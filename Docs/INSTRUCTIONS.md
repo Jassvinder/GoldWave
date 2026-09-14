@@ -112,7 +112,7 @@ Lets the member submit a correction request (reason + new value) for a locked fi
 
 Business logic: `DOMAIN_LOGIC.md` §5, §6, §7.3.
 
-**Backend + minimal working page shipped in T-005** (`resources/js/pages/member/emi.tsx`, `Member\EmiController`): full schedule listing, status badges, and the Online/Cash Pay action for the single next-due installment (§5 item 8 — no skip-ahead). Not yet built here: paid date/payment reference/mode columns, and the "Eligibility indicator for compensation rules" (depends on T-006/T-007's Level Income/Pair eligibility, which don't exist yet) — those + final visual design are T-015's job, on top of this same backend.
+**Backend + minimal working page shipped in T-005** (`resources/js/pages/member/emi.tsx`, `Member\EmiController`): full schedule listing, status badges, and the Online/Cash Pay action for the single next-due installment (§5 item 8 — no skip-ahead). **Completed in T-015:** paid date/payment reference/mode columns, and the Pair/Reward eligibility indicator (completed installments vs. the plan's `pair_qualification_emis` threshold, §7.3) — both deferred at T-005 since Level Income/Pair eligibility rules didn't exist yet.
 
 ---
 

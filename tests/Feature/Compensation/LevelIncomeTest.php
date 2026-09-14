@@ -101,6 +101,21 @@ test('a confirmed ₹5,000 payment distributes exactly the TEST.md scenario-1 am
     }
 });
 
+test('amounts that do not divide evenly round to exactly 2 decimal places, not truncated or left unrounded (Docs/TEST.md Risk-based Coverage table)', function () {
+    $chain = buildSponsorChain('ROUND', 12);
+    $payer = levelIncomeMember('ROUNDPAYER', $chain[0]);
+    // ₹333 × 0.5% (Levels 9-12) = 1.665, which must round to exactly 2dp,
+    // not be left at 3dp or truncated to 1.66.
+    $payment = makeRegistrationPayment($payer, 333);
+
+    app(CalculateLevelIncome::class)($payment);
+
+    $rows = IncomeLedgerCalculation::where('source_payment_id', $payment->id)->orderBy('level_no')->get();
+
+    $level9to12 = $rows->whereIn('level_no', [9, 10, 11, 12]);
+    expect($level9to12->pluck('amount')->map(fn ($v) => (float) $v)->unique()->values()->all())->toBe([1.67]);
+});
+
 test('a chain shorter than 12 records skipped rows for the unreachable levels, not silently missing rows', function () {
     $chain = buildSponsorChain('SHORT', 5); // only 5 sponsors exist above the payer.
     $payer = levelIncomeMember('SHORTPAYER', $chain[0]);
@@ -122,6 +137,29 @@ test('a chain shorter than 12 records skipped rows for the unreachable levels, n
             expect((float) $row->amount)->toBe(0.0);
         }
     }
+});
+
+test('Level Income always resolves via the Sponsor chain, never the Binary Position chain, even when they diverge (Docs/TEST.md Risk-based Coverage table)', function () {
+    // A decoy member with no Sponsor/Direct relationship whatsoever to the
+    // paying chain — only a Binary Position (placement) link to B. If
+    // Level Income ever mistakenly walked placement_parent_id instead of
+    // sponsor_id, this decoy would incorrectly receive a paid level.
+    $decoy = levelIncomeMember('DIVERGE-DECOY');
+
+    $a = levelIncomeMember('DIVERGE-A');
+    $b = levelIncomeMember('DIVERGE-B', $a);
+    $b->update(['placement_parent_id' => $decoy->id, 'placement_side' => 'left']);
+
+    $payer = levelIncomeMember('DIVERGE-PAYER', $b);
+    $payment = makeRegistrationPayment($payer, 5000);
+
+    app(CalculateLevelIncome::class)($payment);
+
+    $rows = IncomeLedgerCalculation::where('source_payment_id', $payment->id)->orderBy('level_no')->get();
+    expect($rows->firstWhere('level_no', 1)->beneficiary_member_id)->toBe($b->id);
+    expect($rows->firstWhere('level_no', 2)->beneficiary_member_id)->toBe($a->id);
+    expect($rows->pluck('beneficiary_member_id'))->not->toContain($decoy->id);
+    expect((float) $decoy->fresh()->wallet_balance)->toBe(0.0);
 });
 
 test('an inactive upline beneficiary is skipped for auditability, other levels are unaffected', function () {

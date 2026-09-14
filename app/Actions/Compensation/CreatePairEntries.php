@@ -52,6 +52,15 @@ class CreatePairEntries
 
         DB::transaction(function () use ($chain, $payment) {
             foreach ($chain as $link) {
+                // DOMAIN_LOGIC.md §14.2 point 5: an unassigned dummy (or the
+                // seeded company root, which is never assignable) never
+                // becomes a compensation beneficiary itself, even though it
+                // correctly still occupies a real Binary Position slot for
+                // whichever real ancestor sits further up the same chain.
+                if ($link['member']->is_company_dummy && $link['member']->dummy_status !== 'assigned') {
+                    continue;
+                }
+
                 PairEntry::create([
                     'member_id' => $link['member']->id,
                     'side' => $link['side'],

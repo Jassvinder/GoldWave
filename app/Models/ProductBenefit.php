@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property-read Member|null $member
  * @property-read MembershipPlan|null $membershipPlan
  * @property-read MetalRate|null $metalRate
+ * @property-read Store|null $store
  */
 class ProductBenefit extends Model
 {
@@ -19,6 +20,8 @@ class ProductBenefit extends Model
         'metal_rate_id',
         'rate_per_gram_at_entry',
         'entry_date',
+        'store_id',
+        'delivered_at',
     ];
 
     protected function casts(): array
@@ -26,6 +29,7 @@ class ProductBenefit extends Model
         return [
             'rate_per_gram_at_entry' => 'decimal:2',
             'entry_date' => 'date',
+            'delivered_at' => 'datetime',
         ];
     }
 
@@ -45,5 +49,16 @@ class ProductBenefit extends Model
     public function metalRate(): BelongsTo
     {
         return $this->belongsTo(MetalRate::class);
+    }
+
+    /**
+     * The store this plan entitlement was physically handed over through,
+     * if any — set only by `RecordPlanJewelleryDelivery` (DOMAIN_LOGIC.md §16.10).
+     *
+     * @return BelongsTo<Store, $this>
+     */
+    public function store(): BelongsTo
+    {
+        return $this->belongsTo(Store::class);
     }
 }

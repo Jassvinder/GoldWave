@@ -177,6 +177,38 @@ test('a one-time-plan registration fans a pair entry out to every Binary Positio
     expect([$forP1->source_payment_id, $forP2->source_payment_id, $forP3->source_payment_id])->each->toBe($payment->id);
 });
 
+test('an unassigned dummy ancestor is skipped as a beneficiary but still lets a real ancestor further up receive theirs', function () {
+    // DOMAIN_LOGIC.md §14.2 point 5 / §21 T-013 pre-coding pass: a dummy never
+    // becomes a compensation beneficiary itself, even while sitting inside a
+    // real registrant's Binary Position ancestor chain.
+    $p3 = pairMember('CHAIN-DUMMY-P3');
+    $dummyP2 = Member::create([
+        'customer_id' => 'CHAIN-DUMMY-P2',
+        'placement_parent_id' => $p3->id,
+        'placement_side' => 'right',
+        'status' => 'active',
+        'is_company_dummy' => true,
+        'dummy_status' => 'unassigned',
+    ]);
+    $planF = MembershipPlan::where('code', 'F')->firstOrFail();
+    $n = pairMember('CHAIN-DUMMY-N', $dummyP2, 'left', $planF);
+
+    $payment = Payment::create([
+        'member_id' => $n->id,
+        'type' => 'registration',
+        'amount' => 50000,
+        'mode' => 'cash',
+        'status' => 'paid',
+        'paid_at' => now(),
+    ]);
+
+    app(CreatePairEntries::class)($payment);
+
+    expect(PairEntry::count())->toBe(1);
+    expect(PairEntry::where('member_id', $dummyP2->id)->exists())->toBeFalse();
+    expect(PairEntry::where('member_id', $p3->id)->exists())->toBeTrue();
+});
+
 test('calling CreatePairEntries twice for the same qualifying payment never duplicates rows', function () {
     $root = pairMember('IDEMP-ROOT');
     $planF = MembershipPlan::where('code', 'F')->firstOrFail();

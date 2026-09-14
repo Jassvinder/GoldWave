@@ -30,6 +30,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Member|null $member
+ * @property-read Store|null $store
  */
 #[Fillable(['name', 'email', 'mobile', 'password', 'role'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
@@ -60,5 +61,15 @@ class User extends Authenticatable implements PasskeyUser
     public function member(): HasOne
     {
         return $this->hasOne(Member::class);
+    }
+
+    /**
+     * The store this Admin/Store Owner owns — null for a Member or Super Admin login (T-017).
+     *
+     * @return HasOne<Store, $this>
+     */
+    public function store(): HasOne
+    {
+        return $this->hasOne(Store::class, 'owner_user_id');
     }
 }

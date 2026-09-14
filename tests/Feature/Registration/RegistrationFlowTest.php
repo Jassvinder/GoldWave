@@ -78,6 +78,33 @@ test('binary placement walks the occupied side straight down regardless of depth
     expect($newMember->sponsor_id)->toBe($s->id); // Sponsor/Direct unaffected by placement depth (§0/§4).
 });
 
+test('binary placement walks the occupied Right side straight down too, symmetric with Left (Docs/TEST.md Risk-based Coverage table)', function () {
+    $s = createActiveMember('GWL910');
+    $r1 = createActiveMember('GWL911', sponsorId: $s->id, placementParentId: $s->id, placementSide: 'right');
+    $r2 = createActiveMember('GWL912', sponsorId: $s->id, placementParentId: $r1->id, placementSide: 'right');
+    // S's Left is empty; R2's Right is empty — the new member must land at R2's Right, never at S's Left.
+
+    $plan = MembershipPlan::where('code', 'F')->first();
+
+    $this->post('/join', [
+        'sponsor_code' => 'GWL910',
+        'placement_side' => 'right',
+        'name' => 'New Right Member',
+        'email' => 'newrightmember@example.test',
+        'mobile' => '9876543211',
+        'membership_plan_id' => $plan->id,
+        'payment_mode' => 'cash',
+    ])->assertRedirect();
+
+    $newMember = Member::where('sponsor_id', $s->id)
+        ->whereNotIn('id', [$r1->id, $r2->id])
+        ->firstOrFail();
+
+    expect($newMember->placement_parent_id)->toBe($r2->id);
+    expect($newMember->placement_side)->toBe('right');
+    expect($newMember->sponsor_id)->toBe($s->id);
+});
+
 test('Current Rate Booking computes the exact worked example for Plan A', function () {
     $sponsor = createActiveMember('GWL900');
     $plan = MembershipPlan::where('code', 'A')->first();

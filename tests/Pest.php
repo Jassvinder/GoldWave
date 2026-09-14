@@ -20,6 +20,21 @@ pest()->extend(TestCase::class)
 
 /*
 |--------------------------------------------------------------------------
+| Concurrency Test Case (T-020, DOMAIN_LOGIC.md §21)
+|--------------------------------------------------------------------------
+|
+| tests/Concurrency runs against the real dev Postgres database (see
+| phpunit.concurrency.xml) and deliberately does NOT use RefreshDatabase —
+| that would migrate/wipe real dev data. Each test creates and cleans up
+| its own throwaway fixtures instead.
+|
+*/
+
+pest()->extend(TestCase::class)
+    ->in('Concurrency');
+
+/*
+|--------------------------------------------------------------------------
 | Expectations
 |--------------------------------------------------------------------------
 |
