@@ -1,15 +1,22 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
+import { Users } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DataPagination } from '@/components/data-pagination';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { FilterBar } from '@/components/filter-bar';
 import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { StatStrip } from '@/components/stat-strip';
 import { formatDate } from '@/lib/utils';
-import { exportMethod, show } from '@/routes/super-admin/members';
+import { exportMethod, index, show } from '@/routes/super-admin/members';
+import type { Paginated } from '@/types';
 
 type MemberRow = {
     id: number;
@@ -23,131 +30,189 @@ type MemberRow = {
     activated_at: string | null;
 };
 
-type Paginated<T> = {
-    data: T[];
-    current_page: number;
-    last_page: number;
-    total: number;
-};
-
 type Props = {
     members: Paginated<MemberRow>;
     filters: { search?: string; plan?: string; status?: string };
+    plan_options: string[];
+    status_options: string[];
+    stats: { total: number; active: number; pending: number; inactive: number };
 };
+
+const statusVariant: Record<
+    string,
+    'default' | 'secondary' | 'outline' | 'destructive'
+> = {
+    active: 'default',
+    payment_pending: 'secondary',
+    payment_confirmed: 'secondary',
+    draft: 'outline',
+    cancelled: 'destructive',
+};
+
+const ANY = '__any__';
 
 /** INSTRUCTIONS.md's Admin Member Management — company-wide member list with search/filter/pagination/export. */
 export default function SuperAdminMemberManagement({
     members,
     filters,
+    plan_options,
+    status_options,
+    stats,
 }: Props) {
     const [search, setSearch] = useState(filters.search ?? '');
+    const [plan, setPlan] = useState(filters.plan ?? ANY);
+    const [status, setStatus] = useState(filters.status ?? ANY);
+
+    const applyFilters = (overrides: Record<string, string | number> = {}) => {
+        router.get(
+            index.url(),
+            {
+                search,
+                plan: plan === ANY ? undefined : plan,
+                status: status === ANY ? undefined : status,
+                ...overrides,
+            },
+            { preserveState: true },
+        );
+    };
 
     const submitSearch: FormEventHandler = (e) => {
         e.preventDefault();
-        router.get('/super-admin/members', { ...filters, search }, { preserveState: true });
+        applyFilters();
     };
 
-    const goToPage = (page: number) => {
-        router.get('/super-admin/members', { ...filters, search, page }, { preserveState: true });
+    const resetFilters = () => {
+        setSearch('');
+        setPlan(ANY);
+        setStatus(ANY);
+        router.get(index.url(), {}, { preserveState: true });
     };
+
+    const columns: DataTableColumn<MemberRow>[] = [
+        {
+            key: 'customer_id',
+            header: 'Customer ID',
+            render: (row) => (
+                <span className="font-medium">{row.customer_id}</span>
+            ),
+        },
+        { key: 'name', header: 'Name', render: (row) => row.name ?? '—' },
+        { key: 'mobile', header: 'Mobile', render: (row) => row.mobile ?? '—' },
+        {
+            key: 'plan',
+            header: 'Plan',
+            render: (row) =>
+                row.plan ? <Badge variant="outline">{row.plan}</Badge> : '—',
+        },
+        {
+            key: 'sponsor_customer_id',
+            header: 'Sponsor ID',
+            render: (row) => row.sponsor_customer_id ?? '—',
+        },
+        {
+            key: 'activated_at',
+            header: 'Join Date',
+            render: (row) => formatDate(row.activated_at),
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            render: (row) => (
+                <Badge
+                    variant={statusVariant[row.status] ?? 'outline'}
+                    className="capitalize"
+                >
+                    {row.status.replace('_', ' ')}
+                </Badge>
+            ),
+        },
+    ];
 
     return (
         <>
             <Head title="Member Management" />
 
-            <div className="mx-auto flex max-w-4xl flex-col gap-6 p-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <CardTitle className="text-2xl">Members</CardTitle>
+            <div className="flex w-full flex-col gap-4 p-4">
+                <StatStrip
+                    icon={Users}
+                    label="Total Members"
+                    value={stats.total}
+                    counts={[
+                        {
+                            label: 'Active',
+                            value: stats.active,
+                            color: 'green',
+                        },
+                        {
+                            label: 'Pending',
+                            value: stats.pending,
+                            color: 'amber',
+                        },
+                        {
+                            label: 'Inactive',
+                            value: stats.inactive,
+                            color: 'red',
+                        },
+                    ]}
+                    actions={
                         <Button variant="outline" size="sm" asChild>
                             <a href={exportMethod.url()}>Export CSV</a>
                         </Button>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-4">
-                        <form
-                            onSubmit={submitSearch}
-                            className="flex items-center gap-2"
-                        >
-                            <Input
-                                placeholder="Search by Customer ID, name, or mobile"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
-                            <Button type="submit" variant="outline">
-                                Search
-                            </Button>
-                        </form>
+                    }
+                />
 
-                        <div className="flex flex-col gap-2">
-                            {members.data.length === 0 && (
-                                <p className="text-muted-foreground text-sm">
-                                    No members found.
-                                </p>
-                            )}
-                            {members.data.map((member) => (
-                                <Link
-                                    key={member.id}
-                                    href={show.url(member.id)}
-                                    className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm"
-                                >
-                                    <div className="min-w-0">
-                                        <div className="font-medium">
-                                            {member.customer_id} —{' '}
-                                            {member.name ?? '—'}
-                                        </div>
-                                        <div className="text-muted-foreground">
-                                            {member.mobile ?? '—'} · Plan:{' '}
-                                            {member.plan ?? '—'} · Sponsor:{' '}
-                                            {member.sponsor_customer_id ??
-                                                '—'}
-                                        </div>
-                                    </div>
-                                    <div className="shrink-0 text-right whitespace-nowrap">
-                                        <div className="font-medium capitalize">
-                                            {member.status}
-                                        </div>
-                                        <div className="text-muted-foreground">
-                                            {formatDate(member.activated_at)}
-                                        </div>
-                                    </div>
-                                </Link>
+                <FilterBar
+                    search={search}
+                    onSearchChange={setSearch}
+                    searchPlaceholder="Search by Customer ID, name, or mobile"
+                    onSubmit={submitSearch}
+                    onReset={resetFilters}
+                >
+                    <Select value={plan} onValueChange={setPlan}>
+                        <SelectTrigger className="w-full sm:w-36">
+                            <SelectValue placeholder="All Plans" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={ANY}>All Plans</SelectItem>
+                            {plan_options.map((code) => (
+                                <SelectItem key={code} value={code}>
+                                    Plan {code}
+                                </SelectItem>
                             ))}
-                        </div>
+                        </SelectContent>
+                    </Select>
 
-                        {members.last_page > 1 && (
-                            <div className="flex items-center justify-between">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={members.current_page <= 1}
-                                    onClick={() =>
-                                        goToPage(members.current_page - 1)
-                                    }
+                    <Select value={status} onValueChange={setStatus}>
+                        <SelectTrigger className="w-full sm:w-40">
+                            <SelectValue placeholder="All Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={ANY}>All Status</SelectItem>
+                            {status_options.map((value) => (
+                                <SelectItem
+                                    key={value}
+                                    value={value}
+                                    className="capitalize"
                                 >
-                                    Previous
-                                </Button>
-                                <span className="text-muted-foreground text-sm">
-                                    Page {members.current_page} of{' '}
-                                    {members.last_page} ({members.total}{' '}
-                                    members)
-                                </span>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={
-                                        members.current_page >=
-                                        members.last_page
-                                    }
-                                    onClick={() =>
-                                        goToPage(members.current_page + 1)
-                                    }
-                                >
-                                    Next
-                                </Button>
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                                    {value.replace('_', ' ')}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </FilterBar>
+
+                <DataTable
+                    columns={columns}
+                    rows={members.data}
+                    rowKey={(row) => row.id}
+                    rowHref={(row) => show.url(row.id)}
+                    emptyMessage="No members found."
+                />
+
+                <DataPagination
+                    paginated={members}
+                    onPageChange={(page) => applyFilters({ page })}
+                />
             </div>
         </>
     );

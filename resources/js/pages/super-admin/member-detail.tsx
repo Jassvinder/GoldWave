@@ -1,11 +1,7 @@
 import { Head } from '@inertiajs/react';
 import { Badge } from '@/components/ui/badge';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { EditMemberDialog } from '@/components/edit-member-dialog';
 import { formatDate } from '@/lib/utils';
 
 type MemberDetail = {
@@ -29,25 +25,72 @@ type MemberDetail = {
     wallet_balance: string;
 };
 
+type BankDetails = {
+    account_holder_name: string | null;
+    account_number: string | null;
+    ifsc_code: string | null;
+    bank_name: string | null;
+    verified_at: string | null;
+} | null;
+
 type Props = {
     member: MemberDetail;
-    product_benefits: { metal: string | null; entry_date: string | null; delivered_at: string | null }[];
+    bank_details: BankDetails;
+    product_benefits: {
+        metal: string | null;
+        entry_date: string | null;
+        delivered_at: string | null;
+    }[];
     emi: {
         total_installments: number;
-        installments: { installment_no: number; due_date: string | null; amount: string; status: string }[];
+        installments: {
+            installment_no: number;
+            due_date: string | null;
+            amount: string;
+            status: string;
+        }[];
     } | null;
-    income: { type: string; level_no: number | null; amount: string; eligibility_status: string; created_at: string | null }[];
-    wallet_ledger: { entry_type: string; category: string; amount: string; status: string; created_at: string | null }[];
-    payouts: { requested_amount: string; status: string; created_at: string | null }[];
+    income: {
+        type: string;
+        level_no: number | null;
+        amount: string;
+        eligibility_status: string;
+        created_at: string | null;
+    }[];
+    wallet_ledger: {
+        entry_type: string;
+        category: string;
+        amount: string;
+        status: string;
+        created_at: string | null;
+    }[];
+    payouts: {
+        requested_amount: string;
+        status: string;
+        created_at: string | null;
+    }[];
     draw_history: { group_no: number; is_winner_removed: boolean }[];
-    booster_history: { level_no: number; qualified_at: string | null; paid_schedule_count: number }[];
-    store_profit_distributions: { beneficiary_type: string; rate_percent: string; amount: string }[];
-    activity: { type: string; description: string; occurred_at: string | null }[];
+    booster_history: {
+        level_no: number;
+        qualified_at: string | null;
+        paid_schedule_count: number;
+    }[];
+    store_profit_distributions: {
+        beneficiary_type: string;
+        rate_percent: string;
+        amount: string;
+    }[];
+    activity: {
+        type: string;
+        description: string;
+        occurred_at: string | null;
+    }[];
 };
 
 /** INSTRUCTIONS.md's Admin Member Management — full member detail: profile, plan, sponsor/placement, EMI, income, wallet, payouts, draw, booster, store-profit, activity. */
 export default function SuperAdminMemberDetail({
     member,
+    bank_details,
     product_benefits,
     emi,
     income,
@@ -62,13 +105,19 @@ export default function SuperAdminMemberDetail({
         <>
             <Head title={member.customer_id} />
 
-            <div className="mx-auto flex max-w-4xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle className="text-2xl">
                             {member.customer_id} — {member.name ?? '—'}
                         </CardTitle>
-                        <Badge variant="secondary">{member.status}</Badge>
+                        <div className="flex items-center gap-2">
+                            <Badge variant="secondary">{member.status}</Badge>
+                            <EditMemberDialog
+                                member={member}
+                                bankDetails={bank_details}
+                            />
+                        </div>
                     </CardHeader>
                     <CardContent className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
                         <Field label="Mobile" value={member.mobile} />
@@ -108,6 +157,23 @@ export default function SuperAdminMemberDetail({
                             value={member.aadhaar_card}
                         />
                         <Field label="Address" value={member.address} />
+                        <Field
+                            label="Bank Account"
+                            value={
+                                bank_details
+                                    ? `${bank_details.bank_name ?? '—'} · ${bank_details.account_number ?? '—'}`
+                                    : null
+                            }
+                        />
+                        <Field
+                            label="Bank Verified"
+                            value={
+                                bank_details
+                                    ? (bank_details.verified_at ??
+                                      'Not verified')
+                                    : null
+                            }
+                        />
                         <Field
                             label="Pending Fields Submitted"
                             value={

@@ -8,6 +8,7 @@ use App\Http\Requests\SuperAdmin\PublishCompensationRulesRequest;
 use App\Models\RuleVersion;
 use App\Services\RuleVersionService;
 use App\Support\Dates;
+use App\Support\RuleVersionDiff;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -35,18 +36,35 @@ class RuleVersionController extends Controller
 
     public function index(Request $request, RuleVersionService $rules): Response
     {
-        $versions = RuleVersion::with('publishedBy')
-            ->orderByDesc('version_no')
-            ->get()
-            ->map(fn (RuleVersion $version): array => [
-                'version_no' => $version->version_no,
-                'effective_from' => Dates::date($version->effective_from),
-                'effective_to' => Dates::date($version->effective_to),
-                'is_active' => $version->is_active,
-                'published_by' => $version->publishedBy?->name,
-                'published_at' => Dates::date($version->published_at),
-                'notes' => $version->notes,
-            ]);
+        $ordered = RuleVersion::with(['publishedBy', 'values'])
+            ->orderBy('version_no')
+            ->get();
+
+        $previousValues = null;
+
+        $versions = $ordered
+            ->map(function (RuleVersion $version) use (&$previousValues): array {
+                $currentValues = $version->values->pluck('value', 'key')->all();
+
+                $changes = $previousValues === null
+                    ? null
+                    : RuleVersionDiff::summarize($previousValues, $currentValues);
+
+                $previousValues = $currentValues;
+
+                return [
+                    'version_no' => $version->version_no,
+                    'effective_from' => Dates::date($version->effective_from),
+                    'effective_to' => Dates::date($version->effective_to),
+                    'is_active' => $version->is_active,
+                    'published_by' => $version->publishedBy?->name,
+                    'published_at' => Dates::date($version->published_at),
+                    'notes' => $version->notes,
+                    'changes' => $changes,
+                ];
+            })
+            ->reverse()
+            ->values();
 
         $current = [];
 

@@ -1,13 +1,9 @@
 import { Head, router } from '@inertiajs/react';
+import { Banknote } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { StatStrip } from '@/components/stat-strip';
 import * as cashPayments from '@/routes/super-admin/cash-payments';
 
 type PendingPayment = {
@@ -26,6 +22,35 @@ type Props = {
     pending: PendingPayment[];
 };
 
+const columns: DataTableColumn<PendingPayment>[] = [
+    {
+        key: 'member',
+        header: 'Member',
+        render: (row) => (
+            <div>
+                <div className="font-medium">
+                    {row.member?.user?.name ?? 'Unknown member'}
+                </div>
+                <div className="text-muted-foreground text-xs">
+                    {row.member?.user?.email}
+                </div>
+            </div>
+        ),
+    },
+    {
+        key: 'type',
+        header: 'Payment Type',
+        render: (row) => (
+            <Badge variant="secondary">
+                {row.type === 'registration'
+                    ? 'Registration'
+                    : `EMI Installment #${row.emi_installment?.installment_no}`}
+            </Badge>
+        ),
+    },
+    { key: 'amount', header: 'Amount', render: (row) => `₹${row.amount}` },
+];
+
 /**
  * DOMAIN_LOGIC.md §3.1 step 8 / §10.2 — Super Admin confirms a member's cash
  * registration payment before their membership can activate.
@@ -43,66 +68,34 @@ export default function CashPayments({ pending }: Props) {
         <>
             <Head title="Cash Payments" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-10">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-2xl">
-                            Pending Cash Payments
-                        </CardTitle>
-                        <CardDescription>
-                            Confirm receipt to activate the member&apos;s
-                            registration.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-3">
-                        {pending.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No cash payments awaiting confirmation.
-                            </p>
-                        )}
+            <div className="flex w-full flex-col gap-4 p-4">
+                <StatStrip
+                    icon={Banknote}
+                    label="Pending Cash Payments"
+                    value={pending.length}
+                    counts={[]}
+                />
 
-                        {pending.map((payment) => (
-                            <div
-                                key={payment.id}
-                                className="flex items-center justify-between rounded-md border p-3"
+                <DataTable
+                    columns={columns}
+                    rows={pending}
+                    rowKey={(row) => row.id}
+                    emptyMessage="No cash payments awaiting confirmation."
+                    renderActions={(row) => (
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => reject(row.id)}
                             >
-                                <div>
-                                    <div className="font-medium">
-                                        {payment.member?.user?.name ??
-                                            'Unknown member'}
-                                    </div>
-                                    <div className="text-muted-foreground text-sm">
-                                        {payment.member?.user?.email} · ₹
-                                        {payment.amount}
-                                        {payment.type === 'emi_installment' &&
-                                            payment.emi_installment &&
-                                            ` · EMI installment #${payment.emi_installment.installment_no}`}
-                                    </div>
-                                    <Badge variant="secondary" className="mt-1">
-                                        {payment.type === 'registration'
-                                            ? 'Registration — Pending Verification'
-                                            : 'EMI Installment — Pending Verification'}
-                                    </Badge>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => reject(payment.id)}
-                                    >
-                                        Reject
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        onClick={() => approve(payment.id)}
-                                    >
-                                        Approve
-                                    </Button>
-                                </div>
-                            </div>
-                        ))}
-                    </CardContent>
-                </Card>
+                                Reject
+                            </Button>
+                            <Button size="sm" onClick={() => approve(row.id)}>
+                                Approve
+                            </Button>
+                        </div>
+                    )}
+                />
             </div>
         </>
     );

@@ -1,12 +1,8 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
+import { Settings2 } from 'lucide-react';
 import { FormEventHandler } from 'react';
+import { FormSection } from '@/components/form-section';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { update } from '@/routes/super-admin/draw-settings';
@@ -36,41 +32,36 @@ export default function SuperAdminDrawSettings({ draw_group_size }: Props) {
                     </p>
                 )}
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-2xl">
-                            Draw Master Settings
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={submit} className="flex flex-col gap-3">
-                            <div className="grid gap-2">
-                                <Label htmlFor="draw_group_size">
-                                    Group Size
-                                </Label>
-                                <Input
-                                    id="draw_group_size"
-                                    type="number"
-                                    min={1}
-                                    value={data.draw_group_size}
-                                    onChange={(e) =>
-                                        setData(
-                                            'draw_group_size',
-                                            Number(e.target.value),
-                                        )
-                                    }
-                                />
-                            </div>
-                            <Button
-                                type="submit"
-                                disabled={processing}
-                                className="self-start"
-                            >
-                                Save Settings
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
+                <FormSection
+                    icon={Settings2}
+                    color="purple"
+                    title="Draw Master Settings"
+                >
+                    <form onSubmit={submit} className="flex flex-col gap-3">
+                        <div className="grid gap-2">
+                            <Label htmlFor="draw_group_size">Group Size</Label>
+                            <Input
+                                id="draw_group_size"
+                                type="number"
+                                min={1}
+                                value={data.draw_group_size}
+                                onChange={(e) =>
+                                    setData(
+                                        'draw_group_size',
+                                        Number(e.target.value),
+                                    )
+                                }
+                            />
+                        </div>
+                        <Button
+                            type="submit"
+                            disabled={processing}
+                            className="self-start"
+                        >
+                            Save Settings
+                        </Button>
+                    </form>
+                </FormSection>
             </div>
         </>
     );

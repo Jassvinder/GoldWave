@@ -1,8 +1,8 @@
 import { Head, Link, usePage } from '@inertiajs/react';
+import { Landmark, User } from 'lucide-react';
+import { FormSection } from '@/components/form-section';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { formatDate } from '@/lib/utils';
 import { index as changeRequestsIndex } from '@/routes/member/change-requests';
 import { create as createPendingProfile } from '@/routes/member/pending-profile';
@@ -55,82 +55,71 @@ export default function Profile({ member, bank_detail }: Props) {
                     </p>
                 )}
 
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <CardTitle className="text-2xl">My Profile</CardTitle>
-                        <Badge variant="secondary">{member.status}</Badge>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-4">
-                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                            <Field
-                                label="Customer ID"
-                                value={member.customer_id}
-                            />
-                            <Field label="Name" value={member.name} />
-                            <Field label="Email" value={member.email} />
-                            <Field label="Mobile" value={member.mobile} />
-                            <Field
-                                label="Activated"
-                                value={formatDate(member.activated_at)}
-                            />
-                        </div>
+                <FormSection
+                    icon={User}
+                    color="blue"
+                    title="My Profile"
+                    action={<Badge variant="secondary">{member.status}</Badge>}
+                    contentClassName="grid grid-cols-2 gap-4 sm:grid-cols-3"
+                >
+                    <Field label="Customer ID" value={member.customer_id} />
+                    <Field label="Name" value={member.name} />
+                    <Field label="Email" value={member.email} />
+                    <Field label="Mobile" value={member.mobile} />
+                    <Field
+                        label="Activated"
+                        value={formatDate(member.activated_at)}
+                    />
+                </FormSection>
 
-                        <Separator />
+                <FormSection
+                    icon={Landmark}
+                    color="purple"
+                    title="Identity & Address"
+                    contentClassName="grid grid-cols-2 gap-4 sm:grid-cols-3"
+                >
+                    <Field label="PAN Card" value={member.pan_card} />
+                    <Field label="Aadhaar Card" value={member.aadhaar_card} />
+                    <Field label="Address" value={member.address} />
+                </FormSection>
 
-                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                            <Field label="PAN Card" value={member.pan_card} />
-                            <Field
-                                label="Aadhaar Card"
-                                value={member.aadhaar_card}
-                            />
-                            <Field label="Address" value={member.address} />
-                        </div>
+                {bank_detail && (
+                    <FormSection
+                        icon={Landmark}
+                        color="green"
+                        title="Bank Details"
+                        contentClassName="grid grid-cols-2 gap-4 sm:grid-cols-3"
+                    >
+                        <Field label="Bank" value={bank_detail.bank_name} />
+                        <Field
+                            label="Account Number"
+                            value={bank_detail.account_number}
+                        />
+                        <Field label="IFSC" value={bank_detail.ifsc_code} />
+                        <Field
+                            label="Verification"
+                            value={
+                                bank_detail.verified_at
+                                    ? `Verified ${formatDate(bank_detail.verified_at)}`
+                                    : 'Pending verification'
+                            }
+                        />
+                    </FormSection>
+                )}
 
-                        {bank_detail && (
-                            <>
-                                <Separator />
-                                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                                    <Field
-                                        label="Bank"
-                                        value={bank_detail.bank_name}
-                                    />
-                                    <Field
-                                        label="Account Number"
-                                        value={bank_detail.account_number}
-                                    />
-                                    <Field
-                                        label="IFSC"
-                                        value={bank_detail.ifsc_code}
-                                    />
-                                    <Field
-                                        label="Verification"
-                                        value={
-                                            bank_detail.verified_at
-                                                ? `Verified ${formatDate(bank_detail.verified_at)}`
-                                                : 'Pending verification'
-                                        }
-                                    />
-                                </div>
-                            </>
-                        )}
-
-                        <Separator />
-
-                        {!locked ? (
-                            <Button asChild>
-                                <Link href={createPendingProfile()}>
-                                    Complete Pending Profile
-                                </Link>
-                            </Button>
-                        ) : (
-                            <Button variant="outline" asChild>
-                                <Link href={changeRequestsIndex()}>
-                                    Request a Change
-                                </Link>
-                            </Button>
-                        )}
-                    </CardContent>
-                </Card>
+                {!locked ? (
+                    <Button asChild className="self-start">
+                        <Link href={createPendingProfile()}>
+                            Complete Pending Profile
+                        </Link>
+                    </Button>
+                ) : (
+                    <Button variant="outline" asChild className="self-start">
+                        <Link href={changeRequestsIndex()}>
+                            Request a Change
+                        </Link>
+                    </Button>
+                )}
             </div>
         </>
     );

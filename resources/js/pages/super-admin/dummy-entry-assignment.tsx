@@ -1,16 +1,8 @@
-import { Head, useForm, usePage } from '@inertiajs/react';
-import { FormEventHandler, useState } from 'react';
-import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Head, usePage } from '@inertiajs/react';
+import { AssignDummyEntryDialog } from '@/components/assign-dummy-entry-dialog';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { formatDate } from '@/lib/utils';
-import { store } from '@/routes/super-admin/dummy-entry-assignment';
 
 type Dummy = {
     id: number;
@@ -22,37 +14,21 @@ type Dummy = {
 
 type Props = { unassigned: Dummy[] };
 
-/** INSTRUCTIONS.md S05 — enter leader details into an available dummy entry. */
+/**
+ * INSTRUCTIONS.md S05 — enter leader details into an available dummy entry.
+ * T-107 (17-09-2026) — rebuilt as a direct per-row Edit action (fill in the
+ * real leader's details, save, done) replacing the old select-a-row-then-
+ * fill-a-separate-card-below flow, which read as a disconnected two-step
+ * process rather than a direct edit.
+ */
 export default function SuperAdminDummyEntryAssignment({ unassigned }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
-    const [selectedId, setSelectedId] = useState<number | null>(null);
-    const { data, setData, post, processing, errors, reset } = useForm({
-        member_id: 0,
-        name: '',
-        email: '',
-        mobile: '',
-    });
-
-    const select = (dummy: Dummy) => {
-        setSelectedId(dummy.id);
-        setData('member_id', dummy.id);
-    };
-
-    const submit: FormEventHandler = (e) => {
-        e.preventDefault();
-        post(store.url(), {
-            onSuccess: () => {
-                reset();
-                setSelectedId(null);
-            },
-        });
-    };
 
     return (
         <>
             <Head title="Dummy Entry Assignment" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 {flash?.status && (
                     <p className="text-muted-foreground text-sm">
                         {flash.status}
@@ -65,101 +41,42 @@ export default function SuperAdminDummyEntryAssignment({ unassigned }: Props) {
                             Unassigned Dummy Entries
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-2">
-                        {unassigned.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No unassigned dummy entries.
-                            </p>
-                        )}
-                        {unassigned.map((dummy) => (
-                            <button
-                                key={dummy.id}
-                                type="button"
-                                onClick={() => select(dummy)}
-                                className={`flex items-start justify-between gap-3 rounded-md border p-3 text-left text-sm ${selectedId === dummy.id ? 'border-primary' : ''}`}
-                            >
-                                <div className="min-w-0">
-                                    <div className="font-medium">
-                                        {dummy.customer_id}
-                                    </div>
-                                    <div className="text-muted-foreground">
-                                        {dummy.placeholder_name} · Placement:{' '}
-                                        {dummy.placement_side ?? '—'}
-                                    </div>
-                                </div>
-                                <div className="text-muted-foreground shrink-0 whitespace-nowrap">
-                                    {formatDate(dummy.generated_at)}
-                                </div>
-                            </button>
-                        ))}
+                    <CardContent>
+                        <DataTable
+                            columns={dummyColumns}
+                            rows={unassigned}
+                            rowKey={(row) => row.id}
+                            emptyMessage="No unassigned dummy entries."
+                            renderActions={(row) => (
+                                <AssignDummyEntryDialog dummy={row} />
+                            )}
+                        />
                     </CardContent>
                 </Card>
-
-                {selectedId !== null && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Assign Leader</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <form
-                                onSubmit={submit}
-                                className="grid grid-cols-1 gap-3 sm:grid-cols-3"
-                            >
-                                <div className="grid gap-2">
-                                    <Label htmlFor="name">Name</Label>
-                                    <Input
-                                        id="name"
-                                        value={data.name}
-                                        onChange={(e) =>
-                                            setData('name', e.target.value)
-                                        }
-                                    />
-                                    {errors.name && (
-                                        <p className="text-destructive text-xs">
-                                            {errors.name}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="email">Email</Label>
-                                    <Input
-                                        id="email"
-                                        type="email"
-                                        value={data.email}
-                                        onChange={(e) =>
-                                            setData('email', e.target.value)
-                                        }
-                                    />
-                                    {errors.email && (
-                                        <p className="text-destructive text-xs">
-                                            {errors.email}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="mobile">
-                                        Mobile (optional)
-                                    </Label>
-                                    <Input
-                                        id="mobile"
-                                        value={data.mobile}
-                                        onChange={(e) =>
-                                            setData('mobile', e.target.value)
-                                        }
-                                    />
-                                </div>
-                                <Button
-                                    type="submit"
-                                    disabled={processing}
-                                    className="sm:col-span-3 sm:self-start"
-                                >
-                                    Assign Leader
-                                </Button>
-                            </form>
-                        </CardContent>
-                    </Card>
-                )}
             </div>
         </>
     );
 }
+
+const dummyColumns: DataTableColumn<Dummy>[] = [
+    {
+        key: 'customer_id',
+        header: 'Customer ID',
+        render: (row) => <span className="font-medium">{row.customer_id}</span>,
+    },
+    {
+        key: 'placeholder_name',
+        header: 'Placeholder Name',
+        render: (row) => row.placeholder_name ?? '—',
+    },
+    {
+        key: 'placement_side',
+        header: 'Placement',
+        render: (row) => row.placement_side ?? '—',
+    },
+    {
+        key: 'generated_at',
+        header: 'Generated',
+        render: (row) => formatDate(row.generated_at),
+    },
+];

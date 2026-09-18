@@ -1,14 +1,11 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
+import { Landmark } from 'lucide-react';
 import { FormEventHandler } from 'react';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { FormSection } from '@/components/form-section';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { formatDate } from '@/lib/utils';
 import { store } from '@/routes/member/payout';
@@ -80,116 +77,115 @@ export default function Payout({
         <>
             <Head title="Payout" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 {flash?.status && (
                     <p className="text-muted-foreground text-sm">
                         {flash.status}
                     </p>
                 )}
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-2xl">
-                            Request a Payout
-                        </CardTitle>
-                        <CardDescription>
-                            Available balance ₹{available_balance} · Minimum
-                            request ₹{min_amount}
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        {!bank_detail ? (
-                            <p className="text-muted-foreground text-sm">
-                                Complete your Pending Profile fields to add bank
-                                details before requesting a payout.
-                            </p>
-                        ) : !bank_detail.verified_at ? (
-                            <p className="text-muted-foreground text-sm">
-                                Your bank details ({bank_detail.bank_name} ···{' '}
-                                {bank_detail.account_number.slice(-4)}) are
-                                awaiting Super Admin verification.
-                            </p>
-                        ) : (
-                            <form
-                                onSubmit={submit}
-                                className="flex items-end gap-2"
-                            >
-                                <div className="grid gap-2">
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="Amount"
-                                        value={data.amount}
-                                        onChange={(e) =>
-                                            setData('amount', e.target.value)
-                                        }
-                                    />
-                                    {errors.amount && (
-                                        <p className="text-destructive text-sm">
-                                            {errors.amount}
-                                        </p>
-                                    )}
-                                </div>
-                                <Button type="submit" disabled={processing}>
-                                    Request Payout
-                                </Button>
-                            </form>
-                        )}
-                    </CardContent>
-                </Card>
+                <FormSection
+                    icon={Landmark}
+                    color="blue"
+                    title="Request a Payout"
+                    description={`Available balance ₹${available_balance} · Minimum request ₹${min_amount}`}
+                >
+                    {!bank_detail ? (
+                        <p className="text-muted-foreground text-sm">
+                            Complete your Pending Profile fields to add bank
+                            details before requesting a payout.
+                        </p>
+                    ) : !bank_detail.verified_at ? (
+                        <p className="text-muted-foreground text-sm">
+                            Your bank details ({bank_detail.bank_name} ···{' '}
+                            {bank_detail.account_number.slice(-4)}) are awaiting
+                            Super Admin verification.
+                        </p>
+                    ) : (
+                        <form
+                            onSubmit={submit}
+                            className="flex items-end gap-2"
+                        >
+                            <div className="grid gap-2">
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="Amount"
+                                    value={data.amount}
+                                    onChange={(e) =>
+                                        setData('amount', e.target.value)
+                                    }
+                                />
+                                {errors.amount && (
+                                    <p className="text-destructive text-sm">
+                                        {errors.amount}
+                                    </p>
+                                )}
+                            </div>
+                            <Button type="submit" disabled={processing}>
+                                Request Payout
+                            </Button>
+                        </form>
+                    )}
+                </FormSection>
 
                 <Card>
                     <CardHeader>
                         <CardTitle>Payout History</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-3">
-                        {requests.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No payout requests yet.
-                            </p>
-                        )}
-                        {requests.map((request) => (
-                            <div
-                                key={request.id}
-                                className="rounded-md border p-3"
-                            >
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="font-medium">
-                                            ₹{request.requested_amount}
-                                        </div>
-                                        <div className="text-muted-foreground text-sm">
-                                            {formatDate(request.created_at)}
-                                        </div>
-                                    </div>
-                                    <Badge
-                                        variant={STATUS_VARIANT[request.status]}
-                                    >
-                                        {request.status}
-                                    </Badge>
-                                </div>
-                                {request.transactions.map(
-                                    (transaction, index) => (
-                                        <div
-                                            key={index}
-                                            className="text-muted-foreground mt-2 border-t pt-2 text-sm"
-                                        >
-                                            {transaction.method} · Net ₹
-                                            {transaction.net_amount}
-                                            {transaction.reference
-                                                ? ` · Ref ${transaction.reference}`
-                                                : ''}
-                                            {transaction.processed_at
-                                                ? ` · ${formatDate(transaction.processed_at)}`
-                                                : ''}
-                                        </div>
-                                    ),
-                                )}
-                            </div>
-                        ))}
+                    <CardContent>
+                        <DataTable
+                            columns={requestColumns}
+                            rows={requests}
+                            rowKey={(row) => row.id}
+                            emptyMessage="No payout requests yet."
+                        />
                     </CardContent>
                 </Card>
             </div>
         </>
     );
 }
+
+const requestColumns: DataTableColumn<PayoutRequest>[] = [
+    {
+        key: 'requested_amount',
+        header: 'Amount',
+        render: (row) => (
+            <span className="font-medium">₹{row.requested_amount}</span>
+        ),
+    },
+    {
+        key: 'created_at',
+        header: 'Requested',
+        render: (row) => formatDate(row.created_at),
+    },
+    {
+        key: 'transactions',
+        header: 'Transaction',
+        render: (row) =>
+            row.transactions.length === 0
+                ? '—'
+                : row.transactions.map((transaction, index) => (
+                      <div
+                          key={index}
+                          className="text-muted-foreground text-xs"
+                      >
+                          {transaction.method} · Net ₹{transaction.net_amount}
+                          {transaction.reference
+                              ? ` · Ref ${transaction.reference}`
+                              : ''}
+                          {transaction.processed_at
+                              ? ` · ${formatDate(transaction.processed_at)}`
+                              : ''}
+                      </div>
+                  )),
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        render: (row) => (
+            <Badge variant={STATUS_VARIANT[row.status]}>{row.status}</Badge>
+        ),
+    },
+];

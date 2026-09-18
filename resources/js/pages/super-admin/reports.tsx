@@ -2,12 +2,8 @@ import { Head, useForm, usePage } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -32,12 +28,13 @@ type Export = {
 
 type Props = { report_types: Record<string, string>; exports: Export[] };
 
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = {
-    pending: 'secondary',
-    processing: 'secondary',
-    ready: 'default',
-    failed: 'destructive',
-};
+const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> =
+    {
+        pending: 'secondary',
+        processing: 'secondary',
+        ready: 'default',
+        failed: 'destructive',
+    };
 
 /** INSTRUCTIONS.md "Reports" (Super Admin) — the full cross-module report catalog with queued exports, T-018. */
 export default function SuperAdminReports({ report_types, exports }: Props) {
@@ -60,7 +57,7 @@ export default function SuperAdminReports({ report_types, exports }: Props) {
         <>
             <Head title="Reports" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 {flash?.status && (
                     <p className="text-muted-foreground text-sm">
                         {flash.status}
@@ -107,23 +104,17 @@ export default function SuperAdminReports({ report_types, exports }: Props) {
                                 <Label>Format</Label>
                                 <Select
                                     value={data.format}
-                                    onValueChange={(v) =>
-                                        setData('format', v)
-                                    }
+                                    onValueChange={(v) => setData('format', v)}
                                 >
                                     <SelectTrigger>
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="csv">
-                                            CSV
-                                        </SelectItem>
+                                        <SelectItem value="csv">CSV</SelectItem>
                                         <SelectItem value="xlsx">
                                             Excel (.xlsx)
                                         </SelectItem>
-                                        <SelectItem value="pdf">
-                                            PDF
-                                        </SelectItem>
+                                        <SelectItem value="pdf">PDF</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -200,58 +191,63 @@ export default function SuperAdminReports({ report_types, exports }: Props) {
                     <CardHeader>
                         <CardTitle>Your Export Requests</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-2">
-                        {exports.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No report exports requested yet.
-                            </p>
-                        )}
-                        {exports.map((e) => (
-                            <div
-                                key={e.id}
-                                className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm"
-                            >
-                                <div className="min-w-0">
-                                    <div className="font-medium">
-                                        {e.report_type} ({e.format})
-                                    </div>
-                                    <div className="text-muted-foreground">
-                                        {e.row_count !== null
-                                            ? `${e.row_count} rows · `
-                                            : ''}
-                                        {formatDate(e.requested_at)}
-                                        {e.status === 'failed' &&
-                                        e.error_message
-                                            ? ` · ${e.error_message}`
-                                            : ''}
-                                    </div>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
-                                    <Badge
-                                        variant={
-                                            STATUS_VARIANT[e.status] ??
-                                            'secondary'
-                                        }
-                                    >
-                                        {e.status}
-                                    </Badge>
-                                    {e.status === 'ready' && (
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            asChild
-                                        >
-                                            <a href={download.url(e.id)}>
-                                                Download
-                                            </a>
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                    <CardContent>
+                        <DataTable
+                            columns={exportColumns}
+                            rows={exports}
+                            rowKey={(row) => row.id}
+                            emptyMessage="No report exports requested yet."
+                            renderActions={(row) =>
+                                row.status === 'ready' ? (
+                                    <Button variant="outline" size="sm" asChild>
+                                        <a href={download.url(row.id)}>
+                                            Download
+                                        </a>
+                                    </Button>
+                                ) : null
+                            }
+                        />
                     </CardContent>
                 </Card>
             </div>
         </>
     );
 }
+
+const exportColumns: DataTableColumn<Export>[] = [
+    {
+        key: 'report_type',
+        header: 'Report',
+        render: (row) => (
+            <span className="font-medium">
+                {row.report_type} ({row.format})
+            </span>
+        ),
+    },
+    {
+        key: 'row_count',
+        header: 'Rows',
+        render: (row) => (row.row_count !== null ? row.row_count : '—'),
+    },
+    {
+        key: 'requested_at',
+        header: 'Requested',
+        render: (row) => formatDate(row.requested_at),
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        render: (row) => (
+            <div className="flex flex-col gap-0.5">
+                <Badge variant={STATUS_VARIANT[row.status] ?? 'secondary'}>
+                    {row.status}
+                </Badge>
+                {row.status === 'failed' && row.error_message && (
+                    <span className="text-muted-foreground text-xs">
+                        {row.error_message}
+                    </span>
+                )}
+            </div>
+        ),
+    },
+];

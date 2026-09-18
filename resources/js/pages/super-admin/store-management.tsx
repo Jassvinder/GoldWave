@@ -1,13 +1,9 @@
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -17,7 +13,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { show as showStore, store } from '@/routes/super-admin/store-management';
+import {
+    show as showStore,
+    store,
+} from '@/routes/super-admin/store-management';
 
 type Store = {
     id: number;
@@ -57,7 +56,7 @@ export default function SuperAdminStoreManagement({
         <>
             <Head title="Store Management" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 {flash?.status && (
                     <p className="text-muted-foreground text-sm">
                         {flash.status}
@@ -66,9 +65,7 @@ export default function SuperAdminStoreManagement({
 
                 <Card>
                     <CardHeader>
-                        <CardTitle className="text-2xl">
-                            Create Store
-                        </CardTitle>
+                        <CardTitle className="text-2xl">Create Store</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <form
@@ -186,33 +183,44 @@ export default function SuperAdminStoreManagement({
                     <CardHeader>
                         <CardTitle>Stores</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-2">
-                        {stores.map((s) => (
-                            <Link
-                                key={s.id}
-                                href={showStore.url(s.id)}
-                                className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm"
-                            >
-                                <div className="min-w-0">
-                                    <div className="font-medium">
-                                        {s.name}
-                                    </div>
-                                    <div className="text-muted-foreground">
-                                        Owner: {s.owner_name ?? 'Unassigned'}{' '}
-                                        · Wallet: ₹{s.wallet_balance}
-                                    </div>
-                                </div>
-                                <Badge
-                                    variant="secondary"
-                                    className="shrink-0"
-                                >
-                                    {s.status}
-                                </Badge>
-                            </Link>
-                        ))}
+                    <CardContent>
+                        <DataTable
+                            columns={storeColumns}
+                            rows={stores}
+                            rowKey={(row) => row.id}
+                            rowHref={(row) => showStore.url(row.id)}
+                            emptyMessage="No stores yet."
+                        />
                     </CardContent>
                 </Card>
             </div>
         </>
     );
 }
+
+const storeColumns: DataTableColumn<Store>[] = [
+    {
+        key: 'name',
+        header: 'Store Name',
+        render: (row) => <span className="font-medium">{row.name}</span>,
+    },
+    {
+        key: 'owner_name',
+        header: 'Owner',
+        render: (row) => row.owner_name ?? 'Unassigned',
+    },
+    {
+        key: 'wallet_balance',
+        header: 'Wallet Balance',
+        render: (row) => `₹${row.wallet_balance}`,
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        render: (row) => (
+            <Badge variant="secondary" className="capitalize">
+                {row.status}
+            </Badge>
+        ),
+    },
+];

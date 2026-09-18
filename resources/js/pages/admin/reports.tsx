@@ -17,7 +17,7 @@ export default function AdminReports({ reports }: Props) {
         <>
             <Head title="Store Reports" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">

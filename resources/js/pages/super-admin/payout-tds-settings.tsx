@@ -1,12 +1,8 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
+import { Banknote } from 'lucide-react';
 import { FormEventHandler } from 'react';
+import { FormSection } from '@/components/form-section';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { update } from '@/routes/super-admin/payout-tds-settings';
@@ -46,75 +42,72 @@ export default function SuperAdminPayoutTdsSettings({
                     </p>
                 )}
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-2xl">
-                            Payout & TDS Settings
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={submit} className="flex flex-col gap-3">
-                            <div className="grid gap-2">
-                                <Label htmlFor="payout_min_amount">
-                                    Minimum Payout Amount
-                                </Label>
-                                <Input
-                                    id="payout_min_amount"
-                                    type="number"
-                                    step="0.01"
-                                    value={data.payout_min_amount}
-                                    onChange={(e) =>
-                                        setData(
-                                            'payout_min_amount',
-                                            Number(e.target.value),
-                                        )
-                                    }
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="payout_tds_percent">
-                                    TDS Percentage
-                                </Label>
-                                <Input
-                                    id="payout_tds_percent"
-                                    type="number"
-                                    step="0.01"
-                                    value={data.payout_tds_percent}
-                                    onChange={(e) =>
-                                        setData(
-                                            'payout_tds_percent',
-                                            Number(e.target.value),
-                                        )
-                                    }
-                                />
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="payout_processing_fee_percent">
-                                    Processing Fee Percentage
-                                </Label>
-                                <Input
-                                    id="payout_processing_fee_percent"
-                                    type="number"
-                                    step="0.01"
-                                    value={data.payout_processing_fee_percent}
-                                    onChange={(e) =>
-                                        setData(
-                                            'payout_processing_fee_percent',
-                                            Number(e.target.value),
-                                        )
-                                    }
-                                />
-                            </div>
-                            <Button
-                                type="submit"
-                                disabled={processing}
-                                className="self-start"
-                            >
-                                Save Settings
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
+                <FormSection
+                    icon={Banknote}
+                    color="green"
+                    title="Payout & TDS Settings"
+                >
+                    <form onSubmit={submit} className="flex flex-col gap-3">
+                        <div className="grid gap-2">
+                            <Label htmlFor="payout_min_amount">
+                                Minimum Payout Amount
+                            </Label>
+                            <Input
+                                id="payout_min_amount"
+                                type="number"
+                                step="0.01"
+                                value={data.payout_min_amount}
+                                onChange={(e) =>
+                                    setData(
+                                        'payout_min_amount',
+                                        Number(e.target.value),
+                                    )
+                                }
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="payout_tds_percent">
+                                TDS Percentage
+                            </Label>
+                            <Input
+                                id="payout_tds_percent"
+                                type="number"
+                                step="0.01"
+                                value={data.payout_tds_percent}
+                                onChange={(e) =>
+                                    setData(
+                                        'payout_tds_percent',
+                                        Number(e.target.value),
+                                    )
+                                }
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="payout_processing_fee_percent">
+                                Processing Fee Percentage
+                            </Label>
+                            <Input
+                                id="payout_processing_fee_percent"
+                                type="number"
+                                step="0.01"
+                                value={data.payout_processing_fee_percent}
+                                onChange={(e) =>
+                                    setData(
+                                        'payout_processing_fee_percent',
+                                        Number(e.target.value),
+                                    )
+                                }
+                            />
+                        </div>
+                        <Button
+                            type="submit"
+                            disabled={processing}
+                            className="self-start"
+                        >
+                            Save Settings
+                        </Button>
+                    </form>
+                </FormSection>
             </div>
         </>
     );

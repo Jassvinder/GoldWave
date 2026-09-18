@@ -81,11 +81,30 @@ test('a published rule version is immediately visible, not cached from the old a
     expect(app(RuleVersionService::class)->value('payout_min_amount'))->toBe(999);
 });
 
-test('creating an admin user sets role=admin and a usable password', function () {
-    $user = app(CreateAdminUser::class)('New Owner', 'newowner@goldwave.test', 'AdminPass123');
+test('promoting a member to admin flips their existing user role, no new account or password', function () {
+    $member = saSettingsMember('SA-PROMO');
+    $originalPasswordHash = $member->user->password;
+
+    $user = app(CreateAdminUser::class)($member);
 
     expect($user->role)->toBe('admin');
-    expect($user->fresh()->password)->not->toBe('AdminPass123'); // hashed, not stored raw.
+    expect($user->id)->toBe($member->user_id);
+    expect($user->fresh()->password)->toBe($originalPasswordHash);
+    expect($member->fresh()->status)->toBe('active'); // Member row itself is untouched.
+});
+
+test('promoting an ineligible member (dummy, inactive, or already admin) is rejected', function () {
+    $dummy = saSettingsMember('SA-DUMMY');
+    $dummy->update(['is_company_dummy' => true]);
+
+    expect(fn () => app(CreateAdminUser::class)($dummy))
+        ->toThrow(ValidationException::class);
+
+    $alreadyAdmin = saSettingsMember('SA-ALREADY-ADMIN');
+    $alreadyAdmin->user->update(['role' => 'admin']);
+
+    expect(fn () => app(CreateAdminUser::class)($alreadyAdmin))
+        ->toThrow(ValidationException::class);
 });
 
 test('reassigning a store owner updates ownership and logs an activity entry', function () {

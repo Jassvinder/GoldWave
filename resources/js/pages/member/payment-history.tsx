@@ -1,6 +1,7 @@
 import { Head } from '@inertiajs/react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { formatDate } from '@/lib/utils';
 
 type Payment = {
@@ -25,51 +26,63 @@ const STATUS_VARIANT: Record<
     failed: 'destructive',
 };
 
+const columns: DataTableColumn<Payment>[] = [
+    {
+        key: 'type',
+        header: 'Payment',
+        render: (row) => (
+            <span className="font-medium">
+                {row.type === 'registration'
+                    ? 'Registration'
+                    : `Installment #${row.installment_no}`}
+            </span>
+        ),
+    },
+    { key: 'amount', header: 'Amount', render: (row) => `₹${row.amount}` },
+    {
+        key: 'mode',
+        header: 'Mode',
+        render: (row) => <span className="capitalize">{row.mode}</span>,
+    },
+    {
+        key: 'provider_reference',
+        header: 'Reference',
+        render: (row) => row.provider_reference ?? '—',
+    },
+    {
+        key: 'paid_at',
+        header: 'Paid',
+        render: (row) => formatDate(row.paid_at),
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        render: (row) => (
+            <Badge variant={STATUS_VARIANT[row.status]}>{row.status}</Badge>
+        ),
+    },
+];
+
 /** INSTRUCTIONS.md M07 — every Payment In transaction (registration + EMI installments). */
 export default function PaymentHistory({ payments }: Props) {
     return (
         <>
             <Head title="Payment History" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">
                             Payment History
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-3">
-                        {payments.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No payments yet.
-                            </p>
-                        )}
-                        {payments.map((payment) => (
-                            <div
-                                key={payment.id}
-                                className="flex items-center justify-between rounded-md border p-3"
-                            >
-                                <div>
-                                    <div className="font-medium">
-                                        {payment.type === 'registration'
-                                            ? 'Registration'
-                                            : `Installment #${payment.installment_no}`}
-                                    </div>
-                                    <div className="text-muted-foreground text-sm">
-                                        ₹{payment.amount} · {payment.mode}
-                                        {payment.provider_reference
-                                            ? ` · Ref ${payment.provider_reference}`
-                                            : ''}
-                                        {payment.paid_at
-                                            ? ` · ${formatDate(payment.paid_at)}`
-                                            : ''}
-                                    </div>
-                                </div>
-                                <Badge variant={STATUS_VARIANT[payment.status]}>
-                                    {payment.status}
-                                </Badge>
-                            </div>
-                        ))}
+                    <CardContent>
+                        <DataTable
+                            columns={columns}
+                            rows={payments}
+                            rowKey={(row) => row.id}
+                            emptyMessage="No payments yet."
+                        />
                     </CardContent>
                 </Card>
             </div>

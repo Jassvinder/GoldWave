@@ -3,10 +3,13 @@
 use App\Actions\Draw\ExecuteMonthlyDraw;
 use App\Actions\Draw\GenerateDrawGroups;
 use App\Actions\DummyEntries\GenerateDailyDummyEntries;
+use App\Actions\Payout\SubmitPayoutRequest;
+use App\Actions\Profile\SubmitProfileChangeRequest;
 use App\Actions\Store\CreateStore;
 use App\Models\DrawGroupMonthConfig;
 use App\Models\IncomeLedgerCalculation;
 use App\Models\Member;
+use App\Models\MemberBankDetail;
 use App\Models\MembershipPlan;
 use App\Models\MetalRate;
 use App\Models\RuleValue;
@@ -14,6 +17,7 @@ use App\Models\RuleVersion;
 use App\Models\Store;
 use App\Models\User;
 use App\Services\RuleVersionService;
+use App\Services\WalletLedgerService;
 
 /**
  * T-017 — HTTP-layer coverage (routes, role gating, Form Requests) for the
@@ -58,16 +62,33 @@ test('a super admin sees the real S01 System Dashboard at the shared /dashboard 
     $response->assertInertia(fn ($page) => $page->component('super-admin/dashboard'));
 });
 
-test('a super admin can create an admin user (S02)', function () {
+test('a super admin can find and promote an existing member to admin (S02)', function () {
+    $member = spMember('SP-PROMOTE');
+
     $this->actingAs(spSuperAdmin())
-        ->post('/super-admin/admin-users', [
-            'name' => 'New Store Owner',
-            'email' => 'newstoreowner@goldwave.test',
-            'password' => 'AdminPass123',
-        ])
+        ->post('/super-admin/admin-users/find-member', ['customer_id' => 'SP-PROMOTE'])
+        ->assertOk()
+        ->assertJson(['valid' => true, 'member_customer_id' => 'SP-PROMOTE']);
+
+    $this->actingAs(spSuperAdmin())
+        ->post('/super-admin/admin-users', ['customer_id' => 'SP-PROMOTE'])
         ->assertRedirect('/super-admin/admin-users');
 
-    expect(User::where('email', 'newstoreowner@goldwave.test')->where('role', 'admin')->exists())->toBeTrue();
+    expect($member->user->fresh()->role)->toBe('admin');
+});
+
+test('promoting a dummy or already-admin customer ID is rejected (S02)', function () {
+    $dummy = spMember('SP-DUMMY-2');
+    $dummy->update(['is_company_dummy' => true]);
+
+    $this->actingAs(spSuperAdmin())
+        ->post('/super-admin/admin-users/find-member', ['customer_id' => 'SP-DUMMY-2'])
+        ->assertStatus(422)
+        ->assertJson(['valid' => false]);
+
+    $this->actingAs(spSuperAdmin())
+        ->post('/super-admin/admin-users', ['customer_id' => 'SP-DUMMY-2'])
+        ->assertSessionHasErrors('customer_id');
 });
 
 test('a super admin can publish a compensation rule version (S03)', function () {
@@ -80,6 +101,18 @@ test('a super admin can publish a compensation rule version (S03)', function () 
 
     $active = RuleVersion::where('is_active', true)->firstOrFail();
     expect((float) $active->values()->where('key', 'item_buyback_percent')->value('value'))->toBe(58.0);
+});
+
+test('Version History shows what actually changed, not just the optional note (T-108)', function () {
+    $this->actingAs(spSuperAdmin())
+        ->post('/super-admin/rule-versions', ['item_buyback_percent' => 58]);
+
+    $this->actingAs(spSuperAdmin())
+        ->get('/super-admin/rule-versions')
+        ->assertInertia(fn ($page) => $page
+            ->component('super-admin/rule-versions')
+            ->where('versions.0.changes', ['Item Buyback %: 60 → 58'])
+            ->where('versions.1.changes', null));
 });
 
 test('a super admin can update dummy entry settings and trigger generation (S04)', function () {
@@ -237,6 +270,76 @@ test('a super admin can view the member list, a member detail page, and export m
     $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
 });
 
+test('a super admin can directly edit a member\'s details, including a new bank account (T-106)', function () {
+    $member = spMember('SPMEMEDIT');
+
+    $this->actingAs(spSuperAdmin())
+        ->patch("/super-admin/members/{$member->id}", [
+            'name' => 'Corrected Name',
+            'email' => 'corrected@goldwave.test',
+            'mobile' => '9998887776',
+            'pan_card' => 'ABCDE1234F',
+            'aadhaar_card' => '123456789012',
+            'address' => '221B Baker Street',
+            'bank_account_holder_name' => 'Corrected Name',
+            'bank_account_number' => '000111222333',
+            'bank_ifsc_code' => 'HDFC0001234',
+            'bank_name' => 'HDFC Bank',
+        ])
+        ->assertRedirect("/super-admin/members/{$member->id}");
+
+    $member->refresh();
+    expect($member->user->name)->toBe('Corrected Name');
+    expect($member->user->email)->toBe('corrected@goldwave.test');
+    expect($member->pan_card)->toBe('ABCDE1234F');
+    expect($member->pending_fields_submitted_at)->not->toBeNull();
+
+    $bankDetail = $member->bankDetails()->latest('id')->firstOrFail();
+    expect($bankDetail->account_number)->toBe('000111222333');
+    expect($bankDetail->verified_at)->toBeNull();
+});
+
+test('re-submitting a member\'s unchanged bank details does not reset an already-verified account', function () {
+    $member = spMember('SPMEMBANKOK');
+    $bankDetail = MemberBankDetail::create([
+        'member_id' => $member->id,
+        'account_holder_name' => 'Same Name',
+        'account_number' => '555666777',
+        'ifsc_code' => 'ICIC0009999',
+        'bank_name' => 'ICICI Bank',
+        'verified_by' => spSuperAdmin()->id,
+        'verified_at' => now(),
+    ]);
+
+    $this->actingAs(spSuperAdmin())
+        ->patch("/super-admin/members/{$member->id}", [
+            'name' => $member->user->name,
+            'email' => $member->user->email,
+            'bank_account_holder_name' => 'Same Name',
+            'bank_account_number' => '555666777',
+            'bank_ifsc_code' => 'ICIC0009999',
+            'bank_name' => 'ICICI Bank',
+        ])
+        ->assertRedirect("/super-admin/members/{$member->id}");
+
+    expect($bankDetail->fresh()->verified_at)->not->toBeNull();
+});
+
+test('a super admin can edit an admin user\'s own details (T-106)', function () {
+    $admin = User::factory()->create(['role' => 'admin', 'email' => 'oldadminemail@goldwave.test']);
+
+    $this->actingAs(spSuperAdmin())
+        ->patch("/super-admin/admin-users/{$admin->id}", [
+            'name' => 'Renamed Admin',
+            'email' => 'newadminemail@goldwave.test',
+            'mobile' => '9123456780',
+        ])
+        ->assertRedirect('/super-admin/admin-users');
+
+    expect($admin->fresh()->name)->toBe('Renamed Admin');
+    expect($admin->fresh()->email)->toBe('newadminemail@goldwave.test');
+});
+
 test('a super admin can view the compensation audit page, and the config page redirects to rule versions (Admin Compensation Management)', function () {
     $member = spMember('SPCOMPAUDIT');
     IncomeLedgerCalculation::create([
@@ -257,4 +360,91 @@ test('a super admin can view the compensation audit page, and the config page re
     $this->actingAs(spSuperAdmin())
         ->get('/super-admin/compensation/config')
         ->assertRedirect('/super-admin/rule-versions');
+});
+
+test('a super admin can view and process a pending payout request (T-109)', function () {
+    $member = spMember('SPPAYOUT1');
+    app(WalletLedgerService::class)->credit($member, 'level_income', 20000, null, 'seed credit');
+    $bankDetail = MemberBankDetail::create([
+        'member_id' => $member->id,
+        'account_holder_name' => 'SP Payout Holder',
+        'account_number' => '1112223334',
+        'ifsc_code' => 'TEST0009999',
+        'bank_name' => 'Test Bank',
+        'verified_at' => now(),
+    ]);
+    $payoutRequest = app(SubmitPayoutRequest::class)($member->fresh(), 10000, $bankDetail);
+
+    $this->actingAs(spSuperAdmin())
+        ->get('/super-admin/payout-requests')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('super-admin/payout-requests')
+            ->where('pending.0.member.customer_id', 'SPPAYOUT1'));
+
+    $this->actingAs(spSuperAdmin())
+        ->post("/super-admin/payout-requests/{$payoutRequest->id}/process", [
+            'method' => 'bank_transfer',
+            'reference' => 'UTR123',
+        ])
+        ->assertRedirect();
+
+    expect($payoutRequest->fresh()->status)->toBe('processed');
+});
+
+test('a super admin can reject a pending payout request, releasing its hold (T-109)', function () {
+    $member = spMember('SPPAYOUT2');
+    app(WalletLedgerService::class)->credit($member, 'level_income', 20000, null, 'seed credit');
+    $bankDetail = MemberBankDetail::create([
+        'member_id' => $member->id,
+        'account_holder_name' => 'SP Payout Holder 2',
+        'account_number' => '5556667778',
+        'ifsc_code' => 'TEST0008888',
+        'bank_name' => 'Test Bank',
+        'verified_at' => now(),
+    ]);
+    $payoutRequest = app(SubmitPayoutRequest::class)($member->fresh(), 3000, $bankDetail);
+
+    $this->actingAs(spSuperAdmin())
+        ->post("/super-admin/payout-requests/{$payoutRequest->id}/reject")
+        ->assertRedirect();
+
+    expect($payoutRequest->fresh()->status)->toBe('rejected');
+});
+
+test('a super admin can view and approve a pending profile change request (T-109)', function () {
+    $member = spMember('SPCHANGEREQ1');
+    $member->update(['pending_fields_submitted_at' => now()]);
+    $changeRequest = app(SubmitProfileChangeRequest::class)($member->fresh(), 'address', 'New Address, City', 'Moved house');
+
+    $this->actingAs(spSuperAdmin())
+        ->get('/super-admin/profile-change-requests')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('super-admin/profile-change-requests')
+            ->where('pending.0.member.customer_id', 'SPCHANGEREQ1')
+            ->where('pending.0.new_value', 'New Address, City'));
+
+    $this->actingAs(spSuperAdmin())
+        ->post("/super-admin/profile-change-requests/{$changeRequest->id}/approve")
+        ->assertRedirect();
+
+    expect($changeRequest->fresh()->status)->toBe('approved');
+    expect($member->fresh()->address)->toBe('New Address, City');
+});
+
+test('a super admin can reject a pending profile change request with a reason, leaving the field untouched (T-109)', function () {
+    $member = spMember('SPCHANGEREQ2');
+    $member->update(['pending_fields_submitted_at' => now(), 'address' => 'Original Address']);
+    $changeRequest = app(SubmitProfileChangeRequest::class)($member->fresh(), 'address', 'Disputed Address');
+
+    $this->actingAs(spSuperAdmin())
+        ->post("/super-admin/profile-change-requests/{$changeRequest->id}/reject", [
+            'rejection_reason' => 'Could not verify new address.',
+        ])
+        ->assertRedirect();
+
+    expect($changeRequest->fresh()->status)->toBe('rejected');
+    expect($changeRequest->fresh()->rejection_reason)->toBe('Could not verify new address.');
+    expect($member->fresh()->address)->toBe('Original Address');
 });

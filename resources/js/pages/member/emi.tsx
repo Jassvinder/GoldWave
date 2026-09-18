@@ -9,6 +9,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { formatDate } from '@/lib/utils';
 import { pay as payInstallment } from '@/routes/member/emi';
 
@@ -74,11 +75,54 @@ export default function Emi({
         router.post(payInstallment.url(installmentId), { mode });
     }
 
+    const columns: DataTableColumn<Installment>[] = [
+        {
+            key: 'installment_no',
+            header: 'Installment',
+            render: (row) => (
+                <span className="font-medium">#{row.installment_no}</span>
+            ),
+        },
+        {
+            key: 'due_date',
+            header: 'Due Date',
+            render: (row) => formatDate(row.due_date),
+        },
+        { key: 'amount', header: 'Amount', render: (row) => `₹${row.amount}` },
+        {
+            key: 'paid_at',
+            header: 'Paid',
+            render: (row) =>
+                row.paid_at ? (
+                    <span>
+                        {formatDate(row.paid_at)} via {row.payment_mode}
+                        {row.payment_reference
+                            ? ` · Ref ${row.payment_reference}`
+                            : ''}
+                    </span>
+                ) : (
+                    '—'
+                ),
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            render: (row) => (
+                <Badge
+                    variant={STATUS_VARIANT[row.status]}
+                    className="capitalize"
+                >
+                    {row.status}
+                </Badge>
+            ),
+        },
+    ];
+
     return (
         <>
             <Head title="EMI Schedule" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 {flash?.status && (
                     <p className="text-muted-foreground text-sm">
                         {flash.status}
@@ -96,7 +140,7 @@ export default function Emi({
                     </CardHeader>
                     <CardContent className="flex flex-col gap-3">
                         {pair_eligibility && (
-                            <div className="mb-2 rounded-md border p-3 text-sm">
+                            <div className="rounded-md border p-3 text-sm">
                                 <span className="font-medium">
                                     Pair/Reward eligibility:
                                 </span>{' '}
@@ -112,84 +156,40 @@ export default function Emi({
                             </div>
                         )}
 
-                        {installments.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No installments to show.
-                            </p>
-                        )}
-
-                        {installments.map((installment) => {
-                            const isPayable =
-                                nextPayable?.id === installment.id;
-
-                            return (
-                                <div
-                                    key={installment.id}
-                                    className="flex items-center justify-between rounded-md border p-3"
-                                >
-                                    <div>
-                                        <div className="font-medium">
-                                            Installment #
-                                            {installment.installment_no}
-                                        </div>
-                                        <div className="text-muted-foreground text-sm">
-                                            Due {formatDate(installment.due_date)} · ₹
-                                            {installment.amount}
-                                        </div>
-                                        {installment.paid_at && (
-                                            <div className="text-muted-foreground text-sm">
-                                                Paid {formatDate(installment.paid_at)} via{' '}
-                                                {installment.payment_mode}
-                                                {installment.payment_reference
-                                                    ? ` · Ref ${installment.payment_reference}`
-                                                    : ''}
-                                            </div>
-                                        )}
-                                        <Badge
-                                            variant={
-                                                STATUS_VARIANT[
-                                                    installment.status
-                                                ]
+                        <DataTable
+                            columns={columns}
+                            rows={installments}
+                            rowKey={(row) => row.id}
+                            emptyMessage="No installments to show."
+                            renderActions={(row) =>
+                                nextPayable?.id === row.id ? (
+                                    <div className="flex items-center justify-end gap-2">
+                                        <select
+                                            className="border-input bg-background rounded-md border px-2 py-1 text-sm"
+                                            value={mode}
+                                            onChange={(event) =>
+                                                setMode(
+                                                    event.target.value as
+                                                        | 'online'
+                                                        | 'cash',
+                                                )
                                             }
-                                            className="mt-1"
                                         >
-                                            {installment.status}
-                                        </Badge>
+                                            <option value="online">
+                                                Online
+                                            </option>
+                                            <option value="cash">Cash</option>
+                                        </select>
+                                        <Button
+                                            size="sm"
+                                            onClick={() => pay(row.id)}
+                                        >
+                                            Pay
+                                        </Button>
                                     </div>
-
-                                    {isPayable && (
-                                        <div className="flex items-center gap-2">
-                                            <select
-                                                className="border-input bg-background rounded-md border px-2 py-1 text-sm"
-                                                value={mode}
-                                                onChange={(event) =>
-                                                    setMode(
-                                                        event.target.value as
-                                                            | 'online'
-                                                            | 'cash',
-                                                    )
-                                                }
-                                            >
-                                                <option value="online">
-                                                    Online
-                                                </option>
-                                                <option value="cash">
-                                                    Cash
-                                                </option>
-                                            </select>
-                                            <Button
-                                                size="sm"
-                                                onClick={() =>
-                                                    pay(installment.id)
-                                                }
-                                            >
-                                                Pay
-                                            </Button>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
+                                ) : null
+                            }
+                        />
                     </CardContent>
                 </Card>
             </div>

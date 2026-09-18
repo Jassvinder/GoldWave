@@ -1,11 +1,8 @@
 import { Head } from '@inertiajs/react';
+import { ClipboardList, Receipt } from 'lucide-react';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { FormSection } from '@/components/form-section';
 import { Badge } from '@/components/ui/badge';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
 import { formatDate } from '@/lib/utils';
 
 type Sale = {
@@ -39,87 +36,115 @@ export default function AdminTransactions({ sales, activity }: Props) {
         <>
             <Head title="Store Transactions" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-2xl">
-                            Transactions
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-2">
-                        {sales.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No transactions yet.
-                            </p>
-                        )}
-                        {sales.map((sale) => (
-                            <div
-                                key={sale.id}
-                                className="rounded-md border p-3 text-sm"
-                            >
-                                <div className="flex items-center justify-between">
-                                    <div className="font-medium capitalize">
-                                        {sale.transaction_type.replace(
-                                            '_',
-                                            ' ',
-                                        )}{' '}
-                                        — {sale.item_name}
-                                    </div>
-                                    <Badge variant="secondary">
-                                        {sale.status}
-                                    </Badge>
-                                </div>
-                                <div className="text-muted-foreground mt-1">
-                                    {sale.customer_id ?? 'Walk-in'} ·{' '}
-                                    {sale.item_weight
-                                        ? `${sale.item_weight}g · `
-                                        : ''}
-                                    {sale.rate ? `₹${sale.rate}/g · ` : ''}₹
-                                    {sale.total_invoice_amount} ·{' '}
-                                    {sale.payment_source}
-                                    {sale.store_wallet_deduction_reference
-                                        ? ` (ref ${sale.store_wallet_deduction_reference})`
-                                        : ''}
-                                </div>
-                                <div className="text-muted-foreground">
-                                    {sale.invoice_no} · Distribution:{' '}
-                                    {sale.distribution_status} ·{' '}
-                                    {formatDate(sale.created_at)}
-                                </div>
-                            </div>
-                        ))}
-                    </CardContent>
-                </Card>
+            <div className="flex w-full flex-col gap-6 p-4">
+                <FormSection icon={Receipt} color="blue" title="Transactions">
+                    <DataTable
+                        columns={saleColumns}
+                        rows={sales}
+                        rowKey={(row) => row.id}
+                        emptyMessage="No transactions yet."
+                    />
+                </FormSection>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Operational History</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-2">
-                        {activity.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No activity recorded yet.
-                            </p>
-                        )}
-                        {activity.map((entry, index) => (
-                            <div
-                                key={index}
-                                className="flex items-center justify-between rounded-md border p-2 text-sm"
-                            >
-                                <span className="capitalize">
-                                    {entry.action_type.replace(/_/g, ' ')}
-                                    {entry.affected_customer_id
-                                        ? ` — ${entry.affected_customer_id}`
-                                        : ''}
-                                </span>
-                                <span className="text-muted-foreground">
-                                    {entry.operator_name} · {formatDate(entry.occurred_at)}
-                                </span>
-                            </div>
-                        ))}
-                    </CardContent>
-                </Card>
+                <FormSection
+                    icon={ClipboardList}
+                    color="purple"
+                    title="Operational History"
+                >
+                    <DataTable
+                        columns={activityColumns}
+                        rows={activity}
+                        rowKey={(row, index) => index}
+                        emptyMessage="No activity recorded yet."
+                    />
+                </FormSection>
             </div>
         </>
     );
 }
+
+const saleColumns: DataTableColumn<Sale>[] = [
+    {
+        key: 'transaction_type',
+        header: 'Transaction',
+        render: (row) => (
+            <span className="font-medium capitalize">
+                {row.transaction_type.replace('_', ' ')} — {row.item_name}
+            </span>
+        ),
+    },
+    {
+        key: 'customer_id',
+        header: 'Customer',
+        render: (row) => row.customer_id ?? 'Walk-in',
+    },
+    {
+        key: 'total_invoice_amount',
+        header: 'Amount',
+        render: (row) => (
+            <span>
+                {row.item_weight ? `${row.item_weight}g · ` : ''}
+                {row.rate ? `₹${row.rate}/g · ` : ''}₹{row.total_invoice_amount}{' '}
+                · {row.payment_source}
+                {row.store_wallet_deduction_reference
+                    ? ` (ref ${row.store_wallet_deduction_reference})`
+                    : ''}
+            </span>
+        ),
+    },
+    {
+        key: 'invoice_no',
+        header: 'Invoice',
+        render: (row) => row.invoice_no ?? '—',
+    },
+    {
+        key: 'created_at',
+        header: 'Date',
+        render: (row) => formatDate(row.created_at),
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        render: (row) => <Badge variant="secondary">{row.status}</Badge>,
+    },
+    {
+        key: 'distribution_status',
+        header: 'Distribution',
+        render: (row) => (
+            <Badge
+                variant={
+                    row.distribution_status === 'processed'
+                        ? 'default'
+                        : 'secondary'
+                }
+            >
+                {row.distribution_status}
+            </Badge>
+        ),
+    },
+];
+
+const activityColumns: DataTableColumn<ActivityEntry>[] = [
+    {
+        key: 'action_type',
+        header: 'Action',
+        render: (row) => (
+            <span className="capitalize">
+                {row.action_type.replace(/_/g, ' ')}
+                {row.affected_customer_id
+                    ? ` — ${row.affected_customer_id}`
+                    : ''}
+            </span>
+        ),
+    },
+    {
+        key: 'operator_name',
+        header: 'By',
+        render: (row) => row.operator_name ?? '—',
+    },
+    {
+        key: 'occurred_at',
+        header: 'Date',
+        render: (row) => formatDate(row.occurred_at),
+    },
+];

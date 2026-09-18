@@ -1,12 +1,8 @@
 import { Head } from '@inertiajs/react';
+import { Banknote, Boxes, ShoppingCart, WalletCards } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import {
-    Card,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { StatCard, StatGrid } from '@/components/stat-card';
 
 type Props = {
     store: { name: string; status: string; location: string | null };
@@ -30,7 +26,7 @@ export default function AdminDashboard({
         <>
             <Head title="Store Dashboard" />
 
-            <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 <div>
                     <h1 className="text-2xl font-semibold">{store.name}</h1>
                     <p className="text-muted-foreground text-sm">
@@ -45,45 +41,52 @@ export default function AdminDashboard({
                     </Alert>
                 ))}
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Store Wallet</CardTitle>
-                            <CardDescription>
-                                ₹{wallet_balance}
-                            </CardDescription>
-                        </CardHeader>
-                    </Card>
+                <StatGrid>
+                    <StatCard
+                        icon={WalletCards}
+                        color="green"
+                        label="Store Wallet"
+                        value={`₹${wallet_balance}`}
+                    />
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Sales</CardTitle>
-                            <CardDescription>
-                                {sales.count} confirmed · ₹{sales.total} total
-                                · {sales.repurchase_count} repurchases
-                            </CardDescription>
-                        </CardHeader>
-                    </Card>
+                    <StatCard
+                        icon={ShoppingCart}
+                        color="blue"
+                        label="Sales"
+                        value={sales.count}
+                        stats={[
+                            { label: 'Total', value: `₹${sales.total}` },
+                            {
+                                label: 'Repurchases',
+                                value: sales.repurchase_count,
+                            },
+                        ]}
+                    />
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Inventory</CardTitle>
-                            <CardDescription>
-                                {inventory.item_count} item types ·{' '}
-                                {inventory.unit_total} units in stock
-                            </CardDescription>
-                        </CardHeader>
-                    </Card>
+                    <StatCard
+                        icon={Boxes}
+                        color="amber"
+                        label="Inventory"
+                        value={inventory.item_count}
+                        stats={[
+                            {
+                                label: 'Item types',
+                                value: inventory.item_count,
+                            },
+                            {
+                                label: 'Units in stock',
+                                value: inventory.unit_total,
+                            },
+                        ]}
+                    />
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Owner Share</CardTitle>
-                            <CardDescription>
-                                ₹{owner_share} earned to date
-                            </CardDescription>
-                        </CardHeader>
-                    </Card>
-                </div>
+                    <StatCard
+                        icon={Banknote}
+                        color="purple"
+                        label="Owner Share (Earned To Date)"
+                        value={`₹${owner_share}`}
+                    />
+                </StatGrid>
             </div>
         </>
     );

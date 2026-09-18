@@ -1,5 +1,8 @@
 import { Head, useForm } from '@inertiajs/react';
+import { FilePenLine } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { FormSection } from '@/components/form-section';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,7 +21,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { store } from '@/routes/member/change-requests';
 
 type ChangeRequest = {
@@ -112,168 +114,172 @@ export default function ChangeRequests({
         <>
             <Head title="Change Requests" />
 
-            <div className="mx-auto flex max-w-2xl flex-col gap-6 p-4">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-2xl">
-                            Submit a Change Request
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <form onSubmit={submit} className="flex flex-col gap-4">
-                            <div className="grid gap-2">
-                                <Label>Field</Label>
-                                <Select
-                                    value={fieldName}
-                                    onValueChange={(value) => {
-                                        setFieldName(value);
-                                        setData('field_name', value);
-                                    }}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {Object.entries(FIELD_LABELS).map(
-                                            ([value, label]) => (
-                                                <SelectItem
-                                                    key={value}
-                                                    value={value}
-                                                >
-                                                    {label}
-                                                </SelectItem>
-                                            ),
-                                        )}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+            <div className="flex w-full flex-col gap-6 p-4">
+                <FormSection
+                    icon={FilePenLine}
+                    color="blue"
+                    title="Submit a Change Request"
+                >
+                    <form onSubmit={submit} className="flex flex-col gap-4">
+                        <div className="grid gap-2">
+                            <Label>Field</Label>
+                            <Select
+                                value={fieldName}
+                                onValueChange={(value) => {
+                                    setFieldName(value);
+                                    setData('field_name', value);
+                                }}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Object.entries(FIELD_LABELS).map(
+                                        ([value, label]) => (
+                                            <SelectItem
+                                                key={value}
+                                                value={value}
+                                            >
+                                                {label}
+                                            </SelectItem>
+                                        ),
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-                            {fieldName === 'bank_details' ? (
-                                <>
-                                    <Input
-                                        placeholder="Account Holder Name"
-                                        value={data.bank_account_holder_name}
-                                        onChange={(e) =>
-                                            setData(
-                                                'bank_account_holder_name',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                    <Input
-                                        placeholder="Account Number"
-                                        value={data.bank_account_number}
-                                        onChange={(e) =>
-                                            setData(
-                                                'bank_account_number',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                    <Input
-                                        placeholder="IFSC Code"
-                                        value={data.bank_ifsc_code}
-                                        onChange={(e) =>
-                                            setData(
-                                                'bank_ifsc_code',
-                                                e.target.value.toUpperCase(),
-                                            )
-                                        }
-                                    />
-                                    <Input
-                                        placeholder="Bank Name"
-                                        value={data.bank_name}
-                                        onChange={(e) =>
-                                            setData('bank_name', e.target.value)
-                                        }
-                                    />
-                                </>
-                            ) : fieldName === 'profile_photo_path' ? (
+                        {fieldName === 'bank_details' ? (
+                            <>
                                 <Input
-                                    type="file"
-                                    accept="image/*"
+                                    placeholder="Account Holder Name"
+                                    value={data.bank_account_holder_name}
                                     onChange={(e) =>
                                         setData(
-                                            'new_photo',
-                                            e.target.files?.[0] ?? null,
+                                            'bank_account_holder_name',
+                                            e.target.value,
                                         )
                                     }
                                 />
-                            ) : (
                                 <Input
-                                    placeholder="New value"
-                                    value={data.new_value}
+                                    placeholder="Account Number"
+                                    value={data.bank_account_number}
                                     onChange={(e) =>
-                                        setData('new_value', e.target.value)
+                                        setData(
+                                            'bank_account_number',
+                                            e.target.value,
+                                        )
                                     }
                                 />
-                            )}
-                            {errors.new_value && (
-                                <p className="text-destructive text-sm">
-                                    {errors.new_value}
-                                </p>
-                            )}
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="reason">
-                                    Reason (optional)
-                                </Label>
                                 <Input
-                                    id="reason"
-                                    value={data.reason}
+                                    placeholder="IFSC Code"
+                                    value={data.bank_ifsc_code}
                                     onChange={(e) =>
-                                        setData('reason', e.target.value)
+                                        setData(
+                                            'bank_ifsc_code',
+                                            e.target.value.toUpperCase(),
+                                        )
                                     }
                                 />
-                            </div>
+                                <Input
+                                    placeholder="Bank Name"
+                                    value={data.bank_name}
+                                    onChange={(e) =>
+                                        setData('bank_name', e.target.value)
+                                    }
+                                />
+                            </>
+                        ) : fieldName === 'profile_photo_path' ? (
+                            <Input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) =>
+                                    setData(
+                                        'new_photo',
+                                        e.target.files?.[0] ?? null,
+                                    )
+                                }
+                            />
+                        ) : (
+                            <Input
+                                placeholder="New value"
+                                value={data.new_value}
+                                onChange={(e) =>
+                                    setData('new_value', e.target.value)
+                                }
+                            />
+                        )}
+                        {errors.new_value && (
+                            <p className="text-destructive text-sm">
+                                {errors.new_value}
+                            </p>
+                        )}
 
-                            <Button type="submit" disabled={processing}>
-                                Submit Request
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
+                        <div className="grid gap-2">
+                            <Label htmlFor="reason">Reason (optional)</Label>
+                            <Input
+                                id="reason"
+                                value={data.reason}
+                                onChange={(e) =>
+                                    setData('reason', e.target.value)
+                                }
+                            />
+                        </div>
+
+                        <Button type="submit" disabled={processing}>
+                            Submit Request
+                        </Button>
+                    </form>
+                </FormSection>
 
                 <Card>
                     <CardHeader>
                         <CardTitle>My Requests</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-3">
-                        {requests.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No change requests yet.
-                            </p>
-                        )}
-                        {requests.map((request) => (
-                            <div key={request.id}>
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <div className="font-medium">
-                                            {FIELD_LABELS[request.field_name] ??
-                                                request.field_name}
-                                        </div>
-                                        <div className="text-muted-foreground text-sm">
-                                            {request.old_value ?? '—'} →{' '}
-                                            {request.new_value ?? '—'}
-                                        </div>
-                                        {request.rejection_reason && (
-                                            <div className="text-destructive text-sm">
-                                                {request.rejection_reason}
-                                            </div>
-                                        )}
-                                    </div>
-                                    <Badge
-                                        variant={STATUS_VARIANT[request.status]}
-                                    >
-                                        {request.status}
-                                    </Badge>
-                                </div>
-                                <Separator className="mt-3" />
-                            </div>
-                        ))}
+                    <CardContent>
+                        <DataTable
+                            columns={requestColumns}
+                            rows={requests}
+                            rowKey={(row) => row.id}
+                            emptyMessage="No change requests yet."
+                        />
                     </CardContent>
                 </Card>
             </div>
         </>
     );
 }
+
+const requestColumns: DataTableColumn<ChangeRequest>[] = [
+    {
+        key: 'field_name',
+        header: 'Field',
+        render: (row) => (
+            <span className="font-medium">
+                {FIELD_LABELS[row.field_name] ?? row.field_name}
+            </span>
+        ),
+    },
+    {
+        key: 'new_value',
+        header: 'Change',
+        render: (row) => (
+            <span>
+                {row.old_value ?? '—'} → {row.new_value ?? '—'}
+            </span>
+        ),
+    },
+    {
+        key: 'status',
+        header: 'Status',
+        render: (row) => (
+            <div className="flex flex-col gap-0.5">
+                <Badge variant={STATUS_VARIANT[row.status]}>{row.status}</Badge>
+                {row.rejection_reason && (
+                    <span className="text-destructive text-xs">
+                        {row.rejection_reason}
+                    </span>
+                )}
+            </div>
+        ),
+    },
+];

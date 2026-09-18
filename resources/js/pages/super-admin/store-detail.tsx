@@ -1,13 +1,10 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
+import { Store as StoreIcon } from 'lucide-react';
 import { FormEventHandler } from 'react';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { FormSection } from '@/components/form-section';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
 import {
     Select,
     SelectContent,
@@ -85,219 +82,224 @@ export default function SuperAdminStoreDetail({
         <>
             <Head title={store.name} />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 {flash?.status && (
                     <p className="text-muted-foreground text-sm">
                         {flash.status}
                     </p>
                 )}
 
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between">
-                        <CardTitle className="text-2xl">
-                            {store.name}
-                        </CardTitle>
-                        <Badge variant="secondary">{store.status}</Badge>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-4">
-                        <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
-                            <div>
-                                <div className="text-muted-foreground text-xs">
-                                    Owner
-                                </div>
-                                <div className="font-medium">
-                                    {store.owner_name ?? 'Unassigned'}
-                                </div>
+                <FormSection
+                    icon={StoreIcon}
+                    color="blue"
+                    title={store.name}
+                    action={<Badge variant="secondary">{store.status}</Badge>}
+                    contentClassName="flex flex-col gap-4"
+                >
+                    <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+                        <div>
+                            <div className="text-muted-foreground text-xs">
+                                Owner
                             </div>
-                            <div>
-                                <div className="text-muted-foreground text-xs">
-                                    Contact
-                                </div>
-                                <div className="font-medium">
-                                    {store.contact ?? '—'}
-                                </div>
-                            </div>
-                            <div>
-                                <div className="text-muted-foreground text-xs">
-                                    Location
-                                </div>
-                                <div className="font-medium">
-                                    {store.location ?? '—'}
-                                </div>
-                            </div>
-                            <div>
-                                <div className="text-muted-foreground text-xs">
-                                    Wallet Balance
-                                </div>
-                                <div className="font-medium">
-                                    ₹{store.wallet_balance}
-                                </div>
-                            </div>
-                            <div>
-                                <div className="text-muted-foreground text-xs">
-                                    Jewellery Allocation
-                                </div>
-                                <div className="font-medium">
-                                    ₹{store.jewellery_allocation_value}
-                                </div>
-                            </div>
-                            <div>
-                                <div className="text-muted-foreground text-xs">
-                                    Advance Amount
-                                </div>
-                                <div className="font-medium">
-                                    ₹{store.advance_amount}
-                                </div>
+                            <div className="font-medium">
+                                {store.owner_name ?? 'Unassigned'}
                             </div>
                         </div>
-
-                        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row">
-                            <form
-                                onSubmit={submitReassign}
-                                className="flex flex-1 items-end gap-2"
-                            >
-                                <div className="grid flex-1 gap-2">
-                                    <span className="text-xs font-medium">
-                                        Reassign Owner
-                                    </span>
-                                    <Select
-                                        value={reassignForm.data.owner_user_id}
-                                        onValueChange={(v) =>
-                                            reassignForm.setData(
-                                                'owner_user_id',
-                                                v,
-                                            )
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select an admin" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {unassigned_admins.map(
-                                                (admin) => (
-                                                    <SelectItem
-                                                        key={admin.id}
-                                                        value={String(
-                                                            admin.id,
-                                                        )}
-                                                    >
-                                                        {admin.name} (
-                                                        {admin.email})
-                                                    </SelectItem>
-                                                ),
-                                            )}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <Button
-                                    type="submit"
-                                    disabled={reassignForm.processing}
-                                >
-                                    Reassign
-                                </Button>
-                            </form>
-
-                            <form
-                                onSubmit={submitStatus}
-                                className="flex items-end gap-2"
-                            >
-                                <div className="grid gap-2">
-                                    <span className="text-xs font-medium">
-                                        Status
-                                    </span>
-                                    <Select
-                                        value={statusForm.data.status}
-                                        onValueChange={(v) =>
-                                            statusForm.setData('status', v)
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="active">
-                                                Active
-                                            </SelectItem>
-                                            <SelectItem value="inactive">
-                                                Inactive
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <Button
-                                    type="submit"
-                                    disabled={statusForm.processing}
-                                >
-                                    Update Status
-                                </Button>
-                            </form>
+                        <div>
+                            <div className="text-muted-foreground text-xs">
+                                Contact
+                            </div>
+                            <div className="font-medium">
+                                {store.contact ?? '—'}
+                            </div>
                         </div>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Recent Sales</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-2">
-                        {recent_sales.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No sales recorded yet.
-                            </p>
-                        )}
-                        {recent_sales.map((sale) => (
-                            <div
-                                key={sale.id}
-                                className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm"
-                            >
-                                <div className="min-w-0">
-                                    <div className="font-medium capitalize">
-                                        {sale.transaction_type} —{' '}
-                                        {sale.item_name}
-                                    </div>
-                                    <div className="text-muted-foreground">
-                                        {sale.customer_id ?? 'Walk-in'} ·{' '}
-                                        {formatDate(sale.created_at)}
-                                    </div>
-                                </div>
-                                <div className="shrink-0 text-right whitespace-nowrap font-medium">
-                                    ₹{sale.total_invoice_amount}
-                                </div>
+                        <div>
+                            <div className="text-muted-foreground text-xs">
+                                Location
                             </div>
-                        ))}
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Operational History</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-2">
-                        {activity.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No activity recorded yet.
-                            </p>
-                        )}
-                        {activity.map((log, index) => (
-                            <div
-                                key={index}
-                                className="flex items-center justify-between rounded-md border p-2 text-sm"
-                            >
-                                <span className="capitalize">
-                                    {log.action_type.replace(/_/g, ' ')}
-                                    {log.affected_customer_id
-                                        ? ` — ${log.affected_customer_id}`
-                                        : ''}
-                                </span>
-                                <span className="text-muted-foreground">
-                                    {log.operator_name} ·{' '}
-                                    {formatDate(log.occurred_at)}
-                                </span>
+                            <div className="font-medium">
+                                {store.location ?? '—'}
                             </div>
-                        ))}
-                    </CardContent>
-                </Card>
+                        </div>
+                        <div>
+                            <div className="text-muted-foreground text-xs">
+                                Wallet Balance
+                            </div>
+                            <div className="font-medium">
+                                ₹{store.wallet_balance}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-muted-foreground text-xs">
+                                Jewellery Allocation
+                            </div>
+                            <div className="font-medium">
+                                ₹{store.jewellery_allocation_value}
+                            </div>
+                        </div>
+                        <div>
+                            <div className="text-muted-foreground text-xs">
+                                Advance Amount
+                            </div>
+                            <div className="font-medium">
+                                ₹{store.advance_amount}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row">
+                        <form
+                            onSubmit={submitReassign}
+                            className="flex flex-1 items-end gap-2"
+                        >
+                            <div className="grid flex-1 gap-2">
+                                <span className="text-xs font-medium">
+                                    Reassign Owner
+                                </span>
+                                <Select
+                                    value={reassignForm.data.owner_user_id}
+                                    onValueChange={(v) =>
+                                        reassignForm.setData('owner_user_id', v)
+                                    }
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select an admin" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {unassigned_admins.map((admin) => (
+                                            <SelectItem
+                                                key={admin.id}
+                                                value={String(admin.id)}
+                                            >
+                                                {admin.name} ({admin.email})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button
+                                type="submit"
+                                disabled={reassignForm.processing}
+                            >
+                                Reassign
+                            </Button>
+                        </form>
+
+                        <form
+                            onSubmit={submitStatus}
+                            className="flex items-end gap-2"
+                        >
+                            <div className="grid gap-2">
+                                <span className="text-xs font-medium">
+                                    Status
+                                </span>
+                                <Select
+                                    value={statusForm.data.status}
+                                    onValueChange={(v) =>
+                                        statusForm.setData('status', v)
+                                    }
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="active">
+                                            Active
+                                        </SelectItem>
+                                        <SelectItem value="inactive">
+                                            Inactive
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <Button
+                                type="submit"
+                                disabled={statusForm.processing}
+                            >
+                                Update Status
+                            </Button>
+                        </form>
+                    </div>
+                </FormSection>
+
+                <FormSection
+                    icon={StoreIcon}
+                    color="amber"
+                    title="Recent Sales"
+                >
+                    <DataTable
+                        columns={saleColumns}
+                        rows={recent_sales}
+                        rowKey={(row) => row.id}
+                        emptyMessage="No sales recorded yet."
+                    />
+                </FormSection>
+
+                <FormSection
+                    icon={StoreIcon}
+                    color="teal"
+                    title="Operational History"
+                >
+                    <DataTable
+                        columns={activityColumns}
+                        rows={activity}
+                        rowKey={(row, index) => index}
+                        emptyMessage="No activity recorded yet."
+                    />
+                </FormSection>
             </div>
         </>
     );
 }
+
+const saleColumns: DataTableColumn<Sale>[] = [
+    {
+        key: 'transaction_type',
+        header: 'Transaction',
+        render: (row) => (
+            <span className="font-medium capitalize">
+                {row.transaction_type} — {row.item_name}
+            </span>
+        ),
+    },
+    {
+        key: 'customer_id',
+        header: 'Customer',
+        render: (row) => row.customer_id ?? 'Walk-in',
+    },
+    {
+        key: 'created_at',
+        header: 'Date',
+        render: (row) => formatDate(row.created_at),
+    },
+    {
+        key: 'total_invoice_amount',
+        header: 'Amount',
+        render: (row) => `₹${row.total_invoice_amount}`,
+    },
+];
+
+const activityColumns: DataTableColumn<Activity>[] = [
+    {
+        key: 'action_type',
+        header: 'Action',
+        render: (row) => (
+            <span className="capitalize">
+                {row.action_type.replace(/_/g, ' ')}
+                {row.affected_customer_id
+                    ? ` — ${row.affected_customer_id}`
+                    : ''}
+            </span>
+        ),
+    },
+    {
+        key: 'operator_name',
+        header: 'By',
+        render: (row) => row.operator_name ?? '—',
+    },
+    {
+        key: 'occurred_at',
+        header: 'Date',
+        render: (row) => formatDate(row.occurred_at),
+    },
+];

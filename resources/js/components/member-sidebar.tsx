@@ -1,4 +1,3 @@
-import { Link } from '@inertiajs/react';
 import {
     Award,
     Bell,
@@ -16,20 +15,7 @@ import {
     Users,
     WalletCards,
 } from 'lucide-react';
-import AppLogo from '@/components/app-logo';
-import { NavUser } from '@/components/nav-user';
-import {
-    Sidebar,
-    SidebarContent,
-    SidebarFooter,
-    SidebarGroup,
-    SidebarGroupLabel,
-    SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-} from '@/components/ui/sidebar';
-import { useCurrentUrl } from '@/hooks/use-current-url';
+import { PortalSidebar } from '@/components/portal-sidebar';
 import { dashboard } from '@/routes';
 import { show as showMembership } from '@/routes/member/membership';
 import { index as bookerIndex } from '@/routes/member/booster';
@@ -47,14 +33,9 @@ import { show as showProfile } from '@/routes/member/profile';
 import { index as reportsIndex } from '@/routes/member/reports';
 import { show as showTree } from '@/routes/member/tree';
 import { index as walletIndex } from '@/routes/member/wallet';
-import type { NavItem } from '@/types';
+import type { NavGroup } from '@/types';
 
-type NavGroup = {
-    label: string;
-    items: NavItem[];
-};
-
-const navGroups: NavGroup[] = [
+const sections: NavGroup[] = [
     {
         label: 'Overview',
         items: [{ title: 'Dashboard', href: dashboard(), icon: LayoutGrid }],
@@ -127,50 +108,7 @@ const navGroups: NavGroup[] = [
     },
 ];
 
+/** INSTRUCTIONS.md's Member Portal (T-015) navigation — M01-M18. Renders via the shared `PortalSidebar` (T-100). */
 export function MemberSidebar() {
-    const { isCurrentUrl } = useCurrentUrl();
-
-    return (
-        <Sidebar collapsible="icon" variant="inset">
-            <SidebarHeader>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
-                                <AppLogo />
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
-            </SidebarHeader>
-
-            <SidebarContent>
-                {navGroups.map((group) => (
-                    <SidebarGroup key={group.label} className="px-2 py-0">
-                        <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-                        <SidebarMenu>
-                            {group.items.map((item) => (
-                                <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton
-                                        asChild
-                                        isActive={isCurrentUrl(item.href)}
-                                        tooltip={{ children: item.title }}
-                                    >
-                                        <Link href={item.href} prefetch>
-                                            {item.icon && <item.icon />}
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
-                        </SidebarMenu>
-                    </SidebarGroup>
-                ))}
-            </SidebarContent>
-
-            <SidebarFooter>
-                <NavUser />
-            </SidebarFooter>
-        </Sidebar>
-    );
+    return <PortalSidebar sections={sections} />;
 }

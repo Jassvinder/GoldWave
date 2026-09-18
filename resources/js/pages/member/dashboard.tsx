@@ -1,13 +1,16 @@
-import { Head, Link } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
+import {
+    Award,
+    Dices,
+    Gem,
+    Receipt,
+    Trophy,
+    Users,
+    WalletCards,
+} from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { StatCard, StatGrid } from '@/components/stat-card';
 import { index as boosterIndex } from '@/routes/member/booster';
 import { show as showDirects } from '@/routes/member/directs';
 import { index as drawIndex } from '@/routes/member/draw';
@@ -50,7 +53,7 @@ export default function Dashboard({
         <>
             <Head title="Dashboard" />
 
-            <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 <div>
                     <h1 className="text-2xl font-semibold">
                         Welcome, {member.name ?? member.customer_id}
@@ -67,99 +70,105 @@ export default function Dashboard({
                     </Alert>
                 ))}
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Membership Plan</CardTitle>
-                            <CardDescription>
-                                {plan?.name ?? 'No active plan'}
-                            </CardDescription>
-                        </CardHeader>
-                    </Card>
+                <StatGrid>
+                    <StatCard
+                        icon={Gem}
+                        color="purple"
+                        label="Membership Plan"
+                        value={plan?.name ?? 'No active plan'}
+                    />
 
-                    <Link href={emiIndex()}>
-                        <Card className="hover:bg-muted/50 h-full transition-colors">
-                            <CardHeader>
-                                <CardTitle>EMI Schedule</CardTitle>
-                                <CardDescription>
-                                    {emi
-                                        ? `${emi.paid_installments} / ${emi.total_installments} installments paid`
-                                        : 'No EMI schedule'}
-                                </CardDescription>
-                            </CardHeader>
-                        </Card>
-                    </Link>
+                    <StatCard
+                        icon={Receipt}
+                        color="amber"
+                        label="EMI Schedule"
+                        value={
+                            emi
+                                ? `${emi.paid_installments} / ${emi.total_installments}`
+                                : 'No EMI schedule'
+                        }
+                        stats={
+                            emi
+                                ? [
+                                      {
+                                          label: 'Installments paid',
+                                          value: emi.paid_installments,
+                                      },
+                                  ]
+                                : undefined
+                        }
+                        href={emiIndex()}
+                    />
 
-                    <Link href={walletIndex()}>
-                        <Card className="hover:bg-muted/50 h-full transition-colors">
-                            <CardHeader>
-                                <CardTitle>Wallet Balance</CardTitle>
-                                <CardDescription>
-                                    ₹{wallet_balance}
-                                </CardDescription>
-                            </CardHeader>
-                        </Card>
-                    </Link>
+                    <StatCard
+                        icon={WalletCards}
+                        color="green"
+                        label="Wallet Balance"
+                        value={`₹${wallet_balance}`}
+                        href={walletIndex()}
+                    />
 
-                    <Link href={showDirects()}>
-                        <Card className="hover:bg-muted/50 h-full transition-colors">
-                            <CardHeader>
-                                <CardTitle>My Team</CardTitle>
-                                <CardDescription>
-                                    {direct_count} direct members
-                                </CardDescription>
-                            </CardHeader>
-                        </Card>
-                    </Link>
+                    <StatCard
+                        icon={Users}
+                        color="blue"
+                        label="My Team — Direct Members"
+                        value={direct_count}
+                        href={showDirects()}
+                    />
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Income Summary</CardTitle>
-                            <CardDescription>
-                                Level Income ₹{income.level_income} ·
-                                Purchase/Repurchase ₹
-                                {income.purchase_repurchase}
-                            </CardDescription>
-                        </CardHeader>
-                    </Card>
+                    <StatCard
+                        icon={Trophy}
+                        color="teal"
+                        label="Income Summary"
+                        value={`₹${income.level_income}`}
+                        stats={[
+                            {
+                                label: 'Purchase/Repurchase',
+                                value: `₹${income.purchase_repurchase}`,
+                            },
+                        ]}
+                    />
 
-                    <Link href={pairRewardIndex()}>
-                        <Card className="hover:bg-muted/50 h-full transition-colors">
-                            <CardHeader>
-                                <CardTitle>Pair/Reward</CardTitle>
-                                <CardDescription>
-                                    Unused: {pair.unused_left}L /{' '}
-                                    {pair.unused_right}R
-                                </CardDescription>
-                            </CardHeader>
-                        </Card>
-                    </Link>
+                    <StatCard
+                        icon={Award}
+                        color="red"
+                        label="Pair/Reward — Unused"
+                        value={`${pair.unused_left}L / ${pair.unused_right}R`}
+                        href={pairRewardIndex()}
+                    />
 
-                    <Link href={boosterIndex()}>
-                        <Card className="hover:bg-muted/50 h-full transition-colors">
-                            <CardHeader>
-                                <CardTitle>Income Booster</CardTitle>
-                                <CardDescription>
-                                    {booster_active_levels} active level
-                                    {booster_active_levels === 1 ? '' : 's'}
-                                </CardDescription>
-                            </CardHeader>
-                        </Card>
-                    </Link>
+                    <StatCard
+                        icon={Award}
+                        color="purple"
+                        label="Income Booster"
+                        value={booster_active_levels}
+                        stats={[
+                            {
+                                label:
+                                    'Active level' +
+                                    (booster_active_levels === 1 ? '' : 's'),
+                                value: booster_active_levels,
+                            },
+                        ]}
+                        href={boosterIndex()}
+                    />
 
-                    <Link href={drawIndex()}>
-                        <Card className="hover:bg-muted/50 h-full transition-colors">
-                            <CardHeader>
-                                <CardTitle>Monthly Draw</CardTitle>
-                                <CardDescription>
-                                    {draw_active
-                                        ? 'You are in an active draw group'
-                                        : 'No active draw group'}
-                                </CardDescription>
-                            </CardHeader>
-                        </Card>
-                    </Link>
-                </div>
+                    <StatCard
+                        icon={Dices}
+                        color="blue"
+                        label="Monthly Draw"
+                        value={draw_active ? 'Active' : 'Not active'}
+                        stats={[
+                            {
+                                label: 'Status',
+                                value: draw_active
+                                    ? 'In an active draw group'
+                                    : 'No active draw group',
+                            },
+                        ]}
+                        href={drawIndex()}
+                    />
+                </StatGrid>
             </div>
         </>
     );

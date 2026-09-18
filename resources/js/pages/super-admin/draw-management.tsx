@@ -1,13 +1,11 @@
 import { Head, router, usePage } from '@inertiajs/react';
+import { Dices, Trophy } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { FormSection, type FormSectionColor } from '@/components/form-section';
+import { Input } from '@/components/ui/input';
+import { StatStrip } from '@/components/stat-strip';
 import { formatDate } from '@/lib/utils';
 import { reconcile } from '@/routes/super-admin/draw-management';
 
@@ -41,6 +39,12 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'outline'> = {
     reconciled: 'default',
 };
 
+const GROUP_COLOR: Record<string, FormSectionColor> = {
+    forming: 'purple',
+    active: 'blue',
+    completed: 'green',
+};
+
 /** INSTRUCTIONS.md M13's Admin view / Admin Draw Management — groups, executions, and the manual reconciliation screen. */
 export default function SuperAdminDrawManagement({ groups }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
@@ -57,39 +61,81 @@ export default function SuperAdminDrawManagement({ groups }: Props) {
             });
         };
 
+    const allExecutions = groups.flatMap((group) => group.executions);
+    const stats = {
+        scheduled: allExecutions.filter((e) => e.status === 'scheduled').length,
+        executed: allExecutions.filter((e) => e.status === 'executed').length,
+        reconciled: allExecutions.filter((e) => e.status === 'reconciled')
+            .length,
+    };
+
     return (
         <>
             <Head title="Draw Management" />
 
-            <div className="mx-auto flex max-w-4xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 {flash?.status && (
                     <p className="text-muted-foreground text-sm">
                         {flash.status}
                     </p>
                 )}
 
+                <StatStrip
+                    icon={Dices}
+                    label="Draw Groups"
+                    value={groups.length}
+                    counts={[
+                        {
+                            label: 'Scheduled',
+                            value: stats.scheduled,
+                            color: 'amber',
+                        },
+                        {
+                            label: 'Executed',
+                            value: stats.executed,
+                            color: 'blue',
+                        },
+                        {
+                            label: 'Reconciled',
+                            value: stats.reconciled,
+                            color: 'green',
+                        },
+                    ]}
+                />
+
                 {groups.length === 0 && (
-                    <Card>
-                        <CardContent className="text-muted-foreground p-6 text-sm">
+                    <FormSection
+                        icon={Dices}
+                        color="teal"
+                        title="No draw groups yet"
+                        description="Draw groups will appear here once generated."
+                    >
+                        <p className="text-muted-foreground text-sm">
                             No draw groups generated yet.
-                        </CardContent>
-                    </Card>
+                        </p>
+                    </FormSection>
                 )}
 
-                {groups.map((group) => (
-                    <Card key={group.id}>
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle>
-                                Group #{group.group_no} · Size {group.size}
-                            </CardTitle>
-                            <Badge variant="secondary">{group.status}</Badge>
-                        </CardHeader>
-                        <CardContent className="flex flex-col gap-3">
-                            <p className="text-muted-foreground text-sm">
-                                Started {formatDate(group.cycle_started_month)}{' '}
-                                · Eligible remaining:{' '}
-                                {group.eligible_remaining}
-                            </p>
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                    {groups.map((group) => (
+                        <FormSection
+                            key={group.id}
+                            icon={Trophy}
+                            color={GROUP_COLOR[group.status] ?? 'teal'}
+                            title={`Group #${group.group_no} · Size ${group.size}`}
+                            description={`Started ${formatDate(group.cycle_started_month)} · Eligible remaining: ${group.eligible_remaining}`}
+                            action={
+                                <Badge variant="secondary">
+                                    {group.status}
+                                </Badge>
+                            }
+                            contentClassName="flex flex-col gap-3"
+                        >
+                            {group.executions.length === 0 && (
+                                <p className="text-muted-foreground text-sm">
+                                    No executions yet.
+                                </p>
+                            )}
 
                             {group.executions.map((execution) => (
                                 <div
@@ -124,8 +170,7 @@ export default function SuperAdminDrawManagement({ groups }: Props) {
                                                     {formatDate(
                                                         execution.reconciled_at,
                                                     )}{' '}
-                                                    by{' '}
-                                                    {execution.reconciled_by}
+                                                    by {execution.reconciled_by}
                                                 </div>
                                             )}
                                             {execution.correction_notes.map(
@@ -158,10 +203,10 @@ export default function SuperAdminDrawManagement({ groups }: Props) {
                                             )}
                                             className="flex items-center gap-2"
                                         >
-                                            <input
+                                            <Input
                                                 type="text"
                                                 placeholder="Correction note (optional)"
-                                                className="border-input bg-background flex-1 rounded-md border px-2 py-1 text-sm"
+                                                className="flex-1"
                                                 value={
                                                     noteByExecution[
                                                         execution.id
@@ -182,9 +227,9 @@ export default function SuperAdminDrawManagement({ groups }: Props) {
                                     )}
                                 </div>
                             ))}
-                        </CardContent>
-                    </Card>
-                ))}
+                        </FormSection>
+                    ))}
+                </div>
             </div>
         </>
     );

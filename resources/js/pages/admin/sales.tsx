@@ -1,14 +1,10 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
+import { Gem, RefreshCw, ShoppingBag } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { FormSection } from '@/components/form-section';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -18,7 +14,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { buyback, delivery, store as storeSale } from '@/routes/admin/sales';
 
 type InventoryItem = {
@@ -99,469 +94,452 @@ export default function AdminSales({ inventory_items, recent_sales }: Props) {
         <>
             <Head title="Repurchases / Sales" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 {flash?.status && (
                     <p className="text-muted-foreground text-sm">
                         {flash.status}
                     </p>
                 )}
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-2xl">
-                            Record a Sale / Purchase / Repurchase
-                        </CardTitle>
-                        <CardDescription>
-                            Select a tracked inventory item, or enter a
-                            custom item name for an untracked sale.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <form
-                            onSubmit={submitSale}
-                            className="flex flex-col gap-3"
-                        >
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="grid gap-2">
-                                    <Label>Transaction Type</Label>
-                                    <Select
-                                        value={saleForm.data.transaction_type}
-                                        onValueChange={(v) =>
-                                            saleForm.setData(
-                                                'transaction_type',
-                                                v,
-                                            )
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="new_sale">
-                                                New Sale
-                                            </SelectItem>
-                                            <SelectItem value="purchase">
-                                                Purchase
-                                            </SelectItem>
-                                            <SelectItem value="repurchase">
-                                                Repurchase
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Customer ID (optional)</Label>
-                                    <Input
-                                        value={saleForm.data.customer_id}
-                                        onChange={(e) =>
-                                            saleForm.setData(
-                                                'customer_id',
-                                                e.target.value,
-                                            )
-                                        }
-                                        placeholder="Leave blank for walk-in"
-                                    />
-                                </div>
-                            </div>
-
+                <FormSection
+                    icon={ShoppingBag}
+                    color="blue"
+                    title="Record a Sale / Purchase / Repurchase"
+                    description="Select a tracked inventory item, or enter a custom item name for an untracked sale."
+                >
+                    <form onSubmit={submitSale} className="flex flex-col gap-3">
+                        <div className="grid grid-cols-2 gap-3">
                             <div className="grid gap-2">
-                                <Label>Inventory Item (optional)</Label>
+                                <Label>Transaction Type</Label>
                                 <Select
-                                    value={selectedItem}
-                                    onValueChange={(v) => {
-                                        setSelectedItem(v);
-                                        saleForm.setData(
-                                            'store_inventory_item_id',
-                                            v,
-                                        );
-                                    }}
+                                    value={saleForm.data.transaction_type}
+                                    onValueChange={(v) =>
+                                        saleForm.setData('transaction_type', v)
+                                    }
                                 >
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Custom / untracked item" />
+                                        <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {inventory_items.map((item) => (
-                                            <SelectItem
-                                                key={item.id}
-                                                value={String(item.id)}
-                                            >
-                                                {item.item_name} (
-                                                {item.quantity} in stock)
-                                            </SelectItem>
-                                        ))}
+                                        <SelectItem value="new_sale">
+                                            New Sale
+                                        </SelectItem>
+                                        <SelectItem value="purchase">
+                                            Purchase
+                                        </SelectItem>
+                                        <SelectItem value="repurchase">
+                                            Repurchase
+                                        </SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
-
-                            {!selectedItem && (
-                                <div className="grid gap-2">
-                                    <Label>Item Name</Label>
-                                    <Input
-                                        value={saleForm.data.item_name}
-                                        onChange={(e) =>
-                                            saleForm.setData(
-                                                'item_name',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                    {saleForm.errors.item_name && (
-                                        <p className="text-destructive text-sm">
-                                            {saleForm.errors.item_name}
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="grid gap-2">
-                                    <Label>Weight (g)</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.001"
-                                        value={saleForm.data.item_weight}
-                                        onChange={(e) =>
-                                            saleForm.setData(
-                                                'item_weight',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Quantity</Label>
-                                    <Input
-                                        type="number"
-                                        min="1"
-                                        value={saleForm.data.quantity}
-                                        onChange={(e) =>
-                                            saleForm.setData(
-                                                'quantity',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Rate (₹/g)</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={saleForm.data.rate}
-                                        onChange={(e) =>
-                                            saleForm.setData(
-                                                'rate',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
+                            <div className="grid gap-2">
+                                <Label>Customer ID (optional)</Label>
+                                <Input
+                                    value={saleForm.data.customer_id}
+                                    onChange={(e) =>
+                                        saleForm.setData(
+                                            'customer_id',
+                                            e.target.value,
+                                        )
+                                    }
+                                    placeholder="Leave blank for walk-in"
+                                />
                             </div>
+                        </div>
 
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="grid gap-2">
-                                    <Label>Sale Amount</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={saleForm.data.sale_amount}
-                                        onChange={(e) =>
-                                            saleForm.setData(
-                                                'sale_amount',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                    {saleForm.errors.sale_amount && (
-                                        <p className="text-destructive text-sm">
-                                            {saleForm.errors.sale_amount}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>GST Amount</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={saleForm.data.gst_amount}
-                                        onChange={(e) =>
-                                            saleForm.setData(
-                                                'gst_amount',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Payment Source</Label>
-                                    <Select
-                                        value={saleForm.data.payment_source}
-                                        onValueChange={(v) =>
-                                            saleForm.setData(
-                                                'payment_source',
-                                                v,
-                                            )
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="cash">
-                                                Cash
-                                            </SelectItem>
-                                            <SelectItem value="store_wallet">
-                                                Store Wallet
-                                            </SelectItem>
-                                            <SelectItem value="other">
-                                                Other
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-
-                            <Button
-                                type="submit"
-                                disabled={saleForm.processing}
-                                className="self-start"
+                        <div className="grid gap-2">
+                            <Label>Inventory Item (optional)</Label>
+                            <Select
+                                value={selectedItem}
+                                onValueChange={(v) => {
+                                    setSelectedItem(v);
+                                    saleForm.setData(
+                                        'store_inventory_item_id',
+                                        v,
+                                    );
+                                }}
                             >
-                                Record Transaction &amp; Generate Invoice
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Custom / untracked item" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {inventory_items.map((item) => (
+                                        <SelectItem
+                                            key={item.id}
+                                            value={String(item.id)}
+                                        >
+                                            {item.item_name} ({item.quantity} in
+                                            stock)
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Item Buyback</CardTitle>
-                        <CardDescription>
-                            Buys an item back from a member at the current
-                            market rate (DOMAIN_LOGIC.md §16.7).
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <form
-                            onSubmit={submitBuyback}
-                            className="flex flex-col gap-3"
-                        >
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="grid gap-2">
-                                    <Label>Customer ID</Label>
-                                    <Input
-                                        value={buybackForm.data.customer_id}
-                                        onChange={(e) =>
-                                            buybackForm.setData(
-                                                'customer_id',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                    {buybackForm.errors.customer_id && (
-                                        <p className="text-destructive text-sm">
-                                            {buybackForm.errors.customer_id}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Item Name</Label>
-                                    <Input
-                                        value={buybackForm.data.item_name}
-                                        onChange={(e) =>
-                                            buybackForm.setData(
-                                                'item_name',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
+                        {!selectedItem && (
+                            <div className="grid gap-2">
+                                <Label>Item Name</Label>
+                                <Input
+                                    value={saleForm.data.item_name}
+                                    onChange={(e) =>
+                                        saleForm.setData(
+                                            'item_name',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                                {saleForm.errors.item_name && (
+                                    <p className="text-destructive text-sm">
+                                        {saleForm.errors.item_name}
+                                    </p>
+                                )}
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="grid gap-2">
-                                    <Label>Metal</Label>
-                                    <Select
-                                        value={buybackForm.data.metal}
-                                        onValueChange={(v) =>
-                                            buybackForm.setData('metal', v)
-                                        }
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="gold">
-                                                Gold
-                                            </SelectItem>
-                                            <SelectItem value="silver">
-                                                Silver
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Weight (g)</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.001"
-                                        value={buybackForm.data.weight}
-                                        onChange={(e) =>
-                                            buybackForm.setData(
-                                                'weight',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                    {buybackForm.errors.metal && (
-                                        <p className="text-destructive text-sm">
-                                            {buybackForm.errors.metal}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Quantity</Label>
-                                    <Input
-                                        type="number"
-                                        min="1"
-                                        value={buybackForm.data.quantity}
-                                        onChange={(e) =>
-                                            buybackForm.setData(
-                                                'quantity',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
-                            </div>
-                            <Button
-                                type="submit"
-                                disabled={buybackForm.processing}
-                                variant="outline"
-                                className="self-start"
-                            >
-                                Record Buyback
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Plan Jewellery Delivery</CardTitle>
-                        <CardDescription>
-                            Marks a new member's plan jewellery entitlement
-                            delivered through this store (DOMAIN_LOGIC.md
-                            §16.10).
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <form
-                            onSubmit={submitDelivery}
-                            className="flex flex-col gap-3"
-                        >
-                            <div className="grid grid-cols-3 gap-3">
-                                <div className="grid gap-2">
-                                    <Label>Customer ID</Label>
-                                    <Input
-                                        value={deliveryForm.data.customer_id}
-                                        onChange={(e) =>
-                                            deliveryForm.setData(
-                                                'customer_id',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                    {deliveryForm.errors.customer_id && (
-                                        <p className="text-destructive text-sm">
-                                            {deliveryForm.errors.customer_id}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>Sale Amount</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={deliveryForm.data.sale_amount}
-                                        onChange={(e) =>
-                                            deliveryForm.setData(
-                                                'sale_amount',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>GST Amount</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={deliveryForm.data.gst_amount}
-                                        onChange={(e) =>
-                                            deliveryForm.setData(
-                                                'gst_amount',
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
-                            </div>
-                            <Button
-                                type="submit"
-                                disabled={deliveryForm.processing}
-                                variant="outline"
-                                className="self-start"
-                            >
-                                Record Delivery
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Recent Transactions</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-2">
-                        {recent_sales.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No transactions yet.
-                            </p>
                         )}
-                        {recent_sales.map((sale) => (
-                            <div
-                                key={sale.id}
-                                className="flex items-center justify-between rounded-md border p-3 text-sm"
-                            >
-                                <div>
-                                    <div className="font-medium capitalize">
-                                        {sale.transaction_type.replace(
-                                            '_',
-                                            ' ',
-                                        )}{' '}
-                                        — {sale.item_name}
-                                    </div>
-                                    <div className="text-muted-foreground">
-                                        {sale.customer_id ?? 'Walk-in'} · ₹
-                                        {sale.total_invoice_amount} ·{' '}
-                                        {sale.payment_source} ·{' '}
-                                        {sale.invoice_no}
-                                    </div>
-                                </div>
-                                <Badge
-                                    variant={
-                                        sale.distribution_status ===
-                                        'processed'
-                                            ? 'default'
-                                            : 'secondary'
+
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="grid gap-2">
+                                <Label>Weight (g)</Label>
+                                <Input
+                                    type="number"
+                                    step="0.001"
+                                    value={saleForm.data.item_weight}
+                                    onChange={(e) =>
+                                        saleForm.setData(
+                                            'item_weight',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Quantity</Label>
+                                <Input
+                                    type="number"
+                                    min="1"
+                                    value={saleForm.data.quantity}
+                                    onChange={(e) =>
+                                        saleForm.setData(
+                                            'quantity',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Rate (₹/g)</Label>
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={saleForm.data.rate}
+                                    onChange={(e) =>
+                                        saleForm.setData('rate', e.target.value)
+                                    }
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="grid gap-2">
+                                <Label>Sale Amount</Label>
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={saleForm.data.sale_amount}
+                                    onChange={(e) =>
+                                        saleForm.setData(
+                                            'sale_amount',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                                {saleForm.errors.sale_amount && (
+                                    <p className="text-destructive text-sm">
+                                        {saleForm.errors.sale_amount}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>GST Amount</Label>
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={saleForm.data.gst_amount}
+                                    onChange={(e) =>
+                                        saleForm.setData(
+                                            'gst_amount',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Payment Source</Label>
+                                <Select
+                                    value={saleForm.data.payment_source}
+                                    onValueChange={(v) =>
+                                        saleForm.setData('payment_source', v)
                                     }
                                 >
-                                    {sale.distribution_status}
-                                </Badge>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="cash">
+                                            Cash
+                                        </SelectItem>
+                                        <SelectItem value="store_wallet">
+                                            Store Wallet
+                                        </SelectItem>
+                                        <SelectItem value="other">
+                                            Other
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
-                        ))}
-                    </CardContent>
-                </Card>
+                        </div>
+
+                        <Button
+                            type="submit"
+                            disabled={saleForm.processing}
+                            className="self-start"
+                        >
+                            Record Transaction &amp; Generate Invoice
+                        </Button>
+                    </form>
+                </FormSection>
+
+                <FormSection
+                    icon={RefreshCw}
+                    color="amber"
+                    title="Item Buyback"
+                    description="Buys an item back from a member at the current market rate (DOMAIN_LOGIC.md §16.7)."
+                >
+                    <form
+                        onSubmit={submitBuyback}
+                        className="flex flex-col gap-3"
+                    >
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="grid gap-2">
+                                <Label>Customer ID</Label>
+                                <Input
+                                    value={buybackForm.data.customer_id}
+                                    onChange={(e) =>
+                                        buybackForm.setData(
+                                            'customer_id',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                                {buybackForm.errors.customer_id && (
+                                    <p className="text-destructive text-sm">
+                                        {buybackForm.errors.customer_id}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Item Name</Label>
+                                <Input
+                                    value={buybackForm.data.item_name}
+                                    onChange={(e) =>
+                                        buybackForm.setData(
+                                            'item_name',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="grid gap-2">
+                                <Label>Metal</Label>
+                                <Select
+                                    value={buybackForm.data.metal}
+                                    onValueChange={(v) =>
+                                        buybackForm.setData('metal', v)
+                                    }
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="gold">
+                                            Gold
+                                        </SelectItem>
+                                        <SelectItem value="silver">
+                                            Silver
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Weight (g)</Label>
+                                <Input
+                                    type="number"
+                                    step="0.001"
+                                    value={buybackForm.data.weight}
+                                    onChange={(e) =>
+                                        buybackForm.setData(
+                                            'weight',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                                {buybackForm.errors.metal && (
+                                    <p className="text-destructive text-sm">
+                                        {buybackForm.errors.metal}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Quantity</Label>
+                                <Input
+                                    type="number"
+                                    min="1"
+                                    value={buybackForm.data.quantity}
+                                    onChange={(e) =>
+                                        buybackForm.setData(
+                                            'quantity',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                            </div>
+                        </div>
+                        <Button
+                            type="submit"
+                            disabled={buybackForm.processing}
+                            variant="outline"
+                            className="self-start"
+                        >
+                            Record Buyback
+                        </Button>
+                    </form>
+                </FormSection>
+
+                <FormSection
+                    icon={Gem}
+                    color="purple"
+                    title="Plan Jewellery Delivery"
+                    description="Marks a new member's plan jewellery entitlement delivered through this store (DOMAIN_LOGIC.md §16.10)."
+                >
+                    <form
+                        onSubmit={submitDelivery}
+                        className="flex flex-col gap-3"
+                    >
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="grid gap-2">
+                                <Label>Customer ID</Label>
+                                <Input
+                                    value={deliveryForm.data.customer_id}
+                                    onChange={(e) =>
+                                        deliveryForm.setData(
+                                            'customer_id',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                                {deliveryForm.errors.customer_id && (
+                                    <p className="text-destructive text-sm">
+                                        {deliveryForm.errors.customer_id}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>Sale Amount</Label>
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={deliveryForm.data.sale_amount}
+                                    onChange={(e) =>
+                                        deliveryForm.setData(
+                                            'sale_amount',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label>GST Amount</Label>
+                                <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={deliveryForm.data.gst_amount}
+                                    onChange={(e) =>
+                                        deliveryForm.setData(
+                                            'gst_amount',
+                                            e.target.value,
+                                        )
+                                    }
+                                />
+                            </div>
+                        </div>
+                        <Button
+                            type="submit"
+                            disabled={deliveryForm.processing}
+                            variant="outline"
+                            className="self-start"
+                        >
+                            Record Delivery
+                        </Button>
+                    </form>
+                </FormSection>
+
+                <FormSection
+                    icon={ShoppingBag}
+                    color="green"
+                    title="Recent Transactions"
+                >
+                    <DataTable
+                        columns={saleColumns}
+                        rows={recent_sales}
+                        rowKey={(row) => row.id}
+                        emptyMessage="No transactions yet."
+                    />
+                </FormSection>
             </div>
         </>
     );
 }
+
+const saleColumns: DataTableColumn<Sale>[] = [
+    {
+        key: 'transaction_type',
+        header: 'Transaction',
+        render: (row) => (
+            <span className="font-medium capitalize">
+                {row.transaction_type.replace('_', ' ')} — {row.item_name}
+            </span>
+        ),
+    },
+    {
+        key: 'customer_id',
+        header: 'Customer',
+        render: (row) => row.customer_id ?? 'Walk-in',
+    },
+    {
+        key: 'total_invoice_amount',
+        header: 'Amount',
+        render: (row) => `₹${row.total_invoice_amount} · ${row.payment_source}`,
+    },
+    {
+        key: 'invoice_no',
+        header: 'Invoice',
+        render: (row) => row.invoice_no ?? '—',
+    },
+    {
+        key: 'distribution_status',
+        header: 'Distribution',
+        render: (row) => (
+            <Badge
+                variant={
+                    row.distribution_status === 'processed'
+                        ? 'default'
+                        : 'secondary'
+                }
+            >
+                {row.distribution_status}
+            </Badge>
+        ),
+    },
+];

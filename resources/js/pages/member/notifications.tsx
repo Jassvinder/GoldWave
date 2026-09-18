@@ -2,6 +2,7 @@ import { Head, router } from '@inertiajs/react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { read as markRead } from '@/routes/member/notifications';
 import { formatDate } from '@/lib/utils';
 
@@ -25,55 +26,62 @@ function describe(notification: Notification): string {
     return notification.type;
 }
 
+const columns: DataTableColumn<Notification>[] = [
+    {
+        key: 'type',
+        header: 'Notification',
+        render: (row) => describe(row),
+    },
+    {
+        key: 'created_at',
+        header: 'Date',
+        render: (row) => formatDate(row.created_at),
+    },
+    {
+        key: 'read_at',
+        header: 'Status',
+        render: (row) =>
+            row.read_at ? (
+                <Badge variant="secondary">Read</Badge>
+            ) : (
+                <Badge variant="default">Unread</Badge>
+            ),
+    },
+];
+
 /** INSTRUCTIONS.md M18 — system notifications inbox (database-channel notifications; see M04/M07 for request/status tracking). */
 export default function Notifications({ notifications }: Props) {
     return (
         <>
             <Head title="Notifications" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">
                             Notifications
                         </CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-3">
-                        {notifications.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No notifications yet.
-                            </p>
-                        )}
-                        {notifications.map((notification) => (
-                            <div
-                                key={notification.id}
-                                className="flex items-center justify-between rounded-md border p-3"
-                            >
-                                <div>
-                                    <div className="font-medium">
-                                        {describe(notification)}
-                                    </div>
-                                    <div className="text-muted-foreground text-sm">
-                                        {formatDate(notification.created_at)}
-                                    </div>
-                                </div>
-                                {!notification.read_at ? (
+                    <CardContent>
+                        <DataTable
+                            columns={columns}
+                            rows={notifications}
+                            rowKey={(row) => row.id}
+                            emptyMessage="No notifications yet."
+                            renderActions={(row) =>
+                                !row.read_at ? (
                                     <Button
                                         variant="outline"
                                         size="sm"
                                         onClick={() =>
-                                            router.post(
-                                                markRead.url(notification.id),
-                                            )
+                                            router.post(markRead.url(row.id))
                                         }
                                     >
                                         Mark read
                                     </Button>
-                                ) : (
-                                    <Badge variant="secondary">Read</Badge>
-                                )}
-                            </div>
-                        ))}
+                                ) : null
+                            }
+                        />
                     </CardContent>
                 </Card>
             </div>

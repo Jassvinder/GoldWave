@@ -7,6 +7,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 
 type Milestone = {
     milestone_no: number;
@@ -35,6 +36,39 @@ type Props = {
     rewards: Reward[];
 };
 
+const milestoneColumns: DataTableColumn<Milestone>[] = [
+    { key: 'milestone_no', header: '#' },
+    { key: 'left', header: 'Left' },
+    { key: 'right', header: 'Right' },
+    { key: 'min_directs', header: 'Min Directs' },
+];
+
+const rewardColumns: DataTableColumn<Reward>[] = [
+    {
+        key: 'milestone_no',
+        header: 'Milestone',
+        render: (row) => (
+            <span className="font-medium">#{row.milestone_no}</span>
+        ),
+    },
+    {
+        key: 'left_consumed_count',
+        header: 'Consumed',
+        render: (row) =>
+            `${row.left_consumed_count}L / ${row.right_consumed_count}R`,
+    },
+    {
+        key: 'calculated_for_month',
+        header: 'Month',
+        render: (row) => row.calculated_for_month ?? '—',
+    },
+    {
+        key: 'reward_amount',
+        header: 'Reward',
+        render: (row) => <Badge>₹{row.reward_amount}</Badge>,
+    },
+];
+
 /** INSTRUCTIONS.md M11 — progress toward the next milestone, milestone table, consumed/available business, reward history (DOMAIN_LOGIC.md §7). */
 export default function PairReward({
     progress,
@@ -46,7 +80,7 @@ export default function PairReward({
         <>
             <Head title="Pair/Reward" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">
@@ -75,23 +109,11 @@ export default function PairReward({
                         <CardTitle>Milestones</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-4 gap-2 text-sm font-medium">
-                            <div>#</div>
-                            <div>Left</div>
-                            <div>Right</div>
-                            <div>Min Directs</div>
-                        </div>
-                        {milestones.map((milestone) => (
-                            <div
-                                key={milestone.milestone_no}
-                                className="grid grid-cols-4 gap-2 border-t py-2 text-sm"
-                            >
-                                <div>{milestone.milestone_no}</div>
-                                <div>{milestone.left}</div>
-                                <div>{milestone.right}</div>
-                                <div>{milestone.min_directs}</div>
-                            </div>
-                        ))}
+                        <DataTable
+                            columns={milestoneColumns}
+                            rows={milestones}
+                            rowKey={(row) => row.milestone_no}
+                        />
                     </CardContent>
                 </Card>
 
@@ -99,30 +121,13 @@ export default function PairReward({
                     <CardHeader>
                         <CardTitle>Reward History</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-3">
-                        {rewards.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No rewards yet.
-                            </p>
-                        )}
-                        {rewards.map((reward, index) => (
-                            <div
-                                key={index}
-                                className="flex items-center justify-between rounded-md border p-3"
-                            >
-                                <div>
-                                    <div className="font-medium">
-                                        Milestone #{reward.milestone_no}
-                                    </div>
-                                    <div className="text-muted-foreground text-sm">
-                                        {reward.left_consumed_count}L /{' '}
-                                        {reward.right_consumed_count}R ·{' '}
-                                        {reward.calculated_for_month}
-                                    </div>
-                                </div>
-                                <Badge>₹{reward.reward_amount}</Badge>
-                            </div>
-                        ))}
+                    <CardContent>
+                        <DataTable
+                            columns={rewardColumns}
+                            rows={rewards}
+                            rowKey={(row) => row.milestone_no}
+                            emptyMessage="No rewards yet."
+                        />
                     </CardContent>
                 </Card>
             </div>

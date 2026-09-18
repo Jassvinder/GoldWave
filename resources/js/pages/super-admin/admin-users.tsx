@@ -1,47 +1,102 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
-import { FormEventHandler } from 'react';
+import { FormEventHandler, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { EditAdminUserDialog } from '@/components/edit-admin-user-dialog';
 import { Input } from '@/components/ui/input';
+import InputError from '@/components/input-error';
 import { Label } from '@/components/ui/label';
 import { formatDate } from '@/lib/utils';
-import { store } from '@/routes/super-admin/admin-users';
+import { findMember, store } from '@/routes/super-admin/admin-users';
 
 type Admin = {
     id: number;
     name: string;
     email: string;
+    mobile: string | null;
+    customer_id: string | null;
     created_at: string | null;
     store: { id: number; name: string; status: string } | null;
 };
 
 type Props = { admins: Admin[] };
 
-/** INSTRUCTIONS.md S02 — create/manage Admin users; "access boundaries" = which store (if any) they own. */
+type MemberLookup =
+    | { status: 'idle' }
+    | { status: 'checking' }
+    | { status: 'valid'; name: string | null; customerId: string }
+    | { status: 'invalid'; message: string };
+
+/**
+ * INSTRUCTIONS.md S02 — promote an existing Member to Admin (Store Owner);
+ * "access boundaries" = which store (if any) they own. Fixed 17-09-2026 —
+ * every real Store Owner is already a company Member first, so this no
+ * longer creates a standalone account; it looks one up by Customer ID and
+ * promotes their existing login. Store assignment stays a separate step
+ * (Store Management page).
+ */
 export default function SuperAdminUsers({ admins }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
+    const [member, setMember] = useState<MemberLookup>({ status: 'idle' });
     const { data, setData, post, processing, errors, reset } = useForm({
-        name: '',
-        email: '',
-        password: '',
+        customer_id: '',
     });
+
+    async function checkCustomerId(customerId: string) {
+        if (!customerId) {
+            setMember({ status: 'idle' });
+            return;
+        }
+
+        setMember({ status: 'checking' });
+
+        const xsrfToken = decodeURIComponent(
+            document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
+        );
+
+        const response = await fetch(findMember.url(), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-XSRF-TOKEN': xsrfToken,
+            },
+            body: JSON.stringify({ customer_id: customerId }),
+        });
+
+        const body = await response.json();
+
+        if (response.ok && body.valid) {
+            setMember({
+                status: 'valid',
+                name: body.member_name,
+                customerId: body.member_customer_id,
+            });
+        } else {
+            setMember({
+                status: 'invalid',
+                message: body.message ?? 'Member not eligible.',
+            });
+        }
+    }
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        post(store.url(), { onSuccess: () => reset() });
+        post(store.url(), {
+            onSuccess: () => {
+                reset();
+                setMember({ status: 'idle' });
+            },
+        });
     };
 
     return (
         <>
             <Head title="Admin Users" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 {flash?.status && (
                     <p className="text-muted-foreground text-sm">
                         {flash.status}
@@ -51,67 +106,54 @@ export default function SuperAdminUsers({ admins }: Props) {
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">
-                            Create Admin User
+                            Promote a Member to Admin
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <form
                             onSubmit={submit}
-                            className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                            className="flex flex-col gap-3 sm:max-w-sm"
                         >
                             <div className="grid gap-2">
-                                <Label htmlFor="name">Name</Label>
+                                <Label htmlFor="customer_id">Customer ID</Label>
                                 <Input
-                                    id="name"
-                                    value={data.name}
+                                    id="customer_id"
+                                    value={data.customer_id}
                                     onChange={(e) =>
-                                        setData('name', e.target.value)
+                                        setData('customer_id', e.target.value)
                                     }
+                                    onBlur={(e) =>
+                                        checkCustomerId(e.target.value)
+                                    }
+                                    placeholder="GWL01"
                                 />
-                                {errors.name && (
-                                    <p className="text-destructive text-xs">
-                                        {errors.name}
+                                {member.status === 'checking' && (
+                                    <p className="text-muted-foreground text-sm">
+                                        Checking…
                                     </p>
                                 )}
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="email">Email</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    value={data.email}
-                                    onChange={(e) =>
-                                        setData('email', e.target.value)
-                                    }
-                                />
-                                {errors.email && (
-                                    <p className="text-destructive text-xs">
-                                        {errors.email}
+                                {member.status === 'valid' && (
+                                    <p className="text-sm text-green-600">
+                                        Member:{' '}
+                                        {member.name ?? member.customerId} (
+                                        {member.customerId})
                                     </p>
                                 )}
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="password">Password</Label>
-                                <Input
-                                    id="password"
-                                    type="password"
-                                    value={data.password}
-                                    onChange={(e) =>
-                                        setData('password', e.target.value)
-                                    }
-                                />
-                                {errors.password && (
-                                    <p className="text-destructive text-xs">
-                                        {errors.password}
+                                {member.status === 'invalid' && (
+                                    <p className="text-destructive text-sm">
+                                        {member.message}
                                     </p>
                                 )}
+                                <InputError message={errors.customer_id} />
                             </div>
                             <Button
                                 type="submit"
-                                disabled={processing}
-                                className="sm:col-span-3 sm:self-start"
+                                disabled={
+                                    processing || member.status !== 'valid'
+                                }
+                                className="self-start"
                             >
-                                Create Admin User
+                                Promote to Admin
                             </Button>
                         </form>
                     </CardContent>
@@ -121,47 +163,53 @@ export default function SuperAdminUsers({ admins }: Props) {
                     <CardHeader>
                         <CardTitle>Admin Users</CardTitle>
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-2">
-                        {admins.length === 0 && (
-                            <p className="text-muted-foreground text-sm">
-                                No Admin users yet.
-                            </p>
-                        )}
-                        {admins.map((admin) => (
-                            <div
-                                key={admin.id}
-                                className="flex items-start justify-between gap-3 rounded-md border p-3 text-sm"
-                            >
-                                <div className="min-w-0">
-                                    <div className="font-medium">
-                                        {admin.name}
-                                    </div>
-                                    <div className="text-muted-foreground">
-                                        {admin.email} · Created{' '}
-                                        {formatDate(admin.created_at)}
-                                    </div>
-                                </div>
-                                <div className="shrink-0 text-right">
-                                    {admin.store ? (
-                                        <>
-                                            <div className="font-medium">
-                                                {admin.store.name}
-                                            </div>
-                                            <Badge variant="secondary">
-                                                {admin.store.status}
-                                            </Badge>
-                                        </>
-                                    ) : (
-                                        <Badge variant="outline">
-                                            No store assigned
-                                        </Badge>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                    <CardContent>
+                        <DataTable
+                            columns={adminColumns}
+                            rows={admins}
+                            rowKey={(row) => row.id}
+                            emptyMessage="No Admin users yet."
+                            renderActions={(row) => (
+                                <EditAdminUserDialog admin={row} />
+                            )}
+                        />
                     </CardContent>
                 </Card>
             </div>
         </>
     );
 }
+
+const adminColumns: DataTableColumn<Admin>[] = [
+    {
+        key: 'name',
+        header: 'Name',
+        render: (row) => <span className="font-medium">{row.name}</span>,
+    },
+    {
+        key: 'customer_id',
+        header: 'Customer ID',
+        render: (row) => row.customer_id ?? '—',
+    },
+    { key: 'email', header: 'Email' },
+    {
+        key: 'created_at',
+        header: 'Created',
+        render: (row) => formatDate(row.created_at),
+    },
+    {
+        key: 'store',
+        header: 'Store',
+        render: (row) =>
+            row.store ? (
+                <div className="flex items-center gap-2">
+                    <span>{row.store.name}</span>
+                    <Badge variant="secondary" className="capitalize">
+                        {row.store.status}
+                    </Badge>
+                </div>
+            ) : (
+                <Badge variant="outline">No store assigned</Badge>
+            ),
+    },
+];

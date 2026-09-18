@@ -9,7 +9,9 @@ use App\Http\Controllers\SuperAdmin\DummyEntryAssignmentController;
 use App\Http\Controllers\SuperAdmin\DummyEntrySettingsController;
 use App\Http\Controllers\SuperAdmin\MemberManagementController;
 use App\Http\Controllers\SuperAdmin\MetalRateController;
+use App\Http\Controllers\SuperAdmin\PayoutRequestController;
 use App\Http\Controllers\SuperAdmin\PayoutTdsSettingsController;
+use App\Http\Controllers\SuperAdmin\ProfileChangeRequestController;
 use App\Http\Controllers\SuperAdmin\ReportsController;
 use App\Http\Controllers\SuperAdmin\RuleVersionController;
 use App\Http\Controllers\SuperAdmin\StoreManagementController;
@@ -23,7 +25,9 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('super-admin')->name('su
 
     // S02 — Admin Users & Permissions.
     Route::get('admin-users', [AdminUserController::class, 'index'])->name('admin-users.index');
+    Route::post('admin-users/find-member', [AdminUserController::class, 'findMember'])->name('admin-users.find-member');
     Route::post('admin-users', [AdminUserController::class, 'store'])->name('admin-users.store');
+    Route::patch('admin-users/{admin_user}', [AdminUserController::class, 'update'])->name('admin-users.update');
 
     // S03 — Compensation Rule Versions (also Admin Compensation Management's config page, see below).
     Route::get('rule-versions', [RuleVersionController::class, 'index'])->name('rule-versions.index');
@@ -68,10 +72,22 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('super-admin')->name('su
     Route::get('members', [MemberManagementController::class, 'index'])->name('members.index');
     Route::get('members/export', [MemberManagementController::class, 'export'])->name('members.export');
     Route::get('members/{member}', [MemberManagementController::class, 'show'])->name('members.show');
+    Route::patch('members/{member}', [MemberManagementController::class, 'update'])->name('members.update');
 
     // Admin Compensation Management.
     Route::get('compensation/config', [CompensationManagementController::class, 'config'])->name('compensation.config');
     Route::get('compensation/audit', [CompensationManagementController::class, 'audit'])->name('compensation.audit');
+
+    // T-109 — Payout Requests queue (ProcessPayoutRequest/FailPayoutRequest/RejectPayoutRequest have existed since T-009 with no page wired to them).
+    Route::get('payout-requests', [PayoutRequestController::class, 'index'])->name('payout-requests.index');
+    Route::post('payout-requests/{payout_request}/process', [PayoutRequestController::class, 'process'])->name('payout-requests.process');
+    Route::post('payout-requests/{payout_request}/fail', [PayoutRequestController::class, 'fail'])->name('payout-requests.fail');
+    Route::post('payout-requests/{payout_request}/reject', [PayoutRequestController::class, 'reject'])->name('payout-requests.reject');
+
+    // T-109 — Profile Change Requests queue (Approve/RejectProfileChangeRequest have existed since T-012 with no page wired to them).
+    Route::get('profile-change-requests', [ProfileChangeRequestController::class, 'index'])->name('profile-change-requests.index');
+    Route::post('profile-change-requests/{profile_change_request}/approve', [ProfileChangeRequestController::class, 'approve'])->name('profile-change-requests.approve');
+    Route::post('profile-change-requests/{profile_change_request}/reject', [ProfileChangeRequestController::class, 'reject'])->name('profile-change-requests.reject');
 
     // T-018 — Reports (full cross-role, cross-module catalog + queued exports).
     Route::get('reports', [ReportsController::class, 'index'])->name('reports.index');

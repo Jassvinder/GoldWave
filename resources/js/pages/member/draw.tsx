@@ -8,6 +8,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { formatDate } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 
@@ -79,7 +80,7 @@ export default function Draw({ groups }: Props) {
         <>
             <Head title="Monthly Draw" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">Monthly Draw</CardTitle>
@@ -113,32 +114,15 @@ export default function Draw({ groups }: Props) {
                                     className="mt-2 max-w-xs"
                                 />
                             </CardHeader>
-                            <CardContent className="flex flex-col gap-1">
-                                <div className="grid grid-cols-3 gap-2 text-sm font-medium">
-                                    <div>Sr. No.</div>
-                                    <div>Customer ID</div>
-                                    <div>Name</div>
-                                </div>
-                                {filteredMembers.map((member, index) => (
-                                    <div
-                                        key={member.customer_id ?? index}
-                                        className="grid grid-cols-3 gap-2 border-t py-1 text-sm"
-                                    >
-                                        <div>{index + 1}</div>
-                                        <div>
-                                            {member.customer_id}
-                                            {member.is_winner_removed && (
-                                                <Badge
-                                                    variant="secondary"
-                                                    className="ml-2"
-                                                >
-                                                    Won
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        <div>{member.name}</div>
-                                    </div>
-                                ))}
+                            <CardContent>
+                                <DataTable
+                                    columns={memberColumns}
+                                    rows={filteredMembers}
+                                    rowKey={(row, index) =>
+                                        row.customer_id ?? index
+                                    }
+                                    emptyMessage="No members found."
+                                />
                             </CardContent>
                         </Card>
 
@@ -146,31 +130,13 @@ export default function Draw({ groups }: Props) {
                             <CardHeader>
                                 <CardTitle>Winner History</CardTitle>
                             </CardHeader>
-                            <CardContent className="flex flex-col gap-2">
-                                {selectedGroup.executions.length === 0 && (
-                                    <p className="text-muted-foreground text-sm">
-                                        No draws executed yet for this group.
-                                    </p>
-                                )}
-                                {selectedGroup.executions.map((execution) => (
-                                    <div
-                                        key={execution.cycle_month_no}
-                                        className="flex items-center justify-between rounded-md border p-3 text-sm"
-                                    >
-                                        <div>
-                                            Month {execution.cycle_month_no} ·{' '}
-                                            {formatDate(execution.executed_at)}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <span>
-                                                {execution.winner_customer_id}
-                                            </span>
-                                            {execution.is_own_win && (
-                                                <Badge>You won!</Badge>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
+                            <CardContent>
+                                <DataTable
+                                    columns={executionColumns}
+                                    rows={selectedGroup.executions}
+                                    rowKey={(row) => row.cycle_month_no}
+                                    emptyMessage="No draws executed yet for this group."
+                                />
                             </CardContent>
                         </Card>
                     </>
@@ -179,3 +145,44 @@ export default function Draw({ groups }: Props) {
         </>
     );
 }
+
+const memberColumns: DataTableColumn<GroupMember>[] = [
+    {
+        key: 'customer_id',
+        header: 'Customer ID',
+        render: (row) => (
+            <span>
+                {row.customer_id}
+                {row.is_winner_removed && (
+                    <Badge variant="secondary" className="ml-2">
+                        Won
+                    </Badge>
+                )}
+            </span>
+        ),
+    },
+    { key: 'name', header: 'Name' },
+];
+
+const executionColumns: DataTableColumn<Execution>[] = [
+    {
+        key: 'cycle_month_no',
+        header: 'Month',
+        render: (row) => `Month ${row.cycle_month_no}`,
+    },
+    {
+        key: 'executed_at',
+        header: 'Executed',
+        render: (row) => formatDate(row.executed_at),
+    },
+    {
+        key: 'winner_customer_id',
+        header: 'Winner',
+        render: (row) => (
+            <span className="flex items-center gap-2">
+                {row.winner_customer_id}
+                {row.is_own_win && <Badge>You won!</Badge>}
+            </span>
+        ),
+    },
+];

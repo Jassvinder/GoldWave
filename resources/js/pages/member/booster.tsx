@@ -7,6 +7,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { formatDate } from '@/lib/utils';
 
 type Level = {
@@ -51,7 +52,7 @@ export default function Booster({
         <>
             <Head title="Income Booster" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">
@@ -93,31 +94,12 @@ export default function Booster({
                                 </Badge>
                             </CardHeader>
                             {qualification && (
-                                <CardContent className="flex flex-col gap-2">
-                                    {qualification.schedules.map((schedule) => (
-                                        <div
-                                            key={schedule.month_no}
-                                            className="flex items-center justify-between rounded-md border p-2 text-sm"
-                                        >
-                                            <div>
-                                                Month {schedule.month_no} ·{' '}
-                                                {formatDate(schedule.scheduled_date)}
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span>₹{schedule.amount}</span>
-                                                <Badge
-                                                    variant={
-                                                        schedule.status ===
-                                                        'paid'
-                                                            ? 'default'
-                                                            : 'secondary'
-                                                    }
-                                                >
-                                                    {schedule.status}
-                                                </Badge>
-                                            </div>
-                                        </div>
-                                    ))}
+                                <CardContent>
+                                    <DataTable
+                                        columns={scheduleColumns}
+                                        rows={qualification.schedules}
+                                        rowKey={(row) => row.month_no}
+                                    />
                                 </CardContent>
                             )}
                         </Card>
@@ -127,3 +109,26 @@ export default function Booster({
         </>
     );
 }
+
+const scheduleColumns: DataTableColumn<Schedule>[] = [
+    {
+        key: 'month_no',
+        header: 'Month',
+        render: (row) => `Month ${row.month_no}`,
+    },
+    {
+        key: 'scheduled_date',
+        header: 'Scheduled',
+        render: (row) => formatDate(row.scheduled_date),
+    },
+    { key: 'amount', header: 'Amount', render: (row) => `₹${row.amount}` },
+    {
+        key: 'status',
+        header: 'Status',
+        render: (row) => (
+            <Badge variant={row.status === 'paid' ? 'default' : 'secondary'}>
+                {row.status}
+            </Badge>
+        ),
+    },
+];

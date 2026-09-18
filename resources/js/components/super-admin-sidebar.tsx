@@ -1,6 +1,6 @@
-import { Link } from '@inertiajs/react';
 import {
     Banknote,
+    ClipboardEdit,
     ClipboardList,
     Coins,
     FileSpreadsheet,
@@ -15,20 +15,7 @@ import {
     Users,
     Wallet,
 } from 'lucide-react';
-import AppLogo from '@/components/app-logo';
-import { NavUser } from '@/components/nav-user';
-import {
-    Sidebar,
-    SidebarContent,
-    SidebarFooter,
-    SidebarGroup,
-    SidebarGroupLabel,
-    SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-} from '@/components/ui/sidebar';
-import { useCurrentUrl } from '@/hooks/use-current-url';
+import { PortalSidebar } from '@/components/portal-sidebar';
 import { dashboard } from '@/routes';
 import { index as adminUsersIndex } from '@/routes/super-admin/admin-users';
 import { audit as compensationAudit } from '@/routes/super-admin/compensation';
@@ -38,12 +25,14 @@ import { index as dummyAssignmentIndex } from '@/routes/super-admin/dummy-entry-
 import { index as dummySettingsIndex } from '@/routes/super-admin/dummy-entry-settings';
 import { index as membersIndex } from '@/routes/super-admin/members';
 import { index as metalRatesIndex } from '@/routes/super-admin/metal-rates';
+import { index as payoutRequestsIndex } from '@/routes/super-admin/payout-requests';
 import { index as payoutTdsIndex } from '@/routes/super-admin/payout-tds-settings';
+import { index as profileChangeRequestsIndex } from '@/routes/super-admin/profile-change-requests';
 import { index as reportsIndex } from '@/routes/super-admin/reports';
 import { index as ruleVersionsIndex } from '@/routes/super-admin/rule-versions';
 import { index as storeManagementIndex } from '@/routes/super-admin/store-management';
 import { index as storeWalletsIndex } from '@/routes/super-admin/store-wallets';
-import type { NavItem } from '@/types';
+import type { NavGroup, NavItem } from '@/types';
 
 const overviewItems: NavItem[] = [
     { title: 'System Dashboard', href: dashboard(), icon: LayoutGrid },
@@ -52,18 +41,39 @@ const overviewItems: NavItem[] = [
 const memberItems: NavItem[] = [
     { title: 'Admin Users', href: adminUsersIndex(), icon: UserCog },
     { title: 'Member Management', href: membersIndex(), icon: Users },
-    { title: 'Dummy Entry Settings', href: dummySettingsIndex(), icon: UserPlus },
-    { title: 'Dummy Entry Assignment', href: dummyAssignmentIndex(), icon: UserCheck },
+    {
+        title: 'Dummy Entry Settings',
+        href: dummySettingsIndex(),
+        icon: UserPlus,
+    },
+    {
+        title: 'Dummy Entry Assignment',
+        href: dummyAssignmentIndex(),
+        icon: UserCheck,
+    },
 ];
 
 const compensationItems: NavItem[] = [
     { title: 'Rule Versions', href: ruleVersionsIndex(), icon: Percent },
-    { title: 'Compensation Audit', href: compensationAudit(), icon: ClipboardList },
+    {
+        title: 'Compensation Audit',
+        href: compensationAudit(),
+        icon: ClipboardList,
+    },
 ];
 
 const drawItems: NavItem[] = [
     { title: 'Draw Settings', href: drawSettingsIndex(), icon: Settings2 },
     { title: 'Draw Management', href: drawManagementIndex(), icon: Trophy },
+];
+
+const requestItems: NavItem[] = [
+    { title: 'Payout Requests', href: payoutRequestsIndex(), icon: Wallet },
+    {
+        title: 'Profile Change Requests',
+        href: profileChangeRequestsIndex(),
+        icon: ClipboardEdit,
+    },
 ];
 
 const settingsItems: NavItem[] = [
@@ -72,7 +82,11 @@ const settingsItems: NavItem[] = [
 ];
 
 const storeItems: NavItem[] = [
-    { title: 'Store Management', href: storeManagementIndex(), icon: StoreIcon },
+    {
+        title: 'Store Management',
+        href: storeManagementIndex(),
+        icon: StoreIcon,
+    },
     { title: 'Store Wallets', href: storeWalletsIndex(), icon: Wallet },
 ];
 
@@ -80,61 +94,18 @@ const reportItems: NavItem[] = [
     { title: 'Reports', href: reportsIndex(), icon: FileSpreadsheet },
 ];
 
-const sections: { label: string; items: NavItem[] }[] = [
+const sections: NavGroup[] = [
     { label: 'Overview', items: overviewItems },
     { label: 'Members', items: memberItems },
     { label: 'Compensation', items: compensationItems },
     { label: 'Draw', items: drawItems },
+    { label: 'Requests', items: requestItems },
     { label: 'Settings', items: settingsItems },
     { label: 'Stores', items: storeItems },
     { label: 'Reports', items: reportItems },
 ];
 
-/** INSTRUCTIONS.md's Super Admin Portal (T-017) navigation — S01-S10 + Admin Dashboard/Member/Compensation/Draw management, mirroring AdminSidebar's structure. */
+/** INSTRUCTIONS.md's Super Admin Portal (T-017) navigation — S01-S10 + Admin Dashboard/Member/Compensation/Draw management. Renders via the shared `PortalSidebar` (T-100). */
 export function SuperAdminSidebar() {
-    const { isCurrentUrl } = useCurrentUrl();
-
-    return (
-        <Sidebar collapsible="icon" variant="inset">
-            <SidebarHeader>
-                <SidebarMenu>
-                    <SidebarMenuItem>
-                        <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
-                                <AppLogo />
-                            </Link>
-                        </SidebarMenuButton>
-                    </SidebarMenuItem>
-                </SidebarMenu>
-            </SidebarHeader>
-
-            <SidebarContent>
-                {sections.map((section) => (
-                    <SidebarGroup key={section.label} className="px-2 py-0">
-                        <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
-                        <SidebarMenu>
-                            {section.items.map((item) => (
-                                <SidebarMenuItem key={item.title}>
-                                    <SidebarMenuButton
-                                        asChild
-                                        isActive={isCurrentUrl(item.href)}
-                                        tooltip={{ children: item.title }}
-                                    >
-                                        <Link href={item.href} prefetch>
-                                            {item.icon && <item.icon />}
-                                            <span>{item.title}</span>
-                                        </Link>
-                                    </SidebarMenuButton>
-                                </SidebarMenuItem>
-                            ))}
-                        </SidebarMenu>
-                    </SidebarGroup>
-                ))}
-            </SidebarContent>
-
-            <SidebarFooter>
-                <NavUser />
-            </SidebarFooter>
-        </Sidebar>
-    );
+    return <PortalSidebar sections={sections} />;
 }

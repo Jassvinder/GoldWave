@@ -6,6 +6,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { formatDate } from '@/lib/utils';
 
 type Plan = {
@@ -36,7 +37,7 @@ export default function Membership({ plan, product_benefits }: Props) {
         <>
             <Head title="Membership Plan" />
 
-            <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4">
+            <div className="flex w-full flex-col gap-6 p-4">
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">
@@ -83,27 +84,12 @@ export default function Membership({ plan, product_benefits }: Props) {
                         <CardHeader>
                             <CardTitle>Product Benefit</CardTitle>
                         </CardHeader>
-                        <CardContent className="flex flex-col gap-3">
-                            {product_benefits.map((benefit, index) => (
-                                <div
-                                    key={index}
-                                    className="rounded-md border p-3 text-sm"
-                                >
-                                    <div className="font-medium capitalize">
-                                        {benefit.metal ?? 'Metal TBD'}
-                                    </div>
-                                    <div className="text-muted-foreground">
-                                        Rate at entry: ₹
-                                        {benefit.rate_per_gram_at_entry ?? '—'}
-                                        /g · Booked {formatDate(benefit.entry_date)}
-                                    </div>
-                                    <div className="text-muted-foreground">
-                                        {benefit.delivered_at
-                                            ? `Delivered ${formatDate(benefit.delivered_at)} via ${benefit.store_name ?? 'a store'}`
-                                            : 'Not yet delivered'}
-                                    </div>
-                                </div>
-                            ))}
+                        <CardContent>
+                            <DataTable
+                                columns={benefitColumns}
+                                rows={product_benefits}
+                                rowKey={(row, index) => index}
+                            />
                         </CardContent>
                     </Card>
                 )}
@@ -111,3 +97,36 @@ export default function Membership({ plan, product_benefits }: Props) {
         </>
     );
 }
+
+const benefitColumns: DataTableColumn<ProductBenefit>[] = [
+    {
+        key: 'metal',
+        header: 'Metal',
+        render: (row) => (
+            <span className="font-medium capitalize">
+                {row.metal ?? 'Metal TBD'}
+            </span>
+        ),
+    },
+    {
+        key: 'rate_per_gram_at_entry',
+        header: 'Rate at Entry',
+        render: (row) =>
+            row.rate_per_gram_at_entry
+                ? `₹${row.rate_per_gram_at_entry}/g`
+                : '—',
+    },
+    {
+        key: 'entry_date',
+        header: 'Booked',
+        render: (row) => formatDate(row.entry_date),
+    },
+    {
+        key: 'delivered_at',
+        header: 'Delivery',
+        render: (row) =>
+            row.delivered_at
+                ? `Delivered ${formatDate(row.delivered_at)} via ${row.store_name ?? 'a store'}`
+                : 'Not yet delivered',
+    },
+];

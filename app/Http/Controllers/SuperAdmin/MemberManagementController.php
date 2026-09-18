@@ -2,11 +2,16 @@
 
 namespace App\Http\Controllers\SuperAdmin;
 
+use App\Actions\Admin\UpdateMemberDetails;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SuperAdmin\UpdateMemberDetailsRequest;
 use App\Models\Member;
+use App\Models\MembershipPlan;
 use App\Support\Dates;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -42,6 +47,14 @@ class MemberManagementController extends Controller
         return Inertia::render('super-admin/member-management', [
             'members' => $members,
             'filters' => $request->only(['search', 'plan', 'status']),
+            'plan_options' => MembershipPlan::orderBy('code')->pluck('code'),
+            'status_options' => ['draft', 'payment_pending', 'payment_confirmed', 'active', 'cancelled'],
+            'stats' => [
+                'total' => Member::where('is_company_dummy', false)->count(),
+                'active' => Member::where('is_company_dummy', false)->where('status', 'active')->count(),
+                'pending' => Member::where('is_company_dummy', false)->whereIn('status', ['payment_pending', 'payment_confirmed'])->count(),
+                'inactive' => Member::where('is_company_dummy', false)->whereIn('status', ['draft', 'cancelled'])->count(),
+            ],
         ]);
     }
 
@@ -120,6 +133,17 @@ class MemberManagementController extends Controller
                 'team_size' => $teamSize,
                 'wallet_balance' => (string) $member->wallet_balance,
             ]),
+            'bank_details' => (function () use ($member) {
+                $bankDetail = $member->bankDetails->sortByDesc('id')->first();
+
+                return $bankDetail ? [
+                    'account_holder_name' => $bankDetail->account_holder_name,
+                    'account_number' => $bankDetail->account_number,
+                    'ifsc_code' => $bankDetail->ifsc_code,
+                    'bank_name' => $bankDetail->bank_name,
+                    'verified_at' => Dates::date($bankDetail->verified_at),
+                ] : null;
+            })(),
             'product_benefits' => $member->productBenefits->map(fn ($b) => [
                 'metal' => $b->metal,
                 'entry_date' => Dates::date($b->entry_date),
@@ -169,6 +193,51 @@ class MemberManagementController extends Controller
             ]),
             'activity' => $activity,
         ]);
+    }
+
+    public function update(UpdateMemberDetailsRequest $request, Member $member, UpdateMemberDetails $action): RedirectResponse
+    {
+        $photoPath = null;
+
+        if ($request->hasFile('profile_photo')) {
+            $photoPath = $request->file('profile_photo')->store('profile-photos', 'public');
+
+            if ($photoPath === false) {
+                throw ValidationException::withMessages(['profile_photo' => 'The uploaded file could not be stored.']);
+            }
+        }
+
+        $proofPath = null;
+
+        if ($request->hasFile('bank_proof_document')) {
+            $proofPath = $request->file('bank_proof_document')->store('bank-proofs', 'public');
+
+            if ($proofPath === false) {
+                throw ValidationException::withMessages(['bank_proof_document' => 'The uploaded file could not be stored.']);
+            }
+        }
+
+        $bankFields = array_filter([
+            'account_holder_name' => $request->string('bank_account_holder_name')->toString() ?: null,
+            'account_number' => $request->string('bank_account_number')->toString() ?: null,
+            'ifsc_code' => $request->string('bank_ifsc_code')->toString() ?: null,
+            'bank_name' => $request->string('bank_name')->toString() ?: null,
+            'proof_document_path' => $proofPath,
+        ], fn ($value) => $value !== null);
+
+        $action(
+            $member,
+            $request->string('name')->toString(),
+            $request->string('email')->toString(),
+            $request->string('mobile')->toString() ?: null,
+            $request->string('pan_card')->toString() ?: null,
+            $request->string('aadhaar_card')->toString() ?: null,
+            $request->string('address')->toString() ?: null,
+            $photoPath,
+            $bankFields === [] ? null : $bankFields,
+        );
+
+        return redirect()->route('super-admin.members.show', $member)->with('status', 'Member details updated.');
     }
 
     /** @return array<string, mixed> */

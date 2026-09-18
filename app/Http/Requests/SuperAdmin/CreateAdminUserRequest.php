@@ -15,9 +15,7 @@ class CreateAdminUserRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8'],
+            'customer_id' => ['required', 'string', 'max:20'],
         ];
     }
 }
