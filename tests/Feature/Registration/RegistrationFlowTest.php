@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Registration\CalculateEmiRateBooking;
 use App\Models\EmiSchedule;
 use App\Models\Member;
 use App\Models\MembershipPlan;
@@ -21,6 +22,7 @@ function createActiveMember(string $customerId, ?int $sponsorId = null, ?int $pl
         'sponsor_id' => $sponsorId,
         'placement_parent_id' => $placementParentId,
         'placement_side' => $placementSide,
+        'gender' => 'female',
         'status' => 'active',
         'activated_at' => now(),
     ]);
@@ -62,6 +64,7 @@ test('binary placement walks the occupied side straight down regardless of depth
     $this->post('/join', [
         'sponsor_code' => 'GWL900',
         'placement_side' => 'left',
+        'gender' => 'female',
         'name' => 'New Member',
         'email' => 'newmember@example.test',
         'mobile' => '9876543210',
@@ -89,6 +92,7 @@ test('binary placement walks the occupied Right side straight down too, symmetri
     $this->post('/join', [
         'sponsor_code' => 'GWL910',
         'placement_side' => 'right',
+        'gender' => 'female',
         'name' => 'New Right Member',
         'email' => 'newrightmember@example.test',
         'mobile' => '9876543211',
@@ -105,31 +109,45 @@ test('binary placement walks the occupied Right side straight down too, symmetri
     expect($newMember->sponsor_id)->toBe($s->id);
 });
 
-test('Current Rate Booking computes the exact worked example for Plan A', function () {
-    $sponsor = createActiveMember('GWL900');
+test('registration always starts an EMI plan on Future Rate, even if a Current Rate choice is posted (T-116)', function () {
+    createActiveMember('GWL900');
     $plan = MembershipPlan::where('code', 'A')->first();
 
     $this->post('/join', [
         'sponsor_code' => 'GWL900',
         'placement_side' => 'left',
-        'name' => 'Current Rate Member',
-        'email' => 'currentrate@example.test',
+        'gender' => 'female',
+        'name' => 'Future By Default Member',
+        'email' => 'futuredefault@example.test',
         'mobile' => '9876500001',
         'membership_plan_id' => $plan->id,
-        'rate_booking_method' => 'current_rate',
+        'rate_booking_method' => 'current_rate', // no longer a field — must be ignored
         'payment_mode' => 'cash',
     ])->assertRedirect();
 
-    $member = Member::whereHas('user', fn ($q) => $q->where('email', 'currentrate@example.test'))->firstOrFail();
+    $member = Member::whereHas('user', fn ($q) => $q->where('email', 'futuredefault@example.test'))->firstOrFail();
     $schedule = EmiSchedule::where('member_id', $member->id)->firstOrFail();
+
+    expect($schedule->rate_booking_method)->toBe('future_rate');
+    expect((float) $schedule->installment_amount)->toBe(1000.0);
+    expect($schedule->maintenance_cost)->toBeNull();
+    expect($schedule->fixed_weight_grams)->toBeNull();
+    expect((float) $schedule->future_commitment_amount)->toBe(20000.0);
+
+    $payment = Payment::where('member_id', $member->id)->where('type', 'registration')->firstOrFail();
+    expect((float) $payment->amount)->toBe(1000.0);
+});
+
+test('the Current Rate formula with nothing paid still reproduces the whole-schedule worked example for Plan A', function () {
+    $plan = MembershipPlan::where('code', 'A')->first();
+
+    $booking = app(CalculateEmiRateBooking::class)($plan, 'current_rate');
 
     // §3.0 worked example: 100gm silver = 10 tola @ ₹3,500/tola (= ₹350/gram, seeded) → ₹35,000 total,
     // ₹350 maintenance, EMI = 35000/20 + 350 = ₹2,100/month.
-    expect((float) $schedule->installment_amount)->toBe(2100.0);
-    expect((float) $schedule->maintenance_cost)->toBe(350.0);
-
-    $payment = Payment::where('member_id', $member->id)->where('type', 'registration')->firstOrFail();
-    expect((float) $payment->amount)->toBe(2100.0);
+    expect($booking['total_value'])->toBe(35000.0);
+    expect($booking['maintenance_cost'])->toBe(350.0);
+    expect($booking['installment_amount'])->toBe(2100.0);
 });
 
 test('Future Rate Booking uses the plan base amount with no maintenance cost', function () {
@@ -139,11 +157,11 @@ test('Future Rate Booking uses the plan base amount with no maintenance cost', f
     $this->post('/join', [
         'sponsor_code' => 'GWL900',
         'placement_side' => 'right',
+        'gender' => 'female',
         'name' => 'Future Rate Member',
         'email' => 'futurerate@example.test',
         'mobile' => '9876500002',
         'membership_plan_id' => $plan->id,
-        'rate_booking_method' => 'future_rate',
         'payment_mode' => 'cash',
     ])->assertRedirect();
 
@@ -162,6 +180,7 @@ test('cash registration stays inactive until Super Admin approves, then activate
     $this->post('/join', [
         'sponsor_code' => 'GWL900',
         'placement_side' => 'left',
+        'gender' => 'female',
         'name' => 'Cash Member',
         'email' => 'cashmember@example.test',
         'mobile' => '9876500003',
@@ -197,6 +216,7 @@ test('rejecting a cash payment leaves the member inactive with an audit trail an
     $this->post('/join', [
         'sponsor_code' => 'GWL900',
         'placement_side' => 'left',
+        'gender' => 'female',
         'name' => 'Rejected Member',
         'email' => 'rejected@example.test',
         'mobile' => '9876500004',
@@ -228,6 +248,7 @@ test('the online payment webhook is idempotent — a duplicate callback never re
     $this->post('/join', [
         'sponsor_code' => 'GWL900',
         'placement_side' => 'left',
+        'gender' => 'female',
         'name' => 'Online Member',
         'email' => 'onlinemember@example.test',
         'mobile' => '9876500005',
@@ -265,6 +286,7 @@ test('an invalid webhook signature is rejected and never activates the membershi
     $this->post('/join', [
         'sponsor_code' => 'GWL900',
         'placement_side' => 'left',
+        'gender' => 'female',
         'name' => 'Tampered Member',
         'email' => 'tampered@example.test',
         'mobile' => '9876500006',
@@ -292,6 +314,7 @@ test('cash-payment approval is restricted to super_admin — a member cannot app
     $this->post('/join', [
         'sponsor_code' => 'GWL900',
         'placement_side' => 'left',
+        'gender' => 'female',
         'name' => 'Role Boundary Member',
         'email' => 'roleboundary@example.test',
         'mobile' => '9876500007',
@@ -310,4 +333,25 @@ test('cash-payment approval is restricted to super_admin — a member cannot app
 
     $payment->refresh();
     expect($payment->status)->toBe('pending');
+});
+
+test('registration requires a valid gender and stores it on the member (T-122)', function () {
+    createActiveMember('GWL900');
+    $plan = MembershipPlan::where('code', 'F')->first();
+    $payload = [
+        'sponsor_code' => 'GWL900',
+        'placement_side' => 'left',
+        'name' => 'Gender Test',
+        'email' => 'gendertest@example.test',
+        'mobile' => '9876500001',
+        'membership_plan_id' => $plan->id,
+        'payment_mode' => 'cash',
+    ];
+
+    $this->post('/join', $payload)->assertSessionHasErrors('gender');
+    $this->post('/join', [...$payload, 'gender' => 'robot'])->assertSessionHasErrors('gender');
+
+    $this->post('/join', [...$payload, 'gender' => 'other'])->assertSessionHasNoErrors();
+
+    expect(Member::whereHas('user', fn ($q) => $q->where('email', 'gendertest@example.test'))->firstOrFail()->gender)->toBe('other');
 });

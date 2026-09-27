@@ -28,6 +28,9 @@ class EmiSchedule extends Model
         'maintenance_cost',
         'rule_version_id',
         'future_commitment_amount',
+        'current_rate_booked_at',
+        'installments_paid_at_booking',
+        'amount_paid_at_booking',
     ];
 
     protected function casts(): array
@@ -38,6 +41,8 @@ class EmiSchedule extends Model
             'fixed_weight_grams' => 'decimal:3',
             'maintenance_cost' => 'decimal:2',
             'future_commitment_amount' => 'decimal:2',
+            'current_rate_booked_at' => 'datetime',
+            'amount_paid_at_booking' => 'decimal:2',
         ];
     }
 
@@ -63,6 +68,12 @@ class EmiSchedule extends Model
     public function ruleVersion(): BelongsTo
     {
         return $this->belongsTo(RuleVersion::class);
+    }
+
+    /** @return HasMany<EmiRateBookingEvent, $this> */
+    public function rateBookingEvents(): HasMany
+    {
+        return $this->hasMany(EmiRateBookingEvent::class);
     }
 
     /** @return HasMany<EmiInstallment, $this> */

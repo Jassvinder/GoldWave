@@ -27,6 +27,7 @@ type Props = {
         name: string | null;
         email: string | null;
         mobile: string | null;
+        gender: string | null;
         pan_card: string | null;
         aadhaar_card: string | null;
         address: string | null;
@@ -46,6 +47,7 @@ export function EditMemberDialog({ member, bankDetails }: Props) {
         name: member.name ?? '',
         email: member.email ?? '',
         mobile: member.mobile ?? '',
+        gender: member.gender ?? '',
         pan_card: member.pan_card ?? '',
         aadhaar_card: member.aadhaar_card ?? '',
         address: member.address ?? '',
@@ -121,6 +123,26 @@ export function EditMemberDialog({ member, bankDetails }: Props) {
                         {errors.mobile && (
                             <p className="text-destructive text-sm">
                                 {errors.mobile}
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="grid gap-2">
+                        <Label htmlFor="edit_gender">Gender</Label>
+                        <select
+                            id="edit_gender"
+                            className="border-input bg-background rounded-md border px-3 py-2 text-sm"
+                            value={data.gender}
+                            onChange={(e) => setData('gender', e.target.value)}
+                        >
+                            <option value="">Not set</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                        </select>
+                        {errors.gender && (
+                            <p className="text-destructive text-sm">
+                                {errors.gender}
                             </p>
                         )}
                     </div>

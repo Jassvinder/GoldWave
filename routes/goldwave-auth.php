@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\GoldWaveLoginController;
 use App\Http\Controllers\Auth\GoldWavePasswordResetController;
+use App\Http\Controllers\Auth\StoreLoginController;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -28,3 +29,12 @@ Route::middleware('guest')->prefix('member')->name('member.')->group(function ()
     Route::post('password/otp/verify', [GoldWavePasswordResetController::class, 'verifyOtp'])->middleware('throttle:20,1')->name('password.otp.verify');
     Route::post('password/set', [GoldWavePasswordResetController::class, 'setPassword'])->middleware('throttle:6,1')->name('password.set');
 });
+
+/**
+ * T-117 (19-09-2026) — Admin/Store Login, on the shared `/login` page
+ * alongside Super Admin's own Fortify email+password form (untouched). Not
+ * under Fortify's own routing (like the Member login above) so it's exempt
+ * from Fortify's login rate limiter — throttled the same way as the Member
+ * login above instead.
+ */
+Route::middleware('guest')->post('login/store', [StoreLoginController::class, 'login'])->middleware('throttle:6,1')->name('store-login.store');

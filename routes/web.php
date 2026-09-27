@@ -1,12 +1,21 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\WelcomeController;
 use Illuminate\Support\Facades\Route;
 
-Route::inertia('/', 'welcome')->name('home');
+Route::get('/', [WelcomeController::class, 'index'])->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+});
+
+// T-140 — read-state endpoints for the header bell and the Notifications pages (own notifications only).
+Route::middleware('auth')->prefix('notifications')->name('notifications.')->group(function () {
+    Route::post('read-all', [NotificationController::class, 'markAllRead'])->name('read-all');
+    Route::get('{notification}/open', [NotificationController::class, 'open'])->name('open');
+    Route::post('{notification}/read', [NotificationController::class, 'markRead'])->name('read');
 });
 
 require __DIR__.'/settings.php';

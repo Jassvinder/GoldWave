@@ -4,6 +4,8 @@ namespace App\Actions\Payments;
 
 use App\Models\Payment;
 use App\Models\User;
+use App\Notifications\CashPaymentDecided;
+use App\Services\Notifier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -15,7 +17,7 @@ class RejectCashPayment
 {
     public function __invoke(Payment $payment, User $operator): void
     {
-        DB::transaction(function () use ($payment, $operator) {
+        $rejected = DB::transaction(function () use ($payment, $operator): bool {
             $locked = Payment::whereKey($payment->id)->lockForUpdate()->firstOrFail();
 
             if ($locked->mode !== 'cash') {
@@ -23,7 +25,7 @@ class RejectCashPayment
             }
 
             if ($locked->status !== 'pending') {
-                return;
+                return false;
             }
 
             $locked->update([
@@ -32,6 +34,13 @@ class RejectCashPayment
                 'verified_by' => $operator->id,
                 'verified_at' => now(),
             ]);
+
+            return true;
         });
+
+        // T-141 — tell the member (only when this call actually rejected it).
+        if ($rejected) {
+            Notifier::toUser($payment->refresh()->member->user, new CashPaymentDecided($payment, false));
+        }
     }
 }

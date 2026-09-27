@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Member;
 
 use App\Http\Controllers\Controller;
 use App\Models\Member;
+use App\Support\NetworkNodeCard;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -26,25 +27,13 @@ class DirectsController extends Controller
         abort_if($selected === null, 404);
         $this->authorize('viewDirects', $selected);
 
-        $selected->loadMissing('user');
-
         return Inertia::render('member/directs', [
             'loggedInMember' => $loggedInMember ? [
                 'name' => $loggedInMember->user?->name,
                 'customer_id' => $loggedInMember->customer_id,
             ] : null,
-            'selectedMember' => [
-                'id' => $selected->id,
-                'name' => $selected->user?->name,
-                'customer_id' => $selected->customer_id,
-                'status' => $selected->status,
-            ],
-            'directs' => $selected->directs()->with('user')->get()->map(fn (Member $direct) => [
-                'id' => $direct->id,
-                'name' => $direct->user?->name,
-                'customer_id' => $direct->customer_id,
-                'status' => $direct->status,
-            ]),
+            'selectedMember' => NetworkNodeCard::from($selected),
+            'directs' => $selected->directs()->with(['user', 'sponsor.user'])->get()->map(fn (Member $direct) => NetworkNodeCard::from($direct)),
         ]);
     }
 

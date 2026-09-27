@@ -42,6 +42,7 @@ Estimated UI size: **~40 screens** (Public/Auth 6, Member 18, Admin/Store Owner 
 | M16 | Payout History           | Payout request/status, payment mode, references and payment history                                 |
 | M17 | Reports                  | Own downloadable reports                                                                            |
 | M18 | Notifications/Support    | System notifications + request/status tracking                                                      |
+| M19 | Register a New Member (T-153) | Assisted Registration — same form as public `/join` (sponsor code typed in, not auto-filled), plus a **Wallet** payment option funding a *different, new* member's registration from this member's own wallet balance (`DOMAIN_LOGIC.md` §12.2(b)); Cash/Online still work exactly as on the public form |
 
 ## Admin / Store Owner Portal — Page Inventory
 
@@ -51,25 +52,28 @@ _(Also referred to as "Store Operations" — merged into one role; no separate S
 | --- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | A01 | Store Dashboard          | Assigned store sales, repurchases, inventory status, owner share, distributions, alerts                                                 |
 | A02 | Store Profile & Settings | Assigned store details and permitted store-level settings                                                                               |
-| A03 | Repurchases / Sales      | Manage new joining payments and store repurchases/sales; use Store Wallet as payment source; generate invoices; view transaction status |
-| A04 | Inventory                | Products, stock, stock movements, inventory status                                                                                      |
+| A03 | Repurchases / Sales      | Record a **Purchase** (member or non-member walk-in — Customer ID optional) or **Repurchase** (member required, Customer ID mandatory); record an **Item Buyback** (primarily non-member — Customer ID or walk-in name+mobile, T-150 23-09-2026); use Store Wallet as payment source; generate invoices; view transaction status. New joining plan-jewellery delivery is a separate, automatic flow (DOMAIN_LOGIC.md §16.10), not a manual transaction type here. **Collect a Pending Cash Payment (T-151):** search a member by Customer ID and settle their pending cash registration/EMI payment instantly from this store's own Store Wallet (`DOMAIN_LOGIC.md` §12.2(a)), no separate Super Admin approval needed. |
+| A04 | Inventory                | Products, stock, stock movements, inventory status. **Restock Shipments (T-152):** any restock this store is owed (`DOMAIN_LOGIC.md` §16.12) — a "Confirm Received" action once Super Admin has marked it sent, adding the item to this store's stock. |
 | A05 | Store Transactions       | Transaction details, invoice/reference, member, item/weight/rate/amount, Store Wallet deduction, status, operational history            |
 | A06 | Store Reports            | Assigned-store sales, inventory, profit, and distribution reports                                                                       |
+| A07 | Register a New Member (T-153) | Assisted Registration — same as M19, but the Wallet option funds it from this store's own Store Wallet instead of a member's wallet     |
 
 ## Super Admin / Company Control Pages
 
-| #   | Page                        | Main content / actions                                                                                    |
-| --- | --------------------------- | --------------------------------------------------------------------------------------------------------- |
-| S01 | System Dashboard            | Global health, business controls, queues, exceptions                                                      |
-| S02 | Admin Users & Permissions   | Create/manage Admin users and their access boundaries                                                     |
-| S03 | Compensation Rule Versions  | Approve/publish rule versions and effective dates                                                         |
-| S04 | Daily Dummy Entry Settings  | Daily count, enable/disable, placement mode, generation controls                                          |
-| S05 | Dummy Entry Assignment      | Enter leader details into an available dummy entry; converts it into the leader's member identity         |
-| S06 | Draw Master Settings        | Group size, monthly prize name/value, draw configuration/history                                          |
-| S07 | Gold & Silver Rate Settings | Gold and Silver rates together on one page, with effective-date history                                   |
-| S08 | Payout & TDS Settings       | Minimum withdrawal, payout schedule/controls, TDS percentage, payout provider, payout processing settings |
-| S09 | Store Management            | Create/manage multiple stores, assign Store Owners, record jewellery allocation/advance and store status  |
-| S10 | Store Wallet Management     | View/credit Store Wallets, record Super Admin top-ups, advance balance, wallet transaction history        |
+| #   | Page                        | Main content / actions                                                                                                                                                                                                                                                                                                                                            |
+| --- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S01 | System Dashboard            | Global health, business controls, queues, exceptions                                                                                                                                                                                                                                                                                                              |
+| S02 | Admin Users & Permissions   | Create/manage Admin users and their access boundaries                                                                                                                                                                                                                                                                                                             |
+| S03 | Compensation Rule Versions  | Approve/publish rule versions and effective dates. **Password-gated (T-132):** opening the page or publishing needs the Super Admin's own password re-entered within the last 5 minutes                                                                                                                                                                           |
+| S04 | Daily Dummy Entry Settings  | Daily count, enable/disable, placement mode, generation controls, **EMI plan selector (T-149)** — every generated dummy entry is created on this plan (default Plan A) with installment #1 seeded as an already-paid, silent cash payment (no Cash Payments queue entry, no compensation triggered)                                                               |
+| S05 | Dummy Entry Assignment      | Enter leader details into an available dummy entry; converts it into the leader's member identity. **T-149:** also generates the leader's remaining EMI schedule (installment #2 onward), starting fresh at the assignment date regardless of how long the entry sat unassigned — the leader pays every installment from here on themselves, like a normal member |
+| S06 | Draw Master Settings        | Group size, monthly prize name/value, draw configuration/history                                                                                                                                                                                                                                                                                                  |
+| S07 | Gold & Silver Rate Settings | Gold and Silver rates together on one page, with effective-date history                                                                                                                                                                                                                                                                                           |
+| S08 | Payout & TDS Settings       | Minimum withdrawal, payout schedule/controls, TDS percentage, payout provider, payout processing settings                                                                                                                                                                                                                                                         |
+| S09 | Store Management            | Create/manage multiple stores, assign Store Owners, record jewellery allocation/advance and store status                                                                                                                                                                                                                                                          |
+| S10 | Store Wallet Management     | View/credit Store Wallets, record Super Admin top-ups, advance balance, wallet transaction history                                                                                                                                                                                                                                                                |
+| S11 | Restock Shipments (T-152)   | Every restock owed to a store (`DOMAIN_LOGIC.md` §16.12) — "Mark Sent" once the jewellery is physically shipped; the store then confirms receipt from its own Inventory page                                                                                                                                                                                     |
+| S12 | Company Wallet (T-153)      | Balance + ledger, credited whenever a Member/Store funds an Assisted Registration from their own wallet (`DOMAIN_LOGIC.md` §12.2(b)) — read-only, nothing spends out of it yet                                                                                                                                                                                   |
 
 Super Admin also gets: full Admin Dashboard (see below), Admin Member Management, Admin Compensation Management, Admin Draw Management, and Reports — these are described as their own sections below because they are functionally distinct screens, not because they belong to a separate role.
 
@@ -77,12 +81,20 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
 
 ## Registration & Onboarding (Public/Auth)
 
+### Login pages & public home (T-128/T-130, 20-09-2026)
+
+- `/login` (Super Admin tab + Admin/Store tab) has no "Sign up" link, and Fortify's generic `/register` is disabled (404) — Super Admin and Admin/Store accounts are never self-registered; Members join only via `/join`. `/login` and `/member/login` show the GoldWave logo (linking to the home page), not the framework mark.
+- **Online payment (T-137, 22-09-2026):** choosing Online sends the member to our signed checkout page, which opens Razorpay Checkout automatically (UPI/cards/netbanking/wallets); a failed or closed payment leaves a "Pay now" button on the Registration Status page (and the EMI page's Pay button) to retry. Cash is unchanged.
+- `/join` and the Registration Status page (after submitting) show the GoldWave logo and name above the card, linking to the home page (T-135, 20-09-2026; status page 21-09-2026). One shared component: `components/public-logo-link.tsx`.
+- **Visual weight (21-09-2026, user feedback on Member Management):** the default Badge is now a soft amber tint instead of a solid amber block; an Active status uses the new soft-green `success` Badge variant (Member Management, Registration Status); the shared FilterBar's Search button is the quiet `secondary` button, not the solid primary one.
+- Home page `/` hero is a full-width auto-advancing image slider (5 s, pauses on hover, previous/next arrows, **no dots**, first slide eager and the rest lazy-loaded) with the Super-Admin-editable headline/subtext/CTAs (T-115) overlaid. The 5 slides are placeholder gradient images in `public/Images/hero/slide-1.webp`…`slide-5.webp` — replace those files with real jewellery photos (WebP) to change them.
+
 ### Registration page
 
 - Invitation/Sponsor Code input; validated sponsor name displayed directly under the code input.
 - Left / Right placement selection.
-- Mobile number, email, name.
-- Plan cards for ₹1,000×20, ₹3,000×10, ₹5,000×10, ₹20,000, and ₹50,000 (see `DOMAIN_LOGIC.md` §3 for plan details).
+- Mobile number, email, name, **gender (required — Male / Female / Other, T-122 19-09-2026)**.
+- Plan cards, one per plan: marketing name first (Silver Start/Prime, Gold Rise/Elite, Silver/Gold Direct, T-154 25-09-2026 — the A-F letter code is never shown), then amount/schedule (₹1,000×20, ₹3,000×10, ₹5,000×10, ₹10,000×10, ₹20,000 one-time, ₹50,000 one-time — see `DOMAIN_LOGIC.md` §3 for plan details).
 - Order/payment summary.
 - Payment mode: Online or Cash (cash registrations stay inactive until Super Admin confirms and activates — `DOMAIN_LOGIC.md` §3.1, §10.2).
 - Terms/consent area (if the company later requires it).
@@ -100,9 +112,43 @@ Lets the member submit a correction request (reason + new value) for a locked fi
 
 ---
 
+## Notifications — bell and Notifications pages (T-140/T-141, 22-09-2026)
+
+**Bell (every portal's header):** an icon with a red unread-count badge (9+ when large; hidden at 0). Click → a compact panel: "Notifications" title with **Mark all as read**, the 6 latest items (category icon, bold title while unread, one-line body, "2 hours ago"), an unread dot, "You're all caught up" when empty, and a **View all notifications** link. Clicking an item marks it read and opens its target (e.g. Cash Payments, the EMI Schedule). Works on phone width.
+
+**Notifications page** (Member `/member/notifications`, Super Admin `/super-admin/notifications`, Admin/Store Owner `/admin/notifications` — one shared layout): title + "N unread" and **Mark all as read**; **category tabs** — All, Payments, Requests, EMI Reminders — each with its unread count, a tab only appears once that category has items; an **Unread only** checkbox; the list (icon, title, body, time as "2 hours ago" with the DD-MM-YYYY date on hover/title, a **View** button, and **Mark as read** for unread ones — no whole-row click); pagination (15 per page); helpful empty states ("No unread notifications", "Nothing here yet — new payment requests will appear here").
+
+**What produces notifications:** _Super Admin:_ cash payment awaiting approval (registration or EMI), profile change request, payout request, bank details to verify. _Member:_ cash payment approved/rejected, change request approved/rejected, EMI due reminders (3 days before, on the due date, overdue). Rules: `DOMAIN_LOGIC.md` §21 "Notifications, SMS and reminders".
+
+## Member Profile — requesting a change (T-143, 22-09-2026)
+
+Every locked field on the Profile page (PAN, Aadhaar, address, profile photo, bank details) has a small **Request change** button. It opens a dialog with the right inputs for that field (text / photo upload / the four bank fields) and a reason, and files the same Change Request as the M04 page; the Super Admin is notified. A field that already has a pending request shows a "Change requested" badge instead of the button. The profile photo (or the gender placeholder) is shown at the top of the page, a green banner confirms a submitted request, and "View my change requests" links to the tracker (M04).
+
+## Inventory of request-type flows (kept current — 22-09-2026)
+
+| Request                                                    | Who → who                 | Status                                                                                                                           |
+| ---------------------------------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Profile Change Request (locked fields, incl. bank details) | Member → Super Admin      | Built (M04; also from the Profile page, T-143)                                                                                   |
+| Payout Request                                             | Member → Super Admin      | Built (M15 / Payout Requests queue)                                                                                              |
+| Cash payment approval (registration or EMI)                | Member → Super Admin      | Built (Cash Payments queue; notified, T-141)                                                                                     |
+| Bank details verification                                  | Member → Super Admin      | Built (verified on Member Detail; notified, T-141)                                                                               |
+| Pending Profile Fields (one-time)                          | Member → system           | Built (M03)                                                                                                                      |
+| Revert a Current Rate booking                              | Member → Super Admin      | Member contacts the Super Admin outside the app; Super Admin reverts on Member Detail. **Candidate:** an in-app "request revert" |
+| Support / help request                                     | Member → Super Admin      | **Candidate, not built** (M18 is titled Notifications/Support but only notifications exist)                                      |
+| Store Wallet top-up request                                | Store Owner → Super Admin | **Candidate, not built** (today Super Admin tops up on their own)                                                                |
+| Dummy entry assignment / other admin-side requests         | —                         | none                                                                                                                             |
+
+## Membership Plan Page (M05) — Book at Current Rate (T-116, 20-09-2026)
+
+- Plan details as before. **The jewellery weight is shown only after the member has booked at Current Rate**; on Future Rate no weight appears.
+- A member whose EMI schedule is on Future Rate with at least one unpaid installment sees a **"Book at Current Rate"** button. It opens a popup with plan, metal + fixed weight, today's rate, total value, EMIs paid / amount paid, remaining value, pending EMIs, maintenance, the new EMI amount and the total still to pay; The popup carries a red-highlighted warning — "You can't revert this. If you book by mistake you will have to contact the Super Admin, and you must do it before you pay your next EMI." (20-09-2026 user request). Confirm applies it, Cancel closes it. The button disappears once booked; the member cannot undo it — only a Super Admin can (see Member detail). Rule and worked numbers: `DOMAIN_LOGIC.md` §3.0.
+- The Join page no longer has a Rate Booking choice (every EMI plan starts on Future Rate).
+
 ## Member EMI Page (M06)
 
-- Selected plan and total commitment.
+**Auto-debit is intentionally not built (22-09-2026).** Every installment after the registration one is paid by the member (Online via Razorpay, or Cash approved by Super Admin). Reminders (bell + email + SMS) prompt the member before and after each due date. Auto-debit is recorded as a possible future capability in `DOMAIN_LOGIC.md` §5.
+
+- Selected plan and total commitment; rate-booking state (Future Rate, or Current Rate booked on a date with the locked rate/weight and the new EMI).
 - Installment number, due month/date, amount, status.
 - Paid date, payment reference, payment mode.
 - Pending/paid/failed indicators.
@@ -122,7 +168,9 @@ Business logic: `DOMAIN_LOGIC.md` §5, §6, §7.3.
 - Below the header: logged-in member's personal direct members, rendered as a tree diagram — the Selected Member card at top, one vertical connector down to a horizontal trunk, one vertical connector from the trunk into each direct's card. When there are more directs than fit one row, they wrap into additional rows, each row connected to the one above by a stub dropping from that row's own center (not a fixed display cap — every direct remains reachable).
 - Clicking a Direct Member card navigates to that member's own Directs View (a real page visit, so it lands in browser history) — recursive, to any depth.
 - **Back button** returns to the previous view via browser history — this retraces whatever path (clicks or search) the viewer actually took.
+- **Go to Root button (T-123, 19-09-2026)** sits beside Back and jumps straight to the logged-in member's own Directs View in one step (a plain link, not a history walk). Hidden for a viewer with no own member record (Super Admin).
 - **Search box**: look up any Customer ID; resolves only if that Customer ID is within the viewer's own downline (same rule as recursive navigation — a Customer ID on a different, unrelated leg is rejected exactly like an unknown one, never revealed as "exists but not visible"). Super Admin's search is unrestricted.
+- **Same chrome as Tree View (T-118, 19-09-2026):** header, Back/Search, zoom (+/−/Reset) and click-drag pan viewport are identical to Tree View — both pages render inside the one shared `NetworkDiagramShell` component; only the member cards/diagram differ.
 - Sponsor/Direct relationships only — never Binary Position.
 - Super Admin can open this view for any member.
 
@@ -133,10 +181,12 @@ Full behavioral rule: `DOMAIN_LOGIC.md` §4.1. (Back button and search added 13-
 - Header always shows the logged-in member's Name and Customer ID; stays constant through navigation.
 - Logged-in member starts as Root; Left/Right placement branches shown below, connected by the same trunk-line pattern as Directs View (vertical stub from parent → horizontal line spanning Left/Right centers → vertical stub into each child/Empty slot).
 - Clicking any node makes it the Selected Member; that member becomes the new Root with its own branches (recursive) — implemented as a full re-root page visit rather than a separate in-place-expand interaction (see `TreeController`'s docblock for why one interaction satisfies both "becomes the new Root" and "each child can be expanded").
-- Zoom (+/−/Reset buttons), pan (click-drag) supported on the diagram.
+- **Depth (T-118, 19-09-2026):** the Root and 3 generations below it are loaded per view (up to 15 cards; raised 2 → 5 on 19-09-2026, then set to 3 the same day because 5 made the tree too wide/unreadable); deeper members are reached by clicking a node to re-root.
+- Zoom (+/−/Reset buttons; zoom-out down to 20%, lowered from 50% on 19-09-2026 so the wider tree fits), pan (click-drag) supported on the diagram. Cards are compact (w-48) and sibling columns tightly spaced for the same reason (Tree View got too wide after the T-119 card redesign).
 - **Back button** and **Customer ID search** — same behavior and downline-only restriction as Directs View above.
-- Node cards show Customer ID, Name, Status.
-- **Rectangular cards only — no circular node designs anywhere in the application.**
+- **Go to Root button (T-123, 19-09-2026):** same button/behavior as Directs View, landing on the logged-in member's own Tree View root.
+- **Node cards (T-119, 19-09-2026, per `Docs/Screenshots/TreeView.png`):** circular avatar — own uploaded photo, else gender placeholder (male blue / female pink), else the male/default placeholder for "other" or unset gender (never a bare icon — 20-09-2026) — plus bold full name, Customer ID, and "Sponsored by : <name>". A small red dot at the card's top-right corner = inactive member (status not `active`). The identical card is used in Directs View (one shared `MemberNodeCard` component, data from `AppSupportNetworkNodeCard`).
+- **Cards are rectangular; only the avatar inside is a circle (T-119, 19-09-2026) — no circular nodes.**
 - Binary Position/Placement only — never Sponsor/Direct.
 - Super Admin can open this view for any member.
 
@@ -150,7 +200,7 @@ Full behavioral rule: `DOMAIN_LOGIC.md` §4.2. (Back button and search added 13-
 
 ## Pair/Reward (M11)
 
-Progress toward the next milestone, milestones table, consumed vs. available business (Left/Right), reward history. Rule: `DOMAIN_LOGIC.md` §7.
+Progress toward the next milestone and consumed vs. available business (Left/Right), plus **one milestone table** — # / Milestone (name) / Left / Right / Min Directs / **Reward / Date** (T-124/T-125, 20-09-2026). Reward and Date are filled once that milestone is actually achieved (Date = the month-end evaluation date that credited it, DD-MM-YYYY) and show "—" otherwise; there is no separate Reward History list. The 15 milestones have names (default ladder, T-154 25-09-2026: Starter, Builder, Achiever, Performer, Leader, Champion, Master, Premium, Platinum, Diamond, Crown, Royal, Imperial, Supreme, Maharaja), stored as a `name` in each `pair_milestones` rule value and editable by Super Admin on the Rule Versions page; an unnamed milestone displays as "Milestone #n". The `#` (milestone number) is always shown alongside the name — unlike the 6 membership plans, 15 names alone don't make relative ranking obvious. Rule: `DOMAIN_LOGIC.md` §7.
 
 ## Income Booster (M12)
 
@@ -166,9 +216,11 @@ Rule: `DOMAIN_LOGIC.md` §8.
 
 ## Wallet (M14)
 
-Balance + full transaction ledger (see `DOMAIN_LOGIC.md` §12 for ledger fields).
+Balance + transaction ledger (see `DOMAIN_LOGIC.md` §12 for ledger fields). **T-126 (20-09-2026):** the ledger is paginated (15 per page, newest first by default), has a search box (category words, description, status — the member's own entries only) and sortable Category / Description / Date / Amount (signed) / Status column headers; clicking a header sorts descending first, then flips.
 
 ## Payout Request (M15) / Payout History (M16)
+
+**Cancel (T-147, 22-09-2026):** a member may cancel their own still-`pending` payout request from the Payout History table (releases the wallet hold, no transaction row is created, status becomes `cancelled`); the Super Admin may also cancel it from the Payout Requests queue. Neither is available once the request has moved past `pending` (processed/failed/rejected/already cancelled).
 
 - Available balance, withdrawable/eligible balance, withdrawal amount input.
 - Minimum payout request enforcement (default ₹500, Super Admin configurable).
@@ -210,11 +262,19 @@ Add/manage member (where permitted), review cash payment, review profile-change 
 
 ### Member list
 
-Customer ID, name, mobile/email, plan, sponsor, placement, status, join date. Search by Customer ID/name/mobile. Filter by plan/status/date/sponsor. Pagination/export.
+Customer ID, name, mobile/email, plan, sponsor, placement, status, join date. **Rows are not clickable (T-134, 20-09-2026):** each row has an "Actions" column with an Eye (view) icon that opens the member detail — the same applies to the Store Management and Store Wallet Management lists. Search by Customer ID/name/mobile. Filter by plan/status/date/sponsor. Pagination/export.
+
+**Network columns (T-129, 19-09-2026):** Position (Left/Right of <parent Customer ID>, or Root), Directs (Sponsor-based count), and Team (total, with Left / Right in brackets — the Binary Position downline). A "Store Owner" badge marks a member whose own user owns a store, and a "Store Owners only" filter lists exactly those members. Team counts are computed for the visible page only, in one query. Filtering by "has a Store Owner somewhere in their team" is deliberately not offered here (it would need a recursive query per member on every list load) — it lives on Member Detail instead.
+
+### Member detail (bank details verification, T-146, 22-09-2026)
+
+When a member's bank details are not yet verified, "Bank Verified" shows "Not verified" with a **Verify** button — clicking it sets `member_bank_details.verified_by`/`verified_at`, which is required before that member can submit a payout request. Re-clicking once already verified is a no-op.
 
 ### Member detail
 
-Profile and one-time field state; membership plan and product benefit; sponsor/direct relation; placement parent/side; direct count and team size; EMI schedule/payment history; income history; wallet/ledger; payout history; draw history; booster history; store-profit history if applicable; audit/activity history.
+Profile and one-time field state; membership plan and product benefit; sponsor/direct relation; a **Network card (T-129)** — sponsor, position (Left/Right of parent), directs, true total team with Left-leg and Right-leg counts each split active / inactive / unassigned-dummy, whether this member is a Store Owner, the Store Owners inside their team (with store name and leg, linking to each), and "View Directs" / "View Tree" buttons that open the existing Directs/Tree views for this member (the old "team size" figure, which only counted immediate placement children, was removed); EMI schedule/payment history; income history; wallet/ledger; payout history; draw history; booster history; store-profit history if applicable; audit/activity history.
+
+**EMI rate booking (21-09-2026):** the EMI card shows the schedule's rate state (Future Rate, or Current Rate with the locked rate/weight, booking date and EMI), a **"Revert to Future Rate"** button when a revert is allowed (booked from the Membership page and no EMI paid since — otherwise the reason it is not allowed is shown), and the booking/revert history (who, when, reason). The button opens a dialog with a mandatory reason. Rule: `DOMAIN_LOGIC.md` §3.0.
 
 Security: sensitive financial/profile changes require appropriate authorization and create audit records (`SECURITY.md`).
 
@@ -225,6 +285,10 @@ Security: sensitive financial/profile changes require appropriate authorization 
 ### Configuration page
 
 Level percentages L1–L12; pair value per eligible joining; reward milestone thresholds/rewards; pair qualification requirements; booster thresholds/benefits/duration; effective date/version of each configuration.
+
+### Earnings Verification page (22-09-2026)
+
+Super Admin → Compensation → **Earnings Verification**. One button, **Run verification**, re-calculates every earning (Level Income, Purchase/Repurchase, Store Profit Distribution, Pair entries and Pair/Reward, Booster payouts) from the original payments, store sales and member tree and compares it with what was credited, plus wallet-ledger and wallet-balance integrity. Result: a green "All earnings match their source events" banner, or a red "N differences found" banner; one card per check with how many items were checked, **Passed / N errors / N warnings**, and (expanded automatically when there are errors) the list of findings — the payment / sale / member concerned and what was expected versus stored. Warnings are things that can legitimately differ (a beneficiary's status changed after the payment). Read-only — it never changes or corrects anything. Same engine as `php artisan earnings:verify` (which exits 1 on any error). Limits: Booster qualification and Monthly Draw eligibility/winners are not re-derived.
 
 ### Calculation audit page
 
@@ -242,7 +306,13 @@ Store ID/name, owner, contact/location/status, total sales, profit eligible for 
 
 ### Store detail page
 
+**Owner & password controls (T-133, 20-09-2026):** the "Reassign Owner" dropdown has its Reassign button directly beside it; pressing it opens a "Confirm your password" popup — the Super Admin's own account password is required for every reassignment. Reassigning auto-generates the new owner's Store password and shows it once (T-117's force-reset rule stays). A single "New / Reset Store Password" control (auto-generate or type one; shown once) replaces the two earlier password controls.
+
 Store profile, owner details, sales summary, profit summary, distribution summary, recent sales/transactions, beneficiary/upline distribution history, jewellery allocation/value and advance, Store Wallet balance and wallet ledger, top-up history, Store Wallet payment deductions.
+
+**Inventory (T-145, 22-09-2026):** an "Add Inventory" button opens a dialog (item name, metal, weight, quantity, price, an optional description — `DOMAIN_LOGIC.md` §16.5) and the current item-wise stock is listed below it. Works for a brand-new store or an existing one, at any time — the Super Admin is not asked to allocate inventory only during store creation. Adding the same item/metal/weight/price again increases that row's quantity instead of creating a duplicate.
+
+**Store Owner dropdown (Create Store / Reassign Owner):** lists only `role=admin` users who do not yet own a store. If it is empty, a hint links to Admin Users so the Super Admin can promote a member first — this is expected once every existing Admin already owns a store, not a bug.
 
 ### Sale entry / transaction page
 

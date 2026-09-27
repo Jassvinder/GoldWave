@@ -47,4 +47,19 @@ class RuleVersionService
 
         return $ruleValue->value ?? $default;
     }
+
+    /**
+     * T-110 (19-09-2026) — Gold/Silver compensation split: every split rate
+     * is stored as two sibling keys, `{$baseKey}` (Silver — the original,
+     * unsuffixed key, left as-is per the user's own instruction) and
+     * `{$baseKey}_gold`. Callers pass whichever metal the triggering
+     * payment/sale/plan actually is; `'silver'` (or anything else) reads the
+     * plain key unchanged.
+     */
+    public function metalValue(string $baseKey, string $metal, mixed $default = null): mixed
+    {
+        $key = $metal === 'gold' ? "{$baseKey}_gold" : $baseKey;
+
+        return $this->value($key, $default);
+    }
 }

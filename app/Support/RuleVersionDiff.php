@@ -19,9 +19,11 @@ class RuleVersionDiff
 {
     private const LABELS = [
         'emi_current_rate_maintenance_cost_percent' => 'EMI Current Rate Maintenance Cost %',
-        'level_income_rates' => 'Level Income Rates',
+        'level_income_rates' => 'Level Income Rates (Silver)',
+        'level_income_rates_gold' => 'Level Income Rates (Gold)',
         'pair_qualification_emis' => 'Pair Qualification EMIs',
-        'pair_value_per_entry' => 'Pair Value Per Entry',
+        'pair_value_per_entry' => 'Pair Value Per Entry (Silver)',
+        'pair_value_per_entry_gold' => 'Pair Value Per Entry (Gold)',
         'pair_milestones' => 'Pair Milestones',
         'payout_min_amount' => 'Payout Minimum Amount',
         'payout_tds_percent' => 'Payout TDS %',
@@ -31,10 +33,17 @@ class RuleVersionDiff
         'booster_levels' => 'Booster Levels',
         'dummy_entry_enabled' => 'Dummy Entry Enabled',
         'dummy_entry_daily_count' => 'Dummy Entry Daily Count',
-        'purchase_repurchase_income_rates' => 'Purchase/Repurchase Income Rates',
-        'store_profit_distribution_rates' => 'Store Profit Distribution Rates',
-        'item_buyback_percent' => 'Item Buyback %',
+        'purchase_repurchase_income_rates' => 'Purchase/Repurchase Income Rates (Silver)',
+        'purchase_repurchase_income_rates_gold' => 'Purchase/Repurchase Income Rates (Gold)',
+        'store_profit_distribution_rates' => 'Store Profit Distribution Rates (Silver)',
+        'store_profit_distribution_rates_gold' => 'Store Profit Distribution Rates (Gold)',
+        'item_buyback_percent' => 'Item Buyback % (Silver)',
+        'item_buyback_percent_gold' => 'Item Buyback % (Gold)',
         'store_gst_percent' => 'Store GST %',
+        'landing_hero_headline' => 'Landing Page Headline',
+        'landing_hero_subtext' => 'Landing Page Subtext',
+        'landing_hero_cta_primary_label' => 'Landing Page Primary CTA Label',
+        'landing_hero_cta_secondary_label' => 'Landing Page Secondary CTA Label',
     ];
 
     /**

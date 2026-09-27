@@ -169,8 +169,10 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 
 ### 10. EMI Rate Booking — Current Rate Booking formula and Future Rate Booking commitment (NEW 12-09-2026 — client spec v2.0)
 
-**Given** a member registers on Plan A (₹1,000/month × 20 months, 100gm Silver) and selects **Current Rate Booking** (`DOMAIN_LOGIC.md` §3.0), and the current silver rate is ₹3,500/tola (100gm = 10 tola).
-**When** the EMI schedule is generated.
+**CHANGED 20-09-2026 (T-116):** registration no longer asks for a rate-booking method — every EMI plan registers on Future Rate (the "Given instead … Future Rate Booking" block below is now the only registration outcome). The Current Rate formula below is exercised through `CalculateEmiRateBooking` with **zero EMIs paid** (the whole-schedule case, a formula fixture) and, for real members, through the post-registration switch in **scenario 21**.
+
+**Given** the Current Rate formula is evaluated for Plan A (₹1,000/month × 20 months, 100gm Silver) with nothing paid, and the current silver rate is ₹3,500/tola (100gm = 10 tola).
+**When** the EMI amount is calculated.
 **Then** Total Current-Rate Jewellery Value = 10 tola × ₹3,500 = ₹35,000; Maintenance Cost = 1% of ₹35,000 = ₹350; EMI Amount = (₹35,000 ÷ 20) + ₹350 = ₹1,750 + ₹350 = **₹2,100/month**, and all 20 `emi_installments` rows are created at ₹2,100 each (total ₹42,000 over the schedule) — not the plan's headline ₹1,000/month, which only applies to Future Rate Booking. The rate used (₹3,500/tola) and the fixed weight (100gm) must be snapshotted on the `emi_schedules` row so this calculation is reproducible even if the silver rate changes next month.
 **Given** instead the same member selects **Future Rate Booking**.
 **Then** the EMI Amount is simply the plan's base amount, ₹1,000/month for 20 months (no maintenance cost added); Future Jewellery Commitment = ₹1,000 × 20 = ₹20,000; at final EMI completion/delivery, the member receives Silver Jewellery worth ₹20,000 **at whichever silver rate is applicable on the delivery date** — if the rate has moved since booking, the delivered weight is not fixed at 100gm the way Current Rate Booking's is. **Regression to test:** switching the example to Plan D (₹10,000/month × 10 months, 10gm Gold) must use the same two formulas — do not special-case Plan A's numbers into the calculation code. **Note:** the Plan D Pair/Reward completed-EMI count is unrelated to this rate-booking calculation — it defaults to **1** completed EMI (RESOLVED 12-09-2026, `DOMAIN_LOGIC.md` §7.3/§21) — do not conflate the two when writing Plan D fixtures.
@@ -190,7 +192,7 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 
 ### 12. EMI installment schedule generation — due-date cadence and overdue transition (NEW 13-09-2026 — user-confirmed, no source spec existed for this)
 
-**Given** a member activates a Plan A membership (20 installments) on **17-02-2026**, Current Rate Booking, EMI amount ₹2,100/month (scenario 10's worked numbers).
+**Given** a member activates a Plan A membership (20 installments) on **17-02-2026**, Future Rate (registration always is, T-116), EMI amount ₹1,000/month.
 **When** the EMI schedule is generated.
 **Then** exactly 20 `emi_installments` rows are created with `due_date` on the activation-date anniversary each month: installment 1 = 17-02-2026, installment 2 = 17-03-2026, installment 3 = 17-04-2026, … installment 20 = 17-09-2027 — **not** the 1st of the month or any other fixed calendar day. All 20 rows start at `status = upcoming` (installment 1 may start `due` if generation happens on/after its own due date — see below).
 **Given** installment 3 (due 17-04-2026) is unpaid.
@@ -279,6 +281,148 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 **Given** a `role=admin` (Store Owner) or `role=member` user, authenticated.
 **When** they request any `super-admin/reports/*` route, including attempting to `download` an existing, `ready` `report_exports` row by guessing/incrementing its numeric ID.
 **Then** every request is rejected (403) — Reports Center access is Super-Admin-only per `DOMAIN_LOGIC.md` §2's "no company-wide... access" rule for Admin, and this is a separate module from Member's own M17 / Admin's own A06 reports, which stay untouched and independently scoped.
+
+### 19. Super Admin network overview — true downline, Left/Right legs, status split, Store Owners (NEW 19-09-2026 — pre-coding pass, DOMAIN_LOGIC.md §21 T-129)
+
+**Given** this Binary Position tree under `R` (sponsor of `L1`, `R1`, `R2` is `R`; every member `active` unless stated): `R` → left `L1`, right `R1`; `L1` → left `L2` (status `draft`), right `R2` (owns a Store); `L2` → left `L3`; `R1` → right `R3` (company dummy, `dummy_status=unassigned`).
+**When** `MemberNetworkSummary::forMember(R)` is computed.
+**Then** `direct_count`=3 (Sponsor-based: `L1`, `R1`, `R2` — never the placement children); **left leg** total=4 (`L1`,`L2`,`R2`,`L3`) = active 3 + inactive 1 + dummy 0; **right leg** total=2 (`R1`,`R3`) = active 1 + inactive 0 + dummy 1; **team total**=6 (not 2 — the old `team_size` bug counted only immediate placement children); store owners in downline = 1 (`R2`, with their store name), all on the left leg. `total` for each leg equals `BinaryTeamSizeCounter::countSides()` for the same member (the two must never disagree).
+**Given** the same tree, **When** computed for `L1`, **Then** left=2 (`L2`,`L3`), right=1 (`R2`); for a leaf (`L3`) left=0/right=0/store owners=[]; the counts never include the member itself.
+**Given** the Member Management list's page contains `R`, `L1` and `L3`, **When** `MemberNetworkSummary::forMany([R, L1, L3])` runs, **Then** it returns the same numbers as three separate `forMember` calls, using one recursive query for the whole page (not one per row).
+**Regression to test:** the list's "Store Owners only" filter matches exactly the members whose own user owns a Store (`R2` only), not members merely having one in their downline; a non-Super-Admin (`member`/`admin`) requesting `super-admin/members*` is still rejected.
+
+### 20. Store Owner who is also a Member — two separate logins, two separate portals (NEW 19-09-2026 — pre-coding pass, DOMAIN_LOGIC.md §21 T-131)
+
+**Given** a user with `role=admin` who owns a store (Store ID `GWLST…`, store password) **and** has an `active` `members` row (Customer ID, initial password = Customer ID), e.g. the dev DB's `GWL37`.
+**When** they log in on `/member/login` with Customer ID + password (or via OTP), **Then** the session records `goldwave_portal=member`; `/dashboard` renders `member/dashboard`; `/member/profile`, `/member/directs`, `/member/tree` are 200; every `/admin/*` route is 403 (they are "in" the Member Portal).
+**When** the same user instead logs in with Store ID + store password on `/login`, **Then** the session records `goldwave_portal=store`; `/dashboard` renders `admin/dashboard` (the Store Dashboard) — **not** the member dashboard even though a `members` row exists; `/admin/sales` is 200; `/member/profile` is 403.
+**Given** a plain `role=member` user, **Then** nothing changes: member routes 200, `/admin/*` 403 (role gate), regardless of portal value. **Given** a `role=admin` user with a store but **no** `members` row, **Then** member login with any Customer ID fails as before and `/member/*` stays 403. **Given** a `role=admin` user with a member row but no `goldwave_portal` in session (e.g. an old session), **Then** member routes are 403 and `/dashboard` shows the Store Dashboard — the member portal is only ever entered through the Member login.
+**Regression to test:** Super Admin can still open `member/directs`/`member/tree` for any member (unchanged); `role=admin` + `portal=member` cannot use `super-admin/*`; logging out and logging in via the other door flips the portal (the value is set at every login, never carried over).
+
+### 21. Book at Current Rate after registration — paid EMIs credited, maintenance on the remaining value (NEW 20-09-2026 — client reply + user confirmation, DOMAIN_LOGIC.md §3.0 / §21 T-116)
+
+**Given** a member on Plan A (₹1,000/month × 20, 100gm Silver), registered on Future Rate, has paid **4 EMIs (₹4,000)**, and the silver rate is ₹350/gm.
+**When** they open the Membership Plan page.
+**Then** a "Book at Current Rate" quote shows: weight 100gm Silver; rate ₹350/gm; total value ₹35,000; paid 4 EMIs / ₹4,000; remaining value ₹31,000; pending EMIs 16; maintenance ₹310 (1% of ₹31,000); **new EMI ₹2,247.50** (31,000 ÷ 16 = 1,937.50, + 310); still to pay ₹35,960 (16 × 2,247.50).
+**When** they confirm.
+**Then** the 16 unpaid `emi_installments` rows are ₹2,247.50 each, the 4 paid rows keep ₹1,000, due dates are unchanged; `emi_schedules` is `current_rate` with `rate_per_gram_at_booking = 350`, `fixed_weight_grams = 100`, `maintenance_cost = 310`, `installment_amount = 2247.50`, `installments_paid_at_booking = 4`, `amount_paid_at_booking = 4000`, `current_rate_booked_at` set; the Membership page now shows the 100gm weight; the button is gone.
+**Given** a second fixture — Plan D (₹10,000/month × 10, 10gm Gold), 2 EMIs paid (₹20,000), gold ₹6,000/gm.
+**Then** total ₹60,000; remaining ₹40,000; 8 pending; maintenance ₹400; **new EMI ₹5,400** (40,000 ÷ 8 = 5,000, + 400). (Do not special-case Plan A.)
+**Regression / guard cases to test:** (a) a schedule already on Current Rate cannot be booked again and its amounts are untouched; (b) with the paid amount ≥ total value (e.g. silver at ₹30/gm → ₹3,000 < ₹4,000 paid) the request is rejected and nothing changes; (c) with an installment payment still `pending` (cash awaiting approval) the request is rejected; (d) if the metal rate changed, or another EMI was paid, between quote and confirm, the request is rejected as stale; (e) all EMIs paid → no button and a direct request is rejected; (f) a one-time plan (E/F) or a member with no EMI schedule never sees the button and cannot post; (g) a Future Rate member's Membership page exposes no weight; (h) a member cannot book another member's schedule (the action always resolves the caller's own schedule).
+
+### 22. Super Admin reverts a Current Rate booking — only while no EMI was paid after it (NEW 21-09-2026 — user decision, DOMAIN_LOGIC.md §3.0)
+
+**Given** scenario 21's member (Plan A, 4 EMIs paid, booked at the Current Rate: 16 unpaid installments at ₹2,247.50, schedule `current_rate`).
+**When** a Super Admin reverts with the reason "Booked by mistake".
+**Then** the 16 unpaid installments are ₹1,000 again, the 4 paid ones are untouched, due dates unchanged, the schedule is `future_rate` with `installment_amount = 1000`, and `metal_rate_id`, `rate_per_gram_at_booking`, `fixed_weight_grams`, `maintenance_cost`, `current_rate_booked_at`, `installments_paid_at_booking`, `amount_paid_at_booking` are all null. Two `emi_rate_booking_events` rows exist for the schedule: `booked` (by the member) and `reverted` (by the Super Admin, with the reason).
+**Then** the member's Membership page shows Future Rate, no weight, and the "Book at Current Rate" button again — a fresh booking works and is logged as a second `booked` event.
+**Guard cases:** (a) an EMI paid after the booking (5 paid vs 4 at booking) → revert refused, nothing changes; (b) an installment payment still `pending` → refused; (c) a schedule that was Current Rate from registration (no `current_rate_booked_at`) → refused; (d) a Future Rate schedule → refused; (e) an empty reason → validation error; (f) a member or Admin (non-Super-Admin) posting the revert route → 403, and a member cannot revert their own booking.
+
+### 23. Razorpay online payment — order, verification, webhook, idempotency (NEW 22-09-2026 — pre-coding pass, DOMAIN_LOGIC.md §10.1 / §21 T-137; network is always faked, real Razorpay is never called in tests)
+
+**Given** Razorpay keys are configured and a Plan A member has a pending online registration payment of ₹1,000.00.
+**When** the gateway creates the intent.
+**Then** exactly one `POST /v1/orders` is sent with HTTP Basic auth (key id : key secret), `amount = 100000` (paise), `currency = INR`, `receipt = "GW-<payment id>"`; the returned order id is saved in `payments.gateway_order_id`; the returned redirect URL is a **signed** `payments/{payment}/checkout` link. Asking again for the same pending payment sends **no** second order request (the order is reused). An unsigned checkout URL is refused (403).
+**When** the member completes Checkout and the page posts back `razorpay_payment_id`, `razorpay_order_id`, `razorpay_signature` where the signature is a valid HMAC-SHA256 of `order_id|payment_id` with the key secret, and Razorpay's payment record for that id says `captured`, the same order id, `amount = 100000`, `INR`.
+**Then** the payment becomes `paid` with `provider_reference = <razorpay payment id>`, the membership activates (Customer ID assigned) and `PaymentConfirmed` fires exactly once.
+**Variants that must NOT activate anything (payment stays `pending`):** (a) a wrong signature; (b) a signature valid for a different order id; (c) Razorpay reports a different amount or currency; (d) Razorpay reports the payment `failed` / `created`; (e) the Razorpay lookup itself fails (network error) — the member sees a "will be confirmed automatically" message. **Authorized payment:** when Razorpay reports `authorized`, a `POST /v1/payments/{id}/capture` with the same amount and currency is sent first and the payment is confirmed only if it then reports `captured`.
+**Webhook:** a body signed with the webhook secret (`X-Razorpay-Signature`, HMAC-SHA256 of the **raw** body) with event `order.paid` (or `payment.captured`) for our order and the right amount → the same confirmation as above. A tampered body or missing/wrong signature → 400, nothing changes. Replaying the identical webhook, or verifying after the webhook already confirmed → no second activation/income (`PaymentConfirmed` still once). `payment.failed` and any other event → 200 and ignored (payment stays `pending`, retryable). An order id we do not know → 200 and ignored. A signed webhook whose amount differs from our payment → not confirmed.
+**Gateway selection:** no Razorpay keys → `FakePaymentGateway` (non-production only); both keys set → `RazorpayGateway`; production with no keys → refuses to boot the gateway (never falls back to the fake one). **EMI:** an online EMI installment payment goes through the same gateway and confirms the installment identically.
+
+### 24. Notifications — bell, inbox, read state, channel failures (NEW 22-09-2026 — pre-coding pass, DOMAIN_LOGIC.md §21 T-139…T-142)
+
+**Given** a member submits a cash EMI payment of ₹1,000 (installment 3) and a Super Admin exists.
+**Then** the Super Admin has exactly one unread notification "Cash payment awaiting approval" (category `payment`, body names the member, ₹1,000.00 and "EMI #3", link to Cash Payments); no other user has one. A cash **registration** creates the same alert (body says "new registration").
+**When** the Super Admin approves it → the member gets "Cash payment approved" (database + email + SMS); when rejected → "Cash payment rejected". A member with no email/mobile simply skips those channels.
+**Given** a member files a profile change request → Super Admin gets "Profile change request" (category `request`, link to the requests queue); approve/reject → the member gets the reviewed notification. A payout request → Super Admin "Payout request" with the amount. Pending-profile submission with bank details → Super Admin "Bank details to verify" linking to that member.
+**Bell:** the shared Inertia `notifications` prop has `unread_count` and the 6 latest items for the logged-in user only; another user's notifications never appear. **Open:** `GET notifications/{id}/open` marks that notification read and redirects to its link; someone else's notification id → 404; a link that is not an internal path is never followed.
+**Page:** category tabs list only categories that have items, with unread counts; "Unread only" hides read ones; "Mark all as read" clears every unread one for that user only; pagination is 15 per page; a Super Admin sees `super-admin/notifications`, a member `member/notifications`, a Store Owner `admin/notifications`.
+**Failure isolation:** if the mail or SMS channel throws, the business action still succeeds, the bell notification exists and the error is logged. **Legacy:** an old `ProfileChangeRequestReviewed` row (no title/category, attached to the Member) is moved to the member's user and still renders sensibly.
+
+### 25. SMS gateway — one path for OTP and notifications (NEW 22-09-2026)
+
+**Given** `SMS_DRIVER=log` (default). **When** an OTP is requested by mobile **or** a notification with the SMS channel is sent. **Then** both go through `SmsGatewayContract`: the log driver records recipient + text, nothing is sent to any network. `NOTIFY_SMS_ENABLED=false` removes the SMS channel from every notification; a user without a mobile number is skipped; a throwing gateway is caught and logged.
+
+### 26. EMI due reminders — schedule, idempotency, eligibility (NEW 22-09-2026 — DOMAIN_LOGIC.md §21)
+
+**Given** Plan A member (active), installments due on 17-10-2026 (#2, `upcoming`), 17-11-2026 (#3). **When** the reminder job runs on 14-10-2026 → one "EMI due in 3 days" reminder for #2 (bell + email + SMS); running it again the same day sends nothing. On 17-10-2026 (status `due`) → one "EMI due today". On 18-10-2026 (`overdue`) → one "EMI overdue"; on 25-10-2026 → one more (7 days later); nothing on 19-10…24-10. Installment #3 gets **no** reminder while #2 is unpaid (only the earliest unpaid installment is reminded). Paying #2 stops its reminders. A member whose status is not active, a fully paid schedule and a member without a user get none. Reminder text carries the amount and DD-MM-YYYY due date and links to the EMI Schedule page.
+
+### 27. Earnings Verification — independent re-computation catches what the Actions got wrong (NEW 22-09-2026)
+
+**Given** a chain GWL900 → A → B → C registered and approved through the real Actions (each a ₹20,000 Plan E cash payment), and a store sale of ₹10,000 by C at a store whose owner is a member sponsored by C.
+**Then** `earnings:verify` (and the Super Admin page) report **0 errors** across Level Income (3 payments), Purchase/Repurchase (1 sale), Store Profit (1 sale), Pair entries, Booster, Wallet ledger links and Wallet balances.
+**Tampering that must be caught, each with a readable message naming the payment/sale/member:** a Level Income row's amount, rate or beneficiary changed; a level row deleted, or a paid payment with no Level Income rows at all; a Purchase/Repurchase or Store Profit amount changed; a wallet entry's amount changed, deleted, or an orphan entry added; a member's cached wallet balance changed; a Pair entry moved to the other leg or deleted; a Pair reward whose value, consumed-entry counts or milestone do not match, or a consumed entry with no reward; a Booster month with the wrong amount/date, or "paid" with no wallet entry.
+**Not an error:** an upline whose status changed after the payment (skipped as inactive then, active now — or the reverse) is a **warning**. The command exits 0 clean, 1 on any error, 2 for an unknown check name; the Super Admin page shows a report only after "Run verification" and is Super-Admin-only. **Not re-derived (documented limits):** whether a member qualified for a Booster level, and Monthly Draw eligibility/winners.
+
+### 28. Dummy entries on EMI — silent installment #1, no compensation until assignment, then a fresh schedule (NEW 22-09-2026 — user decision, DOMAIN_LOGIC.md §14.2/§14.3 T-149)
+
+**Given** `dummy_entry_enabled = true`, `dummy_entry_daily_count = 1`, `dummy_entry_plan_code = 'A'` (₹1,000 × 20 installments, 100gm Silver).
+**When** the daily generation job runs (or Super Admin clicks "Generate Now").
+**Then** the new dummy entry gets a full `emi_schedules` row (`installment_amount = ₹1,000`, `total_installments = 20`, `rate_booking_method = future_rate`) plus exactly **one** `emi_installments` row (`installment_no = 1`, `status = paid`) linked to a `payments` row (`type = registration`, `mode = cash`, `status = paid`, `cash_status = approved`) created directly as paid — never through `InitiateEmiInstallmentPayment`/`ApproveCashPayment`. **Then**, because of that: the payment never appears in the Super Admin Cash Payments queue, `PaymentConfirmed` is never dispatched for it, and zero `IncomeLedgerCalculation`/`PairEntry` rows reference it — no compensation of any kind is triggered, to any upline, ever, for this payment.
+**Given** the entry stays unassigned for several months (generated 01-09-2026, still unassigned on 15-12-2026).
+**Then** it still has exactly 1 `emi_installments` row — no installment #2 is generated while unassigned, so there is nothing to be "next EMI due" for a dummy.
+
+**Given** the same entry, still unassigned on 15-12-2026.
+**When** Super Admin assigns a real leader's details to it (`AssignDummyEntryToLeader`).
+**Then** installments #2–20 (19 rows) are generated in the same transaction, anchored to **today (15-12-2026)**, not the 01-09-2026 generation date: installment #2's `due_date = 15-12-2026` with `status = due` (no grace period — a due date reached today is immediately due, matching `GenerateEmiInstallments`' own rule), installment #3's `due_date = 15-01-2027` with `status = upcoming`, and so on monthly. **No catch-up and no back-dating** for the 3½ months the entry sat unassigned.
+**Given** the now-real leader pays installment #2 themselves (cash or online) through the ordinary EMI Schedule page.
+**Then** this is an entirely ordinary EMI payment from here on — `PaymentConfirmed` fires, and Level Income/Pair/Booster evaluate normally against the leader's real Sponsor/Placement chain, exactly like any other member's EMI installment.
+
+**Given** the dummy-seeded leader's Sponsor chain terminates at the seeded company root (`is_company_root = true`), as it always does for a dummy-originated leader.
+**When** any of their real payments (or a real downline member's payment that reaches the root through the chain) fires Level Income, Purchase/Repurchase Income, or Store Profit Distribution.
+**Then** the company root is **never** credited — each Action records `eligibility_status = skipped`, `skip_reason = upline_dummy` for that level (Store Profit Distribution has no audit row for its skip; it silently omits the level). **Regression to test:** this must also hold for a still-_unassigned_ dummy that happens to sit in a real member's Sponsor chain (structurally rare, since dummies are never sponsors of real members, but the guard is unconditional on `is_company_dummy && dummy_status !== 'assigned'`, not root-specific). `EarningsVerifier` independently re-derives and confirms this — including a tamper case where a wrongly-credited root/dummy row is caught with a message naming the beneficiary.
+
+**Not fixed, flagged instead (`DOMAIN_LOGIC.md` §21):** a dummy-turned-leader can never become Booster-qualified through the normal pipeline, since their conceptual "registration" (installment #1) never dispatches `PaymentConfirmed`, and Booster's own qualification listener only reacts to `payments.type = registration` — every real payment they make afterward is `type = emi_installment`, which that listener's filter excludes.
+
+### 29. Purchase / Repurchase / Buyback — member vs. walk-in (NEW 23-09-2026 — user decision, DOMAIN_LOGIC.md §16.11 T-150)
+
+**Given** the Store Admin selects transaction type Repurchase on the Sales form, with no Customer ID entered.
+**When** the form is submitted.
+**Then** the request is rejected with a `customer_id` validation error — a Repurchase always requires an existing member, enforced both by `RecordStoreSaleRequest` (`required_if:transaction_type,repurchase`) and, as the real source of truth, by `ConfirmStoreSale` itself (so any other caller is protected too).
+
+**Given** the Store Admin selects transaction type Purchase, with no Customer ID entered.
+**When** the form is submitted with valid item/amount details.
+**Then** the sale is recorded with `member_id = null` — this is a normal, first-class walk-in Purchase, not an error. Purchase/Repurchase Upline Income (§15) does not fire (no purchasing member to credit), but Store Profit Distribution (§16.4) still fires in full, based on the **store owner's own** Sponsor/Direct chain — a walk-in customer has no bearing on it.
+**Given** the same, but with a valid Customer ID entered instead.
+**Then** the sale is recorded with `member_id` set, and both Purchase/Repurchase Upline Income (§15, to the purchasing member's own chain) and Store Profit Distribution (§16.4) fire.
+
+**Given** a Buyback with no Customer ID and no walk-in name.
+**When** the form is submitted.
+**Then** the request is rejected with a `walk_in_name` validation error — exactly one identity path (Customer ID or walk-in name) is required, never neither.
+**Given** a Buyback with a walk-in name ("Ramesh Kumar") and mobile, no Customer ID.
+**When** the form is submitted.
+**Then** the `store_buybacks` row is recorded with `member_id = null`, `walk_in_name = 'Ramesh Kumar'`, `walk_in_mobile` set — same pricing formula as a member buyback (§16.7), and still never touches `store_profit_distributions`/`income_ledger_calculations` (§16.9) either way.
+**Given** a Buyback with a valid Customer ID and no walk-in name.
+**Then** the row is recorded with `member_id` set and both `walk_in_name`/`walk_in_mobile` null — identical to the pre-23-09-2026 member-only behavior.
+
+**Given** `new_sale` is submitted directly to the manual Sales form endpoint (`POST /admin/sales`).
+**Then** the request is rejected — `RecordStoreSaleRequest` only accepts `purchase`/`repurchase` since 23-09-2026; `new_sale` is reserved for `RecordPlanJewelleryDelivery`'s automatic path (§16.10), which calls `ConfirmStoreSale` directly and never goes through this Request.
+
+### 30. Store-Wallet-Funded Cash Collection, Jewellery Restock Shipments, and Assisted Registration (NEW 24-09-2026 — user decision, DOMAIN_LOGIC.md §12.2/§16.12, T-151/T-152/T-153)
+
+**Given** a member initiates a cash EMI installment payment (or a cash registration), creating a `pending` `payments` row.
+**When** a Store Admin finds them by Customer ID on the Sales page and clicks "Collect via Store Wallet".
+**Then** the store's own Store Wallet is debited the exact payment amount, the payment becomes `status=paid` with `mode` still `cash` and `paying_store_id` set to that store, and — for an EMI installment — the installment becomes `paid`, or — for a registration — the member is activated (Customer ID assigned, `status=active`), exactly as `ApproveCashPayment` would, with no separate Super Admin approval step.
+**Given** the store's own Store Wallet balance is less than the payment amount.
+**Then** the collection is blocked with an `amount` validation error, and the payment stays `pending`.
+
+**Given** a member's plan-jewellery delivery (`RecordPlanJewelleryDelivery`) at Store X, where the member's `paid` registration payment's `paying_store_id` is **not** Store X (paid online, paid cash with no store, or paid cash but settled through a different store).
+**Then** a `store_restock_shipments` row is created in the same transaction as the delivery, `status=owed`, snapshotting the plan's item name/metal/weight and the delivery's sale amount as `value`.
+**Given** instead the registration payment's `paying_store_id` **is** Store X (settled via T-151's Store-Wallet-Funded Cash Collection at that same store).
+**Then** no restock shipment is created — the store already holds the money.
+**Given** an owed shipment.
+**When** Super Admin marks it "Mark Sent".
+**Then** `status=sent`, `sent_at`/`sent_by` recorded; the store cannot yet confirm it received (still-`owed` and already-`received` shipments both reject a "Confirm Received" attempt), and a different store cannot touch this shipment at all (403).
+**When** the store (or Super Admin) then confirms it received.
+**Then** `status=received`, and the item is added to that store's `store_inventory_items` via `AllocateStoreInventoryItem`'s existing merge-or-create logic (quantity 1, price = the shipment's snapshotted value).
+
+**Given** a logged-in Member (or Store) opens "Register a New Member" (`/member/register-new` or `/admin/register-new`) and registers a **different, new** member — same fields as the public `/join` form, including a manually-typed sponsor code.
+**When** they choose payment mode **Wallet** and submit.
+**Then** `RegisterMember` runs exactly as it does for the public flow (creating the new member + a `pending` registration payment, `mode=wallet`), and `ConfirmWalletFundedRegistration` immediately settles it in the same request: the logged-in payer's own wallet (Member's `wallet_balance` via `WalletLedgerService::debit()`, or the Store's own Store Wallet) is debited the registration amount, the Company Wallet is credited the same amount (`company_wallet_ledger_entries`, category `assisted_registration`), the payment becomes `paid` with `paying_member_id` or `paying_store_id` set (never both), and the **new** member is activated — with their own Level Income/Pair/Booster/etc. all evaluating from their own Sponsor/Placement chain exactly as normal, no special treatment for how the payment was funded.
+**Given** the payer's wallet balance is less than the registration amount.
+**Then** the request is blocked with an `amount` validation error; the new member and their `pending` payment row still exist (mirroring a normal registration's pending state) — no wallet was touched.
+**Given** payment mode Cash or Online is chosen instead (still available on this form).
+**Then** behavior is completely unchanged from the public `/join` flow — a pending cash payment (Super Admin approval) or a Razorpay checkout redirect.
 
 ## Concurrency Verification (T-020, 15-09-2026)
 

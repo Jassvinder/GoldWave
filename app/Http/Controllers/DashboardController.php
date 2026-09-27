@@ -9,6 +9,7 @@ use App\Models\DrawGroupMember;
 use App\Models\Member;
 use App\Models\Store;
 use App\Support\Dates;
+use App\Support\Portal;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -33,7 +34,11 @@ class DashboardController extends Controller
         $user = $request->user();
         $member = $user?->member;
 
-        if ($member) {
+        // T-131: a Store Owner (role=admin) who is also a Member sees the dashboard of the door
+        // they logged in through — Store ID login => Store Dashboard, Member login => member dashboard.
+        $inStorePortal = $user?->role === 'admin' && Portal::current($request) !== Portal::MEMBER;
+
+        if ($member && ! $inStorePortal) {
             return $this->memberDashboard($member);
         }
 

@@ -54,7 +54,8 @@ class CalculateLevelIncome
         }
 
         $payer = $payment->member()->firstOrFail();
-        $rates = $this->rules->value('level_income_rates', []);
+        $metal = $payer->membershipPlan->product_category;
+        $rates = $this->rules->metalValue('level_income_rates', $metal, []);
         $chain = $this->sponsorChain->ancestors($payer, self::MAX_LEVELS);
 
         DB::transaction(function () use ($payment, $payer, $ruleVersion, $rates, $chain) {
@@ -70,6 +71,14 @@ class CalculateLevelIncome
 
                 if ($beneficiary->status !== 'active') {
                     $this->recordSkipped($payment, $ruleVersion, $level, $rate, $beneficiary, 'upline_inactive');
+
+                    continue;
+                }
+
+                // T-149 — an unassigned dummy (or the seeded company root, never assignable) must never itself become a
+                // paid compensation beneficiary, matching the same guard already applied to Pair entries/Booster.
+                if ($beneficiary->is_company_dummy && $beneficiary->dummy_status !== 'assigned') {
+                    $this->recordSkipped($payment, $ruleVersion, $level, $rate, $beneficiary, 'upline_dummy');
 
                     continue;
                 }

@@ -48,7 +48,7 @@ export function FilterBar({
                     <RotateCcw className="size-4" />
                     Reset
                 </Button>
-                <Button type="submit">
+                <Button type="submit" variant="secondary">
                     <SearchIcon className="size-4" />
                     Search
                 </Button>

@@ -6,13 +6,17 @@ use App\Actions\Compensation\EvaluatePairMilestones;
 use App\Actions\Draw\ExecuteMonthlyDraw;
 use App\Actions\Draw\GenerateDrawGroups;
 use App\Actions\DummyEntries\GenerateDailyDummyEntries;
+use App\Actions\Emi\BookCurrentRate;
+use App\Actions\Emi\QuoteCurrentRateBooking;
 use App\Actions\Payments\ApproveCashPayment;
 use App\Actions\Payments\InitiateEmiInstallmentPayment;
 use App\Actions\Registration\RegisterMember;
+use App\Actions\Settings\PublishRuleVersion;
 use App\Actions\Store\AllocateStoreInventoryItem;
 use App\Actions\Store\ConfirmStoreSale;
 use App\Actions\Store\CreateStore;
 use App\Actions\Store\RecordItemBuyback;
+use App\Actions\Store\ResetStorePassword;
 use App\Jobs\EvaluateMonthlyPairMilestones;
 use App\Models\DrawGroup;
 use App\Models\DrawGroupMonthConfig;
@@ -22,9 +26,11 @@ use App\Models\MembershipPlan;
 use App\Models\MetalRate;
 use App\Models\Store;
 use App\Models\User;
+use App\Services\RuleVersionService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
@@ -128,10 +134,10 @@ class DemoSeedNetwork extends Command
 
         $this->info("Registration pass done: {$created} created, {$failed} failed.");
 
-        $this->runDummyEntries();
+        $this->runDummyEntries($operator);
         $this->runDraws();
         $this->runPairMilestones();
-        $this->runStoreDemo($operator, $register, $approveCash);
+        $this->runStoreDemos($operator, $register, $approveCash);
 
         $this->info('Demo network seeding complete.');
 
@@ -143,7 +149,6 @@ class DemoSeedNetwork extends Command
     {
         $sponsorCode = $this->pickSponsor();
         $plan = $this->pickPlan($plans);
-        $isEmi = $plan->isEmiPlan();
 
         return $register([
             'sponsor_code' => $sponsorCode,
@@ -151,8 +156,8 @@ class DemoSeedNetwork extends Command
             'mobile' => (string) (9800000000 + $globalIndex),
             'email' => "demo{$globalIndex}@goldwave.test",
             'name' => "Demo Member {$globalIndex}",
+            'gender' => random_int(0, 1) === 0 ? 'male' : 'female',
             'membership_plan_id' => $plan->id,
-            'rate_booking_method' => $isEmi ? (random_int(0, 1) === 0 ? 'current_rate' : 'future_rate') : null,
             'payment_mode' => 'cash',
         ]);
     }
@@ -161,6 +166,16 @@ class DemoSeedNetwork extends Command
     {
         $payment = $member->payments()->where('type', 'registration')->firstOrFail();
         $approveCash($payment, $operator);
+
+        // T-149 follow-up (24-09-2026, user-reported bug) — the name was previously built from
+        // $globalIndex (a count of demo% emails), while the real Customer ID comes from a
+        // separate, global counter (CustomerIdGenerator) that also advances for dummy entries,
+        // store demo activity, etc. — the two drifted ("Demo Member 497" got "GWL498"). Renaming
+        // here, from the *actually assigned* Customer ID after activation, makes the digits match
+        // every time, regardless of anything else that touched the counter in between.
+        $fresh = $member->fresh();
+        $digits = substr((string) $fresh->customer_id, 3);
+        $fresh->user->update(['name' => "Demo Member {$digits}"]);
     }
 
     private function maybeAdvanceEmi(
@@ -207,6 +222,17 @@ class DemoSeedNetwork extends Command
             $payment = $initiateInstallment($member, $next, 'cash');
             $approveCash($payment, $operator);
         }
+
+        // Registration is always Future Rate (T-116); about a third of members book at the Current Rate afterwards so the
+        // demo data has both kinds (a fully paid schedule has nothing left to book and is skipped by the guard).
+        if (random_int(1, 100) <= 35) {
+            try {
+                $quote = app(QuoteCurrentRateBooking::class)($member->fresh());
+                app(BookCurrentRate::class)($member->fresh(), $quote['metal_rate_id'], $quote['paid_installments']);
+            } catch (ValidationException) {
+                // Not bookable (nothing left to pay, etc.) — stays on Future Rate.
+            }
+        }
     }
 
     private function pickSponsor(): string
@@ -240,8 +266,17 @@ class DemoSeedNetwork extends Command
         return $plans->first();
     }
 
-    private function runDummyEntries(): void
+    private function runDummyEntries(User $operator): void
     {
+        // RuleVersionSeeder ships dummy entries switched off (spec-neutral); demo data wants a few so the S04/S05 pages have something to show.
+        if (! (bool) app(RuleVersionService::class)->value('dummy_entry_enabled', false)) {
+            app(PublishRuleVersion::class)(
+                ['dummy_entry_enabled' => true, 'dummy_entry_daily_count' => 2],
+                $operator,
+                'Demo seeding: enabled daily dummy entries (2/day).',
+            );
+        }
+
         $created = app(GenerateDailyDummyEntries::class)();
         $this->info('Dummy entries generated: '.count($created));
     }
@@ -282,75 +317,101 @@ class DemoSeedNetwork extends Command
         $this->info('Pair/Reward milestone evaluation run.');
     }
 
-    private function runStoreDemo(User $operator, RegisterMember $register, ApproveCashPayment $approveCash): void
+    /**
+     * Demo stores, each owned by a real network Member (raised to `admin`) so Store Profit Distribution fires. Each store
+     * gets a Store ID login (password = its own Store ID, same convention as a Member's initial password), gold + silver
+     * inventory, a mix of walk-in and member sales (new sale / purchase / repurchase) and one buyback.
+     */
+    private function runStoreDemos(User $operator, RegisterMember $register, ApproveCashPayment $approveCash): void
     {
-        $store = Store::where('name', 'Demo Jewellers')->first();
+        $definitions = [
+            ['Demo Jewellers', 'Demo City', '9990000000', '9990000099', 500000, 200000],
+            ['Sunrise Gold House', 'Mumbai', '9990000001', '9990000098', 800000, 300000],
+            ['Silver Line Jewels', 'Jaipur', '9990000002', '9990000097', 400000, 150000],
+            ['Royal Ornaments', 'Delhi', '9990000003', '9990000096', 600000, 250000],
+        ];
 
-        if (! $store) {
-            // A Store Owner must also be a full network Member (DOMAIN_LOGIC.md
-            // §2/§21) — Store::ownerMember() resolving to null makes
-            // CalculateStoreProfitDistribution bail out entirely with zero
-            // rows, so the owner is registered as a real Member first, same
-            // as any other member, then the resulting user's role is raised
-            // to admin.
-            $plan = MembershipPlan::where('code', 'E')->firstOrFail();
-            $ownerMember = $register([
-                'sponsor_code' => $this->pickSponsor(),
-                'placement_side' => 'left',
-                'mobile' => '9990000099',
-                'email' => 'demostoreowner@goldwave.test',
-                'name' => 'Demo Store Owner',
-                'membership_plan_id' => $plan->id,
-                'rate_booking_method' => null,
-                'payment_mode' => 'cash',
-            ]);
-            $approveCash($ownerMember->payments()->where('type', 'registration')->firstOrFail(), $operator);
-            $admin = $ownerMember->user;
-            $admin->update(['role' => 'admin']);
-
-            $store = app(CreateStore::class)(
-                'Demo Jewellers',
-                $admin,
-                '9990000000',
-                'Demo City',
-                500000,
-                200000,
-                $operator,
+        foreach ($definitions as $index => [$name, $location, $contact, $ownerMobile, $allocation, $advance]) {
+            $store = Store::where('name', $name)->first() ?? $this->createStoreWithOwner(
+                $operator, $register, $approveCash, $index + 1, $name, $location, $contact, $ownerMobile, $allocation, $advance,
             );
+
+            $this->runStoreActivity($store, $operator);
         }
+    }
 
-        $item = app(AllocateStoreInventoryItem::class)(
-            $store,
-            'Demo Gold Chain',
-            'gold',
-            10,
-            50,
-            65000,
-            $operator,
-        );
+    private function createStoreWithOwner(
+        User $operator,
+        RegisterMember $register,
+        ApproveCashPayment $approveCash,
+        int $number,
+        string $name,
+        string $location,
+        string $contact,
+        string $ownerMobile,
+        float $allocation,
+        float $advance,
+    ): Store {
+        // A Store Owner must also be a full network Member (DOMAIN_LOGIC.md
+        // §2/§21) — Store::ownerMember() resolving to null makes
+        // CalculateStoreProfitDistribution bail out entirely with zero
+        // rows, so the owner is registered as a real Member first, same
+        // as any other member, then the resulting user's role is raised
+        // to admin.
+        $plan = MembershipPlan::where('code', 'E')->firstOrFail();
+        $ownerMember = $register([
+            'sponsor_code' => $this->pickSponsor(),
+            'placement_side' => $number % 2 === 0 ? 'right' : 'left',
+            'mobile' => $ownerMobile,
+            'email' => "storeowner{$number}@goldwave.test",
+            'name' => "{$name} Owner",
+            'gender' => 'male',
+            'membership_plan_id' => $plan->id,
+            'payment_mode' => 'cash',
+        ]);
+        $approveCash($ownerMember->payments()->where('type', 'registration')->firstOrFail(), $operator);
+        $admin = $ownerMember->user;
+        $admin->update(['role' => 'admin']);
 
-        $memberIds = Member::whereNotNull('customer_id')->inRandomOrder()->limit(10)->pluck('id');
+        $store = app(CreateStore::class)($name, $admin, $contact, $location, $allocation, $advance, $operator);
+
+        // Store ID login (T-117): initial password = the Store ID itself — reset it from Store Management.
+        app(ResetStorePassword::class)($store, (string) $store->store_code, $operator);
+
+        return $store;
+    }
+
+    private function runStoreActivity(Store $store, User $operator): void
+    {
+        $goldChain = app(AllocateStoreInventoryItem::class)($store, 'Gold Chain', 'gold', 10, 50, 65000, $operator);
+        $silverAnklet = app(AllocateStoreInventoryItem::class)($store, 'Silver Anklet', 'silver', 50, 40, 17500, $operator);
+
+        $memberIds = Member::whereNotNull('customer_id')->inRandomOrder()->limit(8)->pluck('id');
+        $types = ['new_sale', 'purchase', 'repurchase'];
 
         foreach ($memberIds as $index => $memberId) {
+            // Alternate walk-in sales (no member, so no Purchase/Repurchase income) with member sales.
             $member = $index % 2 === 0 ? Member::find((int) $memberId) : null;
+            $isGold = $index % 2 === 0;
+            $item = $isGold ? $goldChain : $silverAnklet;
 
             try {
                 app(ConfirmStoreSale::class)(
                     $store,
                     $member,
-                    'new_sale',
-                    'Demo Gold Chain',
+                    $member !== null ? $types[intdiv($index, 2) % 3] : 'new_sale',
+                    $item->item_name,
                     $item,
-                    10,      // itemWeight (grams per unit)
-                    1,       // quantity
-                    6500,    // rate per gram
-                    65000,   // saleAmount (10g x ₹6500 x 1 unit)
-                    0,       // gstAmount
+                    (float) $item->weight,
+                    1,
+                    $isGold ? 6500 : 350,
+                    (float) $item->price,
+                    0,
                     'cash',
                     $operator,
                 );
             } catch (Throwable $e) {
-                $this->warn("Demo store sale skipped: {$e->getMessage()}");
+                $this->warn("Store sale skipped ({$store->name}): {$e->getMessage()}");
             }
         }
 
@@ -362,7 +423,7 @@ class DemoSeedNetwork extends Command
                 app(RecordItemBuyback::class)(
                     $store,
                     $buybackMember,
-                    'Demo Old Ring',
+                    'Old Gold Ring',
                     'gold',
                     5,
                     1,
@@ -371,10 +432,10 @@ class DemoSeedNetwork extends Command
                     $operator,
                 );
             } catch (Throwable $e) {
-                $this->warn("Demo buyback skipped: {$e->getMessage()}");
+                $this->warn("Buyback skipped ({$store->name}): {$e->getMessage()}");
             }
         }
 
-        $this->info("Demo store '{$store->name}' set up with sales and a buyback.");
+        $this->info("Store '{$store->name}' ({$store->store_code}) set up with inventory, sales and a buyback.");
     }
 }

@@ -18,6 +18,7 @@ use App\Models\RuleVersion;
 use App\Models\StoreActivityLog;
 use App\Models\User;
 use App\Services\RuleVersionService;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -107,14 +108,17 @@ test('promoting an ineligible member (dummy, inactive, or already admin) is reje
         ->toThrow(ValidationException::class);
 });
 
-test('reassigning a store owner updates ownership and logs an activity entry', function () {
+test('reassigning a store owner updates ownership, force-resets the password, and logs an activity entry (T-117)', function () {
     $originalOwner = User::factory()->create(['role' => 'admin']);
     $newOwner = User::factory()->create(['role' => 'admin']);
-    $store = app(CreateStore::class)('Reassign Test Store', $originalOwner, null, null, 100000, 0, saSuperAdmin());
+    $store = app(CreateStore::class)('Reassign Test Store', $originalOwner, null, null, 100000, 0, saSuperAdmin(), 'OriginalPass123!');
 
-    app(ReassignStoreOwner::class)($store, $newOwner, saSuperAdmin());
+    app(ReassignStoreOwner::class)($store, $newOwner, saSuperAdmin(), 'BrandNewPass456!');
 
-    expect($store->fresh()->owner_user_id)->toBe($newOwner->id);
+    $fresh = $store->fresh();
+    expect($fresh->owner_user_id)->toBe($newOwner->id);
+    expect(Hash::check('BrandNewPass456!', $fresh->password))->toBeTrue();
+    expect(Hash::check('OriginalPass123!', $fresh->password))->toBeFalse();
     expect(StoreActivityLog::where('store_id', $store->id)->where('action_type', 'store_owner_reassigned')->exists())->toBeTrue();
 });
 

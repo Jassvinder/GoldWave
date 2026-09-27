@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\SuperAdmin;
 
+use App\Actions\Payout\CancelPayoutRequest;
 use App\Actions\Payout\FailPayoutRequest;
 use App\Actions\Payout\ProcessPayoutRequest;
 use App\Actions\Payout\RejectPayoutRequest;
@@ -79,5 +80,12 @@ class PayoutRequestController extends Controller
         $action($payout_request);
 
         return back()->with('status', 'Payout request rejected.');
+    }
+
+    public function cancel(PayoutRequest $payout_request, CancelPayoutRequest $action): RedirectResponse
+    {
+        $action($payout_request);
+
+        return back()->with('status', 'Payout request cancelled.');
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Member;
 use App\Actions\Profile\SubmitPendingProfileFields;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Profile\SubmitPendingProfileFieldsRequest;
+use App\Support\WebpImageStore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -34,8 +35,8 @@ class PendingProfileController extends Controller
 
         abort_if($member === null, 404);
 
-        $photoPath = $request->file('profile_photo')->store('profile-photos', 'public');
-        $proofPath = $request->file('bank_proof_document')->store('bank-proofs', 'public');
+        $photoPath = WebpImageStore::store($request->file('profile_photo'), 'profile-photos');
+        $proofPath = WebpImageStore::store($request->file('bank_proof_document'), 'bank-proofs');
 
         if ($photoPath === false || $proofPath === false) {
             throw ValidationException::withMessages(['profile_photo' => 'One of the uploaded files could not be stored.']);

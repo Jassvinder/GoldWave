@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Member;
 
 use App\Http\Controllers\Controller;
 use App\Models\Member;
+use App\Support\NetworkNodeCard;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -18,13 +19,13 @@ use Inertia\Response;
  * interaction — clicking any visible node already shows that node's own
  * Left/Right branches once it becomes root, which satisfies "each child can
  * be expanded to view its own branches" without a second competing
- * interaction model. Loads 2 levels below the root (root + children +
- * grandchildren = up to 7 cards) — enough to show the recursive Left/Right
- * structure without pagination; zoom/pan is a frontend concern only.
+ * interaction model. Loads 3 levels below the root (root + 3 generations =
+ * up to 15 cards) — enough to show the recursive Left/Right structure
+ * without pagination; zoom/pan is a frontend concern only.
  */
 class TreeController extends Controller
 {
-    private const DEPTH = 2;
+    private const DEPTH = 3;
 
     public function show(Request $request, ?Member $member = null): Response
     {
@@ -63,7 +64,7 @@ class TreeController extends Controller
     }
 
     /**
-     * Recursive node shape: {id, name, customer_id, status, left, right} where
+     * Recursive node shape: NetworkNodeCard fields + {left, right} where
      * left/right are either null or another node of this same shape — not
      * expressible as a finite PHPDoc array shape, hence the loose value type.
      *
@@ -71,16 +72,7 @@ class TreeController extends Controller
      */
     private function buildNode(Member $member, int $depth): array
     {
-        $member->loadMissing('user');
-
-        $node = [
-            'id' => $member->id,
-            'name' => $member->user?->name,
-            'customer_id' => $member->customer_id,
-            'status' => $member->status,
-            'left' => null,
-            'right' => null,
-        ];
+        $node = [...NetworkNodeCard::from($member), 'left' => null, 'right' => null];
 
         if ($depth <= 0) {
             return $node;

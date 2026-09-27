@@ -5,7 +5,7 @@ import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { ProcessPayoutDialog } from '@/components/process-payout-dialog';
 import { StatStrip } from '@/components/stat-strip';
 import { formatDate } from '@/lib/utils';
-import { reject } from '@/routes/super-admin/payout-requests';
+import { cancel, reject } from '@/routes/super-admin/payout-requests';
 
 type PendingPayout = {
     id: number;
@@ -82,6 +82,10 @@ export default function PayoutRequests({ pending }: Props) {
         router.post(reject.url(id), {}, { preserveScroll: true });
     }
 
+    function cancelRequest(id: number) {
+        router.post(cancel.url(id), {}, { preserveScroll: true });
+    }
+
     return (
         <>
             <Head title="Payout Requests" />
@@ -107,6 +111,13 @@ export default function PayoutRequests({ pending }: Props) {
                     emptyMessage="No payout requests awaiting processing."
                     renderActions={(row) => (
                         <div className="flex justify-end gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => cancelRequest(row.id)}
+                            >
+                                Cancel
+                            </Button>
                             <Button
                                 size="sm"
                                 variant="outline"

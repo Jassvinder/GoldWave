@@ -1,5 +1,6 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { CalendarClock, Gem, Sparkles, TrendingUp } from 'lucide-react';
+import { CalendarClock, Gem, TrendingUp } from 'lucide-react';
+import { HeroSlider, type HeroSlide } from '@/components/hero-slider';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 import { login as memberLogin } from '@/routes/member';
@@ -26,8 +27,21 @@ const FEATURES = [
     },
 ];
 
-/** T-104 — public landing page at `/`, replacing the untouched Laravel starter-kit `welcome.tsx`. */
-export default function Welcome() {
+/** Placeholder slides (T-130) — abstract gold/silver gradients. Replace the files in `public/Images/hero/` with real jewellery photos (keep the names, or edit the paths here). */
+const HERO_SLIDES: HeroSlide[] = [1, 2, 3, 4, 5].map((n) => ({
+    src: `/Images/hero/slide-${n}.webp`,
+    alt: 'GoldWave gold and silver jewellery',
+}));
+
+type Hero = {
+    headline: string;
+    subtext: string;
+    cta_primary_label: string;
+    cta_secondary_label: string;
+};
+
+/** T-104 — public landing page at `/`, replacing the untouched Laravel starter-kit `welcome.tsx`. Hero copy made Super-Admin-editable by T-115 (19-09-2026); hero is a full-width image slider since T-130 (20-09-2026). */
+export default function Welcome({ hero }: { hero: Hero }) {
     const { auth } = usePage().props;
 
     return (
@@ -38,7 +52,7 @@ export default function Welcome() {
                 <header className="mx-auto flex w-full max-w-6xl items-center justify-between p-4">
                     <div className="flex items-center gap-2">
                         <img
-                            src="/Images/Logo.png"
+                            src="/Images/Logo.webp"
                             alt="GoldWave"
                             className="size-10 rounded-full object-cover"
                         />
@@ -61,48 +75,35 @@ export default function Welcome() {
                     )}
                 </header>
 
+                <HeroSlider slides={HERO_SLIDES}>
+                    <h1 className="max-w-2xl text-4xl font-bold tracking-tight text-white sm:text-5xl">
+                        {hero.headline}
+                    </h1>
+                    <p className="max-w-xl text-lg text-white/85">
+                        {hero.subtext}
+                    </p>
+                    {!auth.user && (
+                        <div className="flex flex-wrap gap-3">
+                            <Button size="lg" asChild>
+                                <Link href={registerShow()}>
+                                    {hero.cta_primary_label}
+                                </Link>
+                            </Button>
+                            <Button
+                                size="lg"
+                                variant="outline"
+                                className="border-white/60 bg-transparent text-white hover:bg-white/15 hover:text-white"
+                                asChild
+                            >
+                                <Link href={memberLogin()}>
+                                    {hero.cta_secondary_label}
+                                </Link>
+                            </Button>
+                        </div>
+                    )}
+                </HeroSlider>
+
                 <main className="mx-auto flex w-full max-w-6xl flex-col gap-16 p-4 py-12">
-                    <section className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
-                        <div className="flex flex-col gap-6">
-                            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-                                Own real gold & silver jewellery, one easy
-                                instalment at a time.
-                            </h1>
-                            <p className="text-muted-foreground text-lg">
-                                GoldWave is a jewellery membership program —
-                                pick a plan, pay in convenient monthly
-                                instalments, and receive genuine gold or silver
-                                jewellery, while your own network builds rewards
-                                alongside you.
-                            </p>
-                            <div className="flex flex-wrap gap-3">
-                                {!auth.user && (
-                                    <>
-                                        <Button size="lg" asChild>
-                                            <Link href={registerShow()}>
-                                                Join Now
-                                            </Link>
-                                        </Button>
-                                        <Button
-                                            size="lg"
-                                            variant="outline"
-                                            asChild
-                                        >
-                                            <Link href={memberLogin()}>
-                                                Member Login
-                                            </Link>
-                                        </Button>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Temporary placeholder panel standing in for real jewellery photography, pending the user's real photos (T-104). */}
-                        <div className="relative flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 shadow-lg dark:from-amber-600 dark:via-amber-700 dark:to-yellow-800">
-                            <Sparkles className="size-32 text-white/90" />
-                        </div>
-                    </section>
-
                     <section className="flex flex-col gap-8">
                         <div className="mx-auto max-w-2xl text-center">
                             <h2 className="text-2xl font-semibold">

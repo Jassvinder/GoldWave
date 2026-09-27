@@ -6,6 +6,7 @@ use App\Models\Member;
 use App\Models\WalletLedgerEntry;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * ARCHITECTURE.md: the ONLY class allowed to write `wallet_ledger_entries` or
@@ -52,6 +53,48 @@ class WalletLedgerService
             ]);
 
             $locked->increment('wallet_balance', $amount);
+
+            return $entry;
+        });
+    }
+
+    /**
+     * DOMAIN_LOGIC.md §12.2(b) — T-153. An immediate, non-hold debit: a
+     * member funding a *different, new* member's Assisted Registration from
+     * their own wallet balance. Unlike the Payout hold→confirmHold
+     * lifecycle (there is no external processing step to wait for — the
+     * debit and the thing it pays for commit together), this settles in one
+     * step, mirroring `StoreWalletService::deduct()`'s shape for stores.
+     */
+    public function debit(
+        Member $member,
+        string $category,
+        float $amount,
+        ?Model $source,
+        string $description,
+    ): WalletLedgerEntry {
+        return DB::transaction(function () use ($member, $category, $amount, $source, $description) {
+            $locked = Member::whereKey($member->id)->lockForUpdate()->firstOrFail();
+
+            if ($amount > $this->availableBalance($locked)) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Insufficient wallet balance for this transaction.',
+                ]);
+            }
+
+            $entry = WalletLedgerEntry::create([
+                'member_id' => $locked->id,
+                'entry_type' => 'debit',
+                'category' => $category,
+                'source_type' => $source?->getMorphClass(),
+                'source_id' => $source?->getKey(),
+                'amount' => $amount,
+                'status' => 'confirmed',
+                'description' => $description,
+                'processed_at' => now(),
+            ]);
+
+            $locked->decrement('wallet_balance', $amount);
 
             return $entry;
         });

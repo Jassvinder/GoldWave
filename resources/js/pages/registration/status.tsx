@@ -1,5 +1,7 @@
 import { Head } from '@inertiajs/react';
+import { PublicLogoLink } from '@/components/public-logo-link';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
@@ -21,6 +23,9 @@ type Props = {
         status: string;
         cash_status: string | null;
     } | null;
+    /** Signed checkout link while an online payment is still pending (T-137). */
+    pay_url: string | null;
+    payment_error: string | null;
 };
 
 const statusLabel: Record<string, string> = {
@@ -31,12 +36,19 @@ const statusLabel: Record<string, string> = {
     cancelled: 'Cancelled',
 };
 
-export default function RegistrationStatus({ member, payment }: Props) {
+export default function RegistrationStatus({
+    member,
+    payment,
+    pay_url,
+    payment_error,
+}: Props) {
     return (
         <>
             <Head title="Registration Status" />
 
             <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-6 px-4 py-10">
+                <PublicLogoLink />
+
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">
@@ -54,7 +66,7 @@ export default function RegistrationStatus({ member, payment }: Props) {
                             <Badge
                                 variant={
                                     member.status === 'active'
-                                        ? 'default'
+                                        ? 'success'
                                         : 'secondary'
                                 }
                             >
@@ -82,6 +94,27 @@ export default function RegistrationStatus({ member, payment }: Props) {
                                     ₹{payment.amount} · {payment.mode} ·{' '}
                                     {payment.cash_status ?? payment.status}
                                 </span>
+                            </div>
+                        )}
+
+                        {payment_error && (
+                            <p
+                                role="alert"
+                                className="border-destructive/40 bg-destructive/10 text-destructive rounded-md border p-3 text-sm"
+                            >
+                                {payment_error}
+                            </p>
+                        )}
+
+                        {pay_url && (
+                            <div className="flex flex-col gap-2">
+                                <p className="text-muted-foreground text-sm">
+                                    Your registration is saved but the payment
+                                    is not complete yet.
+                                </p>
+                                <Button asChild>
+                                    <a href={pay_url}>Pay now</a>
+                                </Button>
                             </div>
                         )}
 

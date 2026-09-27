@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\CompanyWallet;
+use App\Models\CompanyWalletLedgerEntry;
 use App\Models\EmiSchedule;
 use App\Models\Member;
 use App\Models\MembershipPlan;
@@ -53,6 +55,19 @@ test('a super admin sees the real S01 System Dashboard, not the member one', fun
 
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page->component('super-admin/dashboard'));
+});
+
+test("a member's own profile page shows their sponsor's Customer ID and name (T-121)", function () {
+    $sponsor = portalMember('SPON-1');
+    $member = portalMember('SPON-2');
+    $member->update(['sponsor_id' => $sponsor->id]);
+
+    $this->actingAs($member->user)
+        ->get('/member/profile')
+        ->assertInertia(fn ($page) => $page
+            ->component('member/profile')
+            ->where('member.sponsor_customer_id', 'SPON-1')
+            ->where('member.sponsor_name', $sponsor->user->name));
 });
 
 test('a member can submit Pending Profile fields exactly once, with real file uploads', function () {
@@ -173,6 +188,51 @@ test('a payout request is blocked without verified bank details, and succeeds on
     expect((float) $member->fresh()->wallet_hold_amount)->toBe(1000.0);
 });
 
+test('a member can cancel their own pending payout request, releasing the wallet hold (T-147)', function () {
+    $member = portalMember('PAY-CANCEL-1');
+    $member->update(['wallet_balance' => 5000, 'pending_fields_submitted_at' => now()]);
+    $bankDetail = $member->bankDetails()->create([
+        'account_holder_name' => 'Test Holder',
+        'account_number' => '1234567891',
+        'ifsc_code' => 'TEST0001235',
+        'bank_name' => 'Test Bank',
+        'proof_document_path' => 'proofs/x.jpg',
+        'verified_at' => now(),
+    ]);
+
+    $this->actingAs($member->user)->post('/member/payout', ['amount' => 1000]);
+    $payoutRequest = $member->payoutRequests()->firstOrFail();
+    expect((float) $member->fresh()->wallet_hold_amount)->toBe(1000.0);
+
+    $this->actingAs($member->user)
+        ->post("/member/payout/{$payoutRequest->id}/cancel")
+        ->assertRedirect('/member/payout');
+
+    expect($payoutRequest->fresh()->status)->toBe('cancelled');
+    expect((float) $member->fresh()->wallet_hold_amount)->toBe(0.0);
+
+    // A member cannot cancel someone else's payout request.
+    $other = portalMember('PAY-CANCEL-2');
+    $other->update(['wallet_balance' => 5000, 'pending_fields_submitted_at' => now()]);
+    $otherBank = $other->bankDetails()->create([
+        'account_holder_name' => 'Other Holder', 'account_number' => '9998887771', 'ifsc_code' => 'TEST0009991',
+        'bank_name' => 'Test Bank', 'proof_document_path' => 'proofs/y.jpg', 'verified_at' => now(),
+    ]);
+    $this->actingAs($other->user)->post('/member/payout', ['amount' => 1000]);
+    $othersRequest = $other->payoutRequests()->firstOrFail();
+
+    $this->actingAs($member->user)
+        ->post("/member/payout/{$othersRequest->id}/cancel")
+        ->assertNotFound();
+
+    expect($othersRequest->fresh()->status)->toBe('pending');
+
+    // Already-cancelled request cannot be cancelled again.
+    $this->actingAs($member->user)
+        ->post("/member/payout/{$payoutRequest->id}/cancel")
+        ->assertSessionHasErrors('payout_request');
+});
+
 test('the EMI page shows the Pair/Reward eligibility indicator for an EMI plan member', function () {
     $plan = MembershipPlan::where('code', 'A')->firstOrFail();
     $member = portalMember('EMI-1', $plan);
@@ -217,4 +277,107 @@ test('a member can download their own payment history report as CSV', function (
 
     $response->assertOk();
     $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+});
+
+test("a member's own profile page shows their gender (T-122)", function () {
+    $member = portalMember('GENDER-1');
+    $member->update(['gender' => 'male']);
+
+    $this->actingAs($member->user)
+        ->get('/member/profile')
+        ->assertInertia(fn ($page) => $page->where('member.gender', 'male'));
+});
+
+// ---------------------------------------------------------------- T-153: Assisted Registration
+
+test('a member can register a different, new member and pay from their own wallet (T-153, DOMAIN_LOGIC.md §12.2(b))', function () {
+    $sponsor = portalMember('AR-SPONSOR');
+    $payer = portalMember('AR-PAYER');
+    $payer->update(['wallet_balance' => 60000]);
+    $plan = MembershipPlan::where('code', 'F')->firstOrFail();
+
+    $this->actingAs($payer->user)
+        ->get('/member/register-new')
+        ->assertInertia(fn ($page) => $page->where('wallet_balance', 60000));
+
+    $this->actingAs($payer->user)
+        ->post('/member/register-new', [
+            'sponsor_code' => $sponsor->customer_id,
+            'placement_side' => 'left',
+            'gender' => 'male',
+            'name' => 'Assisted New Member',
+            'email' => 'assisted-new@example.test',
+            'mobile' => '9876511111',
+            'membership_plan_id' => $plan->id,
+            'payment_mode' => 'wallet',
+        ])
+        ->assertRedirect();
+
+    $newMember = Member::where('sponsor_id', $sponsor->id)->firstOrFail();
+    expect($newMember->status)->toBe('active');
+    expect($newMember->customer_id)->not->toBeNull();
+
+    $payment = $newMember->payments->firstWhere('type', 'registration');
+    expect($payment->status)->toBe('paid');
+    expect($payment->mode)->toBe('wallet');
+    expect($payment->paying_member_id)->toBe($payer->id);
+    expect($payment->paying_store_id)->toBeNull();
+
+    expect((float) $payer->fresh()->wallet_balance)->toBe(10000.0); // 60,000 - 50,000.
+
+    $companyWallet = CompanyWallet::firstOrFail();
+    expect((float) $companyWallet->balance)->toBe(50000.0);
+    expect(CompanyWalletLedgerEntry::where('company_wallet_id', $companyWallet->id)->where('category', 'assisted_registration')->exists())->toBeTrue();
+});
+
+test('assisted registration via wallet is blocked when the payer\'s wallet balance is insufficient', function () {
+    $sponsor = portalMember('AR-SPONSOR2');
+    $payer = portalMember('AR-POORPAYER');
+    $payer->update(['wallet_balance' => 100]);
+    $plan = MembershipPlan::where('code', 'F')->firstOrFail();
+
+    $this->actingAs($payer->user)
+        ->post('/member/register-new', [
+            'sponsor_code' => $sponsor->customer_id,
+            'placement_side' => 'right',
+            'gender' => 'female',
+            'name' => 'Blocked New Member',
+            'email' => 'blocked-new@example.test',
+            'mobile' => '9876522222',
+            'membership_plan_id' => $plan->id,
+            'payment_mode' => 'wallet',
+        ])
+        ->assertSessionHasErrors('amount');
+
+    $newMember = Member::where('sponsor_id', $sponsor->id)->firstOrFail();
+    $payment = $newMember->payments->firstWhere('type', 'registration');
+    // The member row and its pending payment were already created by RegisterMember before the
+    // wallet debit failed — this mirrors a normal cash/online registration's pending state.
+    expect($payment->status)->toBe('pending');
+    expect((float) $payer->fresh()->wallet_balance)->toBe(100.0);
+});
+
+test('assisted registration still supports cash, unaffected by the wallet option (T-153 regression)', function () {
+    $sponsor = portalMember('AR-SPONSOR3');
+    $payer = portalMember('AR-CASHPAYER');
+    $plan = MembershipPlan::where('code', 'F')->firstOrFail();
+
+    $this->actingAs($payer->user)
+        ->post('/member/register-new', [
+            'sponsor_code' => $sponsor->customer_id,
+            'placement_side' => 'left',
+            'gender' => 'male',
+            'name' => 'Cash New Member',
+            'email' => 'cash-new@example.test',
+            'mobile' => '9876533333',
+            'membership_plan_id' => $plan->id,
+            'payment_mode' => 'cash',
+        ])
+        ->assertRedirect();
+
+    $newMember = Member::where('sponsor_id', $sponsor->id)->firstOrFail();
+    $payment = $newMember->payments->firstWhere('type', 'registration');
+    expect($payment->status)->toBe('pending');
+    expect($payment->mode)->toBe('cash');
+    expect($payment->paying_member_id)->toBeNull();
 });

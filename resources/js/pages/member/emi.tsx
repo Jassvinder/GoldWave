@@ -35,6 +35,10 @@ type Props = {
         rate_booking_method: string;
         installment_amount: string;
         total_installments: number;
+        booked_at: string | null;
+        rate_per_gram: string | null;
+        fixed_weight_grams: string | null;
+        pending_installments: number;
     } | null;
     installments: Installment[];
     pair_eligibility: PairEligibility | null;
@@ -64,6 +68,8 @@ export default function Emi({
     pair_eligibility,
 }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
+    const paymentError = (usePage().props.errors as Record<string, string>)
+        ?.payment;
     const [mode, setMode] = useState<'online' | 'cash'>('online');
 
     const nextPayable = installments.find(
@@ -123,6 +129,15 @@ export default function Emi({
             <Head title="EMI Schedule" />
 
             <div className="flex w-full flex-col gap-6 p-4">
+                {paymentError && (
+                    <p
+                        role="alert"
+                        className="border-destructive/40 bg-destructive/10 text-destructive rounded-md border p-3 text-sm"
+                    >
+                        {paymentError}
+                    </p>
+                )}
+
                 {flash?.status && (
                     <p className="text-muted-foreground text-sm">
                         {flash.status}
@@ -133,9 +148,14 @@ export default function Emi({
                     <CardHeader>
                         <CardTitle className="text-2xl">EMI Schedule</CardTitle>
                         <CardDescription>
-                            {schedule
-                                ? `${schedule.rate_booking_method === 'current_rate' ? 'Current Rate Booking' : 'Future Rate Booking'} — ₹${schedule.installment_amount}/month × ${schedule.total_installments}`
-                                : 'No EMI schedule on this membership.'}
+                            {!schedule
+                                ? 'No EMI schedule on this membership.'
+                                : schedule.rate_booking_method ===
+                                    'current_rate'
+                                  ? schedule.booked_at
+                                      ? `Current Rate Booking (booked ${formatDate(schedule.booked_at)}) — ${schedule.fixed_weight_grams}g at ₹${schedule.rate_per_gram}/g · ₹${schedule.installment_amount}/month × ${schedule.pending_installments} remaining`
+                                      : `Current Rate Booking — ${schedule.fixed_weight_grams}g at ₹${schedule.rate_per_gram}/g · ₹${schedule.installment_amount}/month × ${schedule.total_installments}`
+                                  : `Future Rate — ₹${schedule.installment_amount}/month × ${schedule.total_installments}`}
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-3">

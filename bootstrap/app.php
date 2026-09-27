@@ -1,6 +1,7 @@
 <?php
 
 use App\Console\Scheduling;
+use App\Http\Middleware\EnsureMemberPortal;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureStoreOwnership;
 use App\Http\Middleware\HandleAppearance;
@@ -36,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
+            'member-portal' => EnsureMemberPortal::class,
             'role' => EnsureRole::class,
             'store-owner' => EnsureStoreOwnership::class,
         ]);

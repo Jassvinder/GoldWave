@@ -53,7 +53,8 @@ class CalculateStoreProfitDistribution
             return;
         }
 
-        $rates = $this->rules->value('store_profit_distribution_rates', []);
+        $metal = $storeSale->metal;
+        $rates = $this->rules->metalValue('store_profit_distribution_rates', $metal, []);
         $baseAmount = (float) $storeSale->sale_amount;
         $chain = $this->sponsorChain->ancestors($ownerMember, self::SPONSOR_LEVELS);
 
@@ -64,6 +65,12 @@ class CalculateStoreProfitDistribution
                 $beneficiary = $chain[$level - 1] ?? null;
 
                 if (! $beneficiary) {
+                    continue;
+                }
+
+                // T-149 — an unassigned dummy (or the seeded company root, never assignable) must never itself become a
+                // paid compensation beneficiary, matching the same guard already applied to Pair entries/Booster.
+                if ($beneficiary->is_company_dummy && $beneficiary->dummy_status !== 'assigned') {
                     continue;
                 }
 

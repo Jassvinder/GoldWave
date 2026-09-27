@@ -4,6 +4,8 @@ namespace App\Actions\Profile;
 
 use App\Models\Member;
 use App\Models\ProfileChangeRequest;
+use App\Notifications\ProfileChangeRequestSubmitted;
+use App\Services\Notifier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -35,7 +37,7 @@ class SubmitProfileChangeRequest
             ]);
         }
 
-        return DB::transaction(function () use ($member, $fieldName, $newValue, $reason) {
+        $changeRequest = DB::transaction(function () use ($member, $fieldName, $newValue, $reason) {
             $exists = ProfileChangeRequest::where('member_id', $member->id)
                 ->where('field_name', $fieldName)
                 ->where('status', 'pending')
@@ -57,6 +59,11 @@ class SubmitProfileChangeRequest
                 'status' => 'pending',
             ]);
         });
+
+        // T-141 — the Super Admin is told (bell + Notifications page).
+        Notifier::toSuperAdmins(new ProfileChangeRequestSubmitted($changeRequest));
+
+        return $changeRequest;
     }
 
     /** @param  string|array<string, string>  $newValue */

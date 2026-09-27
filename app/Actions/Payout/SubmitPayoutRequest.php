@@ -5,6 +5,8 @@ namespace App\Actions\Payout;
 use App\Models\Member;
 use App\Models\MemberBankDetail;
 use App\Models\PayoutRequest;
+use App\Notifications\PayoutRequestSubmitted;
+use App\Services\Notifier;
 use App\Services\RuleVersionService;
 use App\Services\WalletLedgerService;
 use Illuminate\Support\Facades\DB;
@@ -47,7 +49,7 @@ class SubmitPayoutRequest
             ]);
         }
 
-        return DB::transaction(function () use ($member, $amount, $bankDetail) {
+        $payoutRequest = DB::transaction(function () use ($member, $amount, $bankDetail) {
             $locked = Member::whereKey($member->id)->lockForUpdate()->firstOrFail();
             $available = (float) $locked->wallet_balance - (float) $locked->wallet_hold_amount;
 
@@ -76,5 +78,10 @@ class SubmitPayoutRequest
 
             return $request->fresh();
         });
+
+        // T-141 — the Super Admin is told (bell + Notifications page).
+        Notifier::toSuperAdmins(new PayoutRequestSubmitted($payoutRequest));
+
+        return $payoutRequest;
     }
 }

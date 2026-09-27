@@ -53,6 +53,7 @@ class Member extends Model
         'dummy_assigned_by',
         'is_company_root',
         'placeholder_name',
+        'gender',
         'pan_card',
         'aadhaar_card',
         'profile_photo_path',

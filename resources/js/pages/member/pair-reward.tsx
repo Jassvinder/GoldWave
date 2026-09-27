@@ -8,20 +8,16 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
+import { formatDate } from '@/lib/utils';
 
 type Milestone = {
     milestone_no: number;
+    name: string;
     min_directs: number;
     left: number;
     right: number;
-};
-
-type Reward = {
-    milestone_no: number;
-    left_consumed_count: number;
-    right_consumed_count: number;
-    reward_amount: string;
-    calculated_for_month: string | null;
+    reward_amount: string | null;
+    achieved_on: string | null;
 };
 
 type Props = {
@@ -33,48 +29,40 @@ type Props = {
     };
     milestones: Milestone[];
     next_milestone: Milestone | null;
-    rewards: Reward[];
 };
 
 const milestoneColumns: DataTableColumn<Milestone>[] = [
     { key: 'milestone_no', header: '#' },
+    {
+        key: 'name',
+        header: 'Milestone',
+        render: (row) => <span className="font-medium">{row.name}</span>,
+    },
     { key: 'left', header: 'Left' },
     { key: 'right', header: 'Right' },
     { key: 'min_directs', header: 'Min Directs' },
-];
-
-const rewardColumns: DataTableColumn<Reward>[] = [
-    {
-        key: 'milestone_no',
-        header: 'Milestone',
-        render: (row) => (
-            <span className="font-medium">#{row.milestone_no}</span>
-        ),
-    },
-    {
-        key: 'left_consumed_count',
-        header: 'Consumed',
-        render: (row) =>
-            `${row.left_consumed_count}L / ${row.right_consumed_count}R`,
-    },
-    {
-        key: 'calculated_for_month',
-        header: 'Month',
-        render: (row) => row.calculated_for_month ?? '—',
-    },
     {
         key: 'reward_amount',
         header: 'Reward',
-        render: (row) => <Badge>₹{row.reward_amount}</Badge>,
+        render: (row) =>
+            row.reward_amount !== null ? (
+                <Badge>₹{row.reward_amount}</Badge>
+            ) : (
+                <span className="text-muted-foreground">—</span>
+            ),
+    },
+    {
+        key: 'achieved_on',
+        header: 'Date',
+        render: (row) => formatDate(row.achieved_on),
     },
 ];
 
-/** INSTRUCTIONS.md M11 — progress toward the next milestone, milestone table, consumed/available business, reward history (DOMAIN_LOGIC.md §7). */
+/** INSTRUCTIONS.md M11 — progress toward the next milestone, and one milestone table carrying each achieved milestone's reward and date (DOMAIN_LOGIC.md §7). */
 export default function PairReward({
     progress,
     milestones,
     next_milestone,
-    rewards,
 }: Props) {
     return (
         <>
@@ -96,7 +84,8 @@ export default function PairReward({
                     {next_milestone && (
                         <CardContent>
                             <div className="rounded-md border p-3 text-sm">
-                                Next milestone #{next_milestone.milestone_no}:{' '}
+                                Next milestone: {next_milestone.name} (#
+                                {next_milestone.milestone_no}) —{' '}
                                 {next_milestone.left}L / {next_milestone.right}R
                                 (min {next_milestone.min_directs} directs)
                             </div>
@@ -113,20 +102,6 @@ export default function PairReward({
                             columns={milestoneColumns}
                             rows={milestones}
                             rowKey={(row) => row.milestone_no}
-                        />
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Reward History</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <DataTable
-                            columns={rewardColumns}
-                            rows={rewards}
-                            rowKey={(row) => row.milestone_no}
-                            emptyMessage="No rewards yet."
                         />
                     </CardContent>
                 </Card>

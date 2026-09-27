@@ -1,10 +1,12 @@
 <?php
 
+use App\Http\Controllers\Admin\AssistedRegistrationController;
 use App\Http\Controllers\Admin\InventoryController;
 use App\Http\Controllers\Admin\SalesController;
 use App\Http\Controllers\Admin\StoreProfileController;
 use App\Http\Controllers\Admin\StoreReportsController;
 use App\Http\Controllers\Admin\StoreTransactionsController;
+use App\Http\Controllers\NotificationController;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -14,6 +16,12 @@ use Illuminate\Support\Facades\Route;
  * an assigned store), matching M01's precedent from T-015.
  */
 Route::middleware(['auth', 'role:admin', 'store-owner'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('notifications', [NotificationController::class, 'index'])->defaults('portal', 'admin')->name('notifications.index');
+
+    // T-153 — Assisted Registration (DOMAIN_LOGIC.md §12.2(b)).
+    Route::get('register-new', [AssistedRegistrationController::class, 'show'])->name('assisted-registration.show');
+    Route::post('register-new', [AssistedRegistrationController::class, 'store'])->name('assisted-registration.store');
+
     Route::get('profile', [StoreProfileController::class, 'show'])->name('profile.show');
     Route::post('profile', [StoreProfileController::class, 'update'])->name('profile.update');
 
@@ -21,8 +29,10 @@ Route::middleware(['auth', 'role:admin', 'store-owner'])->prefix('admin')->name(
     Route::post('sales', [SalesController::class, 'storeSale'])->name('sales.store');
     Route::post('sales/buyback', [SalesController::class, 'storeBuyback'])->name('sales.buyback');
     Route::post('sales/delivery', [SalesController::class, 'storeDelivery'])->name('sales.delivery');
+    Route::post('sales/collect-payment/{payment}', [SalesController::class, 'collectPayment'])->name('sales.collect-payment');
 
     Route::get('inventory', [InventoryController::class, 'index'])->name('inventory.index');
+    Route::post('inventory/restock/{shipment}/received', [InventoryController::class, 'markRestockReceived'])->name('inventory.restock.received');
 
     Route::get('transactions', [StoreTransactionsController::class, 'index'])->name('transactions.index');
 

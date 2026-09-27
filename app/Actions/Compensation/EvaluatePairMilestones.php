@@ -42,7 +42,16 @@ class EvaluatePairMilestones
             return;
         }
 
-        $payValue = (float) $this->rules->value('pair_value_per_entry', 0);
+        // T-110 (19-09-2026) — milestone thresholds stay unified/mixed
+        // regardless of metal (user's explicit instruction), but the ₹
+        // reward no longer comes from one flat rate: a milestone's consumed
+        // entries can be a mix of Gold- and Silver-sourced ones, so each
+        // metal's own per-entry value is looked up here and applied to only
+        // the entries that actually carry that metal (below).
+        $payValues = [
+            'silver' => (float) $this->rules->value('pair_value_per_entry', 0),
+            'gold' => (float) $this->rules->value('pair_value_per_entry_gold', 0),
+        ];
         $milestones = collect((array) $this->rules->value('pair_milestones', []))->sortBy('milestone_no')->values();
 
         $lastAchieved = (int) (PairRewardTransaction::where('member_id', $beneficiary->id)->max('milestone_no') ?? 0);
@@ -61,28 +70,36 @@ class EvaluatePairMilestones
                 break;
             }
 
-            $this->consumeMilestone($beneficiary, $milestone, $ruleVersion, $payValue, $forMonth);
+            $this->consumeMilestone($beneficiary, $milestone, $ruleVersion, $payValues, $forMonth);
         }
     }
 
-    /** @param  array{milestone_no: int, min_directs: int, left: int, right: int}  $milestone */
-    private function consumeMilestone(Member $beneficiary, array $milestone, RuleVersion $ruleVersion, float $payValue, Carbon $forMonth): void
+    /**
+     * @param  array{milestone_no: int, min_directs: int, left: int, right: int}  $milestone
+     * @param  array{silver: float, gold: float}  $payValues
+     */
+    private function consumeMilestone(Member $beneficiary, array $milestone, RuleVersion $ruleVersion, array $payValues, Carbon $forMonth): void
     {
-        DB::transaction(function () use ($beneficiary, $milestone, $ruleVersion, $payValue, $forMonth) {
-            $leftIds = PairEntry::where('member_id', $beneficiary->id)
+        DB::transaction(function () use ($beneficiary, $milestone, $ruleVersion, $payValues, $forMonth) {
+            $leftEntries = PairEntry::where('member_id', $beneficiary->id)
                 ->where('side', 'left')->where('status', 'unused')
-                ->oldest('id')->limit($milestone['left'])->lockForUpdate()->pluck('id');
+                ->oldest('id')->limit($milestone['left'])->lockForUpdate()->get(['id', 'metal']);
 
-            $rightIds = PairEntry::where('member_id', $beneficiary->id)
+            $rightEntries = PairEntry::where('member_id', $beneficiary->id)
                 ->where('side', 'right')->where('status', 'unused')
-                ->oldest('id')->limit($milestone['right'])->lockForUpdate()->pluck('id');
+                ->oldest('id')->limit($milestone['right'])->lockForUpdate()->get(['id', 'metal']);
 
-            PairEntry::whereIn('id', $leftIds->merge($rightIds))->update([
+            $consumedEntries = $leftEntries->merge($rightEntries);
+
+            PairEntry::whereIn('id', $consumedEntries->pluck('id'))->update([
                 'status' => 'consumed',
                 'consumed_for_milestone_no' => $milestone['milestone_no'],
             ]);
 
-            $reward = round(($milestone['left'] + $milestone['right']) * $payValue, 2);
+            $reward = round(
+                $consumedEntries->sum(fn (PairEntry $entry) => $payValues[$entry->metal] ?? $payValues['silver']),
+                2,
+            );
 
             $transaction = PairRewardTransaction::create([
                 'member_id' => $beneficiary->id,

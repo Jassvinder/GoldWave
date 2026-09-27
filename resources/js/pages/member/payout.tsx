@@ -1,4 +1,4 @@
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { Landmark } from 'lucide-react';
 import { FormEventHandler } from 'react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { formatDate } from '@/lib/utils';
-import { store } from '@/routes/member/payout';
+import { cancel, store } from '@/routes/member/payout';
 
 type Transaction = {
     method: string;
@@ -101,6 +101,12 @@ export default function Payout({
                             {bank_detail.account_number.slice(-4)}) are awaiting
                             Super Admin verification.
                         </p>
+                    ) : Number(available_balance) < Number(min_amount) ? (
+                        <p className="text-muted-foreground text-sm">
+                            You need at least ₹{min_amount} available to request
+                            a payout — your current balance is ₹
+                            {available_balance}.
+                        </p>
                     ) : (
                         <form
                             onSubmit={submit}
@@ -139,6 +145,23 @@ export default function Payout({
                             rows={requests}
                             rowKey={(row) => row.id}
                             emptyMessage="No payout requests yet."
+                            renderActions={(row) =>
+                                row.status === 'pending' ? (
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                            router.post(
+                                                cancel.url(row.id),
+                                                {},
+                                                { preserveScroll: true },
+                                            )
+                                        }
+                                    >
+                                        Cancel
+                                    </Button>
+                                ) : null
+                            }
                         />
                     </CardContent>
                 </Card>

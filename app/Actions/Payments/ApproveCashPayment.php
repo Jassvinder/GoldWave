@@ -6,6 +6,8 @@ use App\Actions\Registration\ActivateMembershipOnPaymentConfirmed;
 use App\Events\PaymentConfirmed;
 use App\Models\Payment;
 use App\Models\User;
+use App\Notifications\CashPaymentDecided;
+use App\Services\Notifier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -54,6 +56,9 @@ class ApproveCashPayment
 
         if (! $wasAlreadyPaid) {
             event(new PaymentConfirmed($payment->refresh()));
+
+            // T-141 — tell the member (bell if they can log in yet, plus email + SMS).
+            Notifier::toUser($payment->member->user, new CashPaymentDecided($payment, true));
         }
     }
 }

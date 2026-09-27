@@ -13,6 +13,7 @@ use App\Models\Member;
 use App\Models\MembershipPlan;
 use App\Models\MetalRate;
 use App\Models\ProductBenefit;
+use App\Models\RuleValue;
 use App\Models\Store;
 use App\Models\StoreActivityLog;
 use App\Models\StoreProfitDistribution;
@@ -147,6 +148,7 @@ test('a store-initiated sale paid from the Store Wallet deducts atomically with 
         store: $store, member: null, transactionType: 'new_sale', itemName: 'Silver Coin',
         inventoryItem: null, itemWeight: 10, quantity: 1, rate: 1500,
         saleAmount: 15000, gstAmount: 0, paymentSource: 'store_wallet', operator: $operator,
+        metal: 'silver',
     );
 
     expect((float) $store->wallet->fresh()->balance)->toBe(5000.0);
@@ -173,13 +175,32 @@ test('Item Buyback prices on the current market rate, restocks inventory, and ne
     expect((float) $member->fresh()->wallet_balance)->toBe(0.0);
 });
 
+test('T-110: Item Buyback prices Gold and Silver items using their own separately-configured percentages', function () {
+    RuleValue::where('key', 'item_buyback_percent')->update(['value' => 60]);
+    RuleValue::where('key', 'item_buyback_percent_gold')->update(['value' => 55]);
+
+    $result = makeStoreWithOwnerChain('BUYBACKSPLIT', 1);
+    $store = $result['store'];
+    $member = storeMember('BUYBACKSPLIT-SELLER');
+    $rate = makeGoldRate(6000);
+    $operator = User::where('role', 'super_admin')->firstOrFail();
+
+    $goldBuyback = app(RecordItemBuyback::class)($store, $member, 'Gold Chain', 'gold', 10.000, 1, null, $rate, $operator);
+    $silverBuyback = app(RecordItemBuyback::class)($store, $member, 'Silver Chain', 'silver', 10.000, 1, null, $rate, $operator);
+
+    expect((float) $goldBuyback->buyback_percent)->toBe(55.0);
+    expect((float) $goldBuyback->price_paid)->toBe(33000.0); // 10g * 6000 * 55%.
+    expect((float) $silverBuyback->buyback_percent)->toBe(60.0);
+    expect((float) $silverBuyback->price_paid)->toBe(36000.0); // 10g * 6000 * 60%.
+});
+
 test('Purchase/Repurchase Upline Income pays self 2% and the full 12-level Sponsor/Direct chain', function () {
     $chain = buildStoreSponsorChain('PRI', 12);
     $payer = storeMember('PRIPAYER', $chain[0]);
     $store = Store::create(['name' => 'PRI Store', 'status' => 'active']);
     $sale = StoreSale::create([
         'store_id' => $store->id, 'member_id' => $payer->id, 'transaction_type' => 'repurchase',
-        'item_name' => 'Gold Chain', 'quantity' => 1, 'sale_amount' => 10000, 'gst_amount' => 0,
+        'item_name' => 'Gold Chain', 'metal' => 'gold', 'quantity' => 1, 'sale_amount' => 10000, 'gst_amount' => 0,
         'total_invoice_amount' => 10000, 'payment_source' => 'cash', 'distribution_status' => 'pending',
         'status' => 'confirmed',
     ]);
@@ -218,6 +239,43 @@ test('Purchase/Repurchase Income never fires for a walk-in sale with no purchasi
     expect(IncomeLedgerCalculation::where('source_store_sale_id', $sale->id)->count())->toBe(0);
 });
 
+test('T-110: Purchase/Repurchase Income and Store Profit Distribution both use the sale\'s own metal, not one shared rate table', function () {
+    RuleValue::where('key', 'purchase_repurchase_income_rates')->update(['value' => ['self' => 2]]);
+    RuleValue::where('key', 'purchase_repurchase_income_rates_gold')->update(['value' => ['self' => 3]]);
+    RuleValue::where('key', 'store_profit_distribution_rates')->update(['value' => ['store_owner' => 2]]);
+    RuleValue::where('key', 'store_profit_distribution_rates_gold')->update(['value' => ['store_owner' => 1]]);
+
+    $result = makeStoreWithOwnerChain('METALSALE');
+    $store = $result['store'];
+    $payer = storeMember('METALSALE-PAYER');
+
+    $goldSale = StoreSale::create([
+        'store_id' => $store->id, 'member_id' => $payer->id, 'transaction_type' => 'repurchase',
+        'item_name' => 'Gold Item', 'metal' => 'gold', 'quantity' => 1, 'sale_amount' => 10000, 'gst_amount' => 0,
+        'total_invoice_amount' => 10000, 'payment_source' => 'cash', 'distribution_status' => 'pending', 'status' => 'confirmed',
+    ]);
+    app(CalculatePurchaseRepurchaseIncome::class)($goldSale);
+    app(CalculateStoreProfitDistribution::class)($goldSale);
+
+    $silverSale = StoreSale::create([
+        'store_id' => $store->id, 'member_id' => $payer->id, 'transaction_type' => 'repurchase',
+        'item_name' => 'Silver Item', 'metal' => 'silver', 'quantity' => 1, 'sale_amount' => 10000, 'gst_amount' => 0,
+        'total_invoice_amount' => 10000, 'payment_source' => 'cash', 'distribution_status' => 'pending', 'status' => 'confirmed',
+    ]);
+    app(CalculatePurchaseRepurchaseIncome::class)($silverSale);
+    app(CalculateStoreProfitDistribution::class)($silverSale);
+
+    $goldSelfRow = IncomeLedgerCalculation::where('source_store_sale_id', $goldSale->id)->whereNull('level_no')->firstOrFail();
+    $silverSelfRow = IncomeLedgerCalculation::where('source_store_sale_id', $silverSale->id)->whereNull('level_no')->firstOrFail();
+    expect((float) $goldSelfRow->amount)->toBe(300.0); // 3% Gold.
+    expect((float) $silverSelfRow->amount)->toBe(200.0); // 2% Silver.
+
+    $goldOwnerRow = StoreProfitDistribution::where('store_sale_id', $goldSale->id)->where('beneficiary_type', 'store_owner')->firstOrFail();
+    $silverOwnerRow = StoreProfitDistribution::where('store_sale_id', $silverSale->id)->where('beneficiary_type', 'store_owner')->firstOrFail();
+    expect((float) $goldOwnerRow->amount)->toBe(100.0); // 1% Gold.
+    expect((float) $silverOwnerRow->amount)->toBe(200.0); // 2% Silver.
+});
+
 test('Store Profit Distribution pays owner + 3 Sponsor/Direct levels on every store-attributed sale', function () {
     $result = makeStoreWithOwnerChain('SPD', 3);
     $store = $result['store'];
@@ -225,7 +283,7 @@ test('Store Profit Distribution pays owner + 3 Sponsor/Direct levels on every st
 
     $sale = StoreSale::create([
         'store_id' => $store->id, 'member_id' => null, 'transaction_type' => 'new_sale',
-        'item_name' => 'Gold Necklace', 'quantity' => 1, 'sale_amount' => 50000, 'gst_amount' => 0,
+        'item_name' => 'Gold Necklace', 'metal' => 'gold', 'quantity' => 1, 'sale_amount' => 50000, 'gst_amount' => 0,
         'total_invoice_amount' => 50000, 'payment_source' => 'cash', 'distribution_status' => 'pending',
         'status' => 'confirmed',
     ]);
@@ -265,6 +323,7 @@ test('a member purchase fires both Store Profit Distribution and Purchase/Repurc
         store: $store, member: $purchaser, transactionType: 'new_sale', itemName: 'Gold Bangle',
         inventoryItem: null, itemWeight: null, quantity: 1, rate: null,
         saleAmount: 50000, gstAmount: 0, paymentSource: 'cash', operator: $operator,
+        metal: 'gold',
     );
 
     $sale = StoreSale::where('store_id', $store->id)->firstOrFail();
@@ -315,6 +374,7 @@ test('ConfirmStoreSale generates a printable invoice for every confirmed sale', 
         store: $result['store'], member: null, transactionType: 'new_sale', itemName: 'Gold Pendant',
         inventoryItem: null, itemWeight: 3, quantity: 1, rate: 6000,
         saleAmount: 18000, gstAmount: 540, paymentSource: 'cash', operator: $operator,
+        metal: 'gold',
     );
 
     expect($sale->invoice)->not->toBeNull();

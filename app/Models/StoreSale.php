@@ -26,6 +26,7 @@ class StoreSale extends Model
         'store_inventory_item_id',
         'transaction_type',
         'item_name',
+        'metal',
         'item_weight',
         'quantity',
         'rate',

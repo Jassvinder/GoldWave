@@ -36,11 +36,11 @@ function registerPlanAViaCash(string $email, string $mobile): Member
     test()->post('/join', [
         'sponsor_code' => 'GWL900',
         'placement_side' => 'left',
+        'gender' => 'male',
         'name' => 'Emi Test Member',
         'email' => $email,
         'mobile' => $mobile,
         'membership_plan_id' => $plan->id,
-        'rate_booking_method' => 'current_rate',
         'payment_mode' => 'cash',
     ])->assertRedirect();
 
@@ -79,7 +79,7 @@ test('activation generates the full installment schedule on activation-date-anni
     $installments = EmiInstallment::where('emi_schedule_id', $schedule->id)->orderBy('installment_no')->get();
 
     expect($installments)->toHaveCount(20);
-    expect((float) $installments->sum('amount'))->toBe(2100.0 * 20);
+    expect((float) $installments->sum('amount'))->toBe(1000.0 * 20);
 
     $first = $installments->first();
     expect($first->status)->toBe('paid');
@@ -137,7 +137,7 @@ test('cash Payment In flow confirms installment #2 and advances the next-due ins
 
     $payment = Payment::find($installment2->fresh()->payment_id);
     expect($payment->type)->toBe('emi_installment');
-    expect((float) $payment->amount)->toBe(2100.0);
+    expect((float) $payment->amount)->toBe(1000.0);
     expect($payment->cash_status)->toBe('pending_verification');
 
     $superAdmin = User::where('role', 'super_admin')->firstOrFail();

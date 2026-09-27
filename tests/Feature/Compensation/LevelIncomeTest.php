@@ -7,6 +7,7 @@ use App\Models\IncomeLedgerCalculation;
 use App\Models\Member;
 use App\Models\MembershipPlan;
 use App\Models\Payment;
+use App\Models\RuleValue;
 use App\Models\User;
 use App\Models\WalletLedgerEntry;
 use Illuminate\Support\Carbon;
@@ -24,6 +25,11 @@ function levelIncomeMember(string $customerId, ?Member $sponsor = null, string $
         'user_id' => $user->id,
         'customer_id' => $customerId,
         'sponsor_id' => $sponsor?->id,
+        // T-110 (19-09-2026) — CalculateLevelIncome now reads the payer's
+        // plan metal (Gold/Silver split); Plan A is Silver, matching every
+        // existing worked-number assertion in this file, which was computed
+        // against the unsuffixed (now "Silver") rate table.
+        'membership_plan_id' => MembershipPlan::where('code', 'A')->firstOrFail()->id,
         'status' => $status,
         'activated_at' => $status === 'active' ? now() : null,
     ]);
@@ -114,6 +120,23 @@ test('amounts that do not divide evenly round to exactly 2 decimal places, not t
 
     $level9to12 = $rows->whereIn('level_no', [9, 10, 11, 12]);
     expect($level9to12->pluck('amount')->map(fn ($v) => (float) $v)->unique()->values()->all())->toBe([1.67]);
+});
+
+test('T-110: a Gold-plan payer\'s payment uses the Gold rate table, never the Silver one', function () {
+    RuleValue::where('key', 'level_income_rates')->update(['value' => ['1' => 5]]);
+    RuleValue::where('key', 'level_income_rates_gold')->update(['value' => ['1' => 8]]);
+
+    $goldPlan = MembershipPlan::where('code', 'C')->firstOrFail(); // Gold.
+    $sponsor = levelIncomeMember('GOLDLI-SPONSOR');
+    $payer = levelIncomeMember('GOLDLI-PAYER', $sponsor);
+    $payer->update(['membership_plan_id' => $goldPlan->id]);
+
+    $payment = makeRegistrationPayment($payer, 5000);
+    app(CalculateLevelIncome::class)($payment);
+
+    $row = IncomeLedgerCalculation::where('source_payment_id', $payment->id)->where('level_no', 1)->firstOrFail();
+    expect((float) $row->rate_percent)->toBe(8.0);
+    expect((float) $row->amount)->toBe(400.0); // 5000 * 8%, not 5000 * 5%.
 });
 
 test('a chain shorter than 12 records skipped rows for the unreachable levels, not silently missing rows', function () {
@@ -222,11 +245,11 @@ test('registering via cash triggers Level Income automatically through PaymentCo
     $this->post('/join', [
         'sponsor_code' => $sponsor->customer_id,
         'placement_side' => 'left',
+        'gender' => 'male',
         'name' => 'Level Income E2E Member',
         'email' => 'level-income-e2e@example.test',
         'mobile' => '9876520001',
         'membership_plan_id' => $plan->id,
-        'rate_booking_method' => 'current_rate',
         'payment_mode' => 'cash',
     ])->assertRedirect();
 

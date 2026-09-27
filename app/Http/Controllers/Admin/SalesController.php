@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\Payments\CollectCashPaymentViaStoreWallet;
 use App\Actions\Store\ConfirmStoreSale;
 use App\Actions\Store\RecordItemBuyback;
 use App\Actions\Store\RecordPlanJewelleryDelivery;
@@ -11,6 +12,7 @@ use App\Http\Requests\Admin\RecordPlanJewelleryDeliveryRequest;
 use App\Http\Requests\Admin\RecordStoreSaleRequest;
 use App\Models\Member;
 use App\Models\MetalRate;
+use App\Models\Payment;
 use App\Models\Store;
 use App\Models\StoreInventoryItem;
 use App\Models\StoreSale;
@@ -69,7 +71,63 @@ class SalesController extends Controller
         return Inertia::render('admin/sales', [
             'inventory_items' => $inventoryItems,
             'recent_sales' => $recentSales,
+            'collect_search' => $this->collectSearchResult($request),
         ]);
+    }
+
+    /**
+     * DOMAIN_LOGIC.md §12.2(a) — T-151. Looks up a member by Customer ID and
+     * lists their pending cash payments (registration or EMI installment)
+     * this store could collect and settle via its own Store Wallet. Kept on
+     * the same page as a GET query-param search (`?collect_customer_id=`)
+     * rather than a separate route, matching this page's existing
+     * search-and-act pattern.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function collectSearchResult(Request $request): ?array
+    {
+        $customerId = $request->string('collect_customer_id')->toString();
+
+        if ($customerId === '') {
+            return null;
+        }
+
+        $member = Member::where('customer_id', $customerId)->first();
+
+        if (! $member) {
+            return ['customer_id' => $customerId, 'found' => false, 'payments' => []];
+        }
+
+        $pending = $member->payments()
+            ->where('mode', 'cash')
+            ->where('status', 'pending')
+            ->orderBy('id')
+            ->get()
+            ->map(fn ($payment): array => [
+                'id' => $payment->id,
+                'type' => $payment->type,
+                'amount' => $payment->amount,
+                'created_at' => $payment->created_at,
+            ]);
+
+        return [
+            'customer_id' => $customerId,
+            'found' => true,
+            'member_name' => $member->placeholder_name ?? $member->user?->name,
+            'payments' => $pending,
+        ];
+    }
+
+    public function collectPayment(Payment $payment, Request $request, CollectCashPaymentViaStoreWallet $action): RedirectResponse
+    {
+        /** @var Store $store */
+        $store = $request->attributes->get('store');
+
+        $action($payment, $store, $request->user());
+
+        return redirect()->route('admin.sales.index', ['collect_customer_id' => $payment->member?->customer_id])
+            ->with('status', 'Payment collected and settled via Store Wallet.');
     }
 
     public function storeSale(RecordStoreSaleRequest $request, ConfirmStoreSale $action): RedirectResponse
@@ -77,7 +135,12 @@ class SalesController extends Controller
         /** @var Store $store */
         $store = $request->attributes->get('store');
 
-        $member = $this->resolveMember($request->string('customer_id')->toString() ?: null);
+        $customerId = $request->string('customer_id')->toString() ?: null;
+        $member = $this->resolveMember($customerId);
+
+        if ($customerId && ! $member) {
+            throw ValidationException::withMessages(['customer_id' => 'No member found with this Customer ID.']);
+        }
 
         $inventoryItem = null;
 
@@ -86,6 +149,7 @@ class SalesController extends Controller
         }
 
         $itemName = $inventoryItem !== null ? $inventoryItem->item_name : $request->string('item_name')->toString();
+        $metal = $inventoryItem !== null ? $inventoryItem->metal : $request->string('metal')->toString();
 
         $action(
             store: $store,
@@ -100,6 +164,7 @@ class SalesController extends Controller
             gstAmount: (float) ($request->input('gst_amount') ?? 0),
             paymentSource: $request->string('payment_source')->toString(),
             operator: $request->user(),
+            metal: $metal,
         );
 
         return redirect()->route('admin.sales.index')->with('status', 'Sale recorded and invoice generated.');
@@ -110,9 +175,13 @@ class SalesController extends Controller
         /** @var Store $store */
         $store = $request->attributes->get('store');
 
-        $member = $this->resolveMember($request->string('customer_id')->toString());
+        // T-149 follow-up (23-09-2026) — a Buyback seller is primarily a
+        // non-member walk-in; a Customer ID is only resolved (and required
+        // to match) when the operator actually gave one.
+        $customerId = $request->string('customer_id')->toString() ?: null;
+        $member = $this->resolveMember($customerId);
 
-        if (! $member) {
+        if ($customerId && ! $member) {
             throw ValidationException::withMessages(['customer_id' => 'No member found with this Customer ID.']);
         }
 
@@ -136,6 +205,8 @@ class SalesController extends Controller
             $request->string('description')->toString() ?: null,
             $currentRate,
             $request->user(),
+            $member ? null : ($request->string('walk_in_name')->toString() ?: null),
+            $member ? null : ($request->string('walk_in_mobile')->toString() ?: null),
         );
 
         return redirect()->route('admin.sales.index')->with('status', 'Item Buyback recorded.');

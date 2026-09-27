@@ -35,8 +35,9 @@ class UpdateMemberDetails
         ?string $address,
         ?string $profilePhotoPath,
         ?array $bankDetails,
+        ?string $gender = null,
     ): Member {
-        return DB::transaction(function () use ($member, $name, $email, $mobile, $panCard, $aadhaarCard, $address, $profilePhotoPath, $bankDetails) {
+        return DB::transaction(function () use ($member, $name, $email, $mobile, $panCard, $aadhaarCard, $address, $profilePhotoPath, $bankDetails, $gender) {
             $locked = Member::whereKey($member->id)->lockForUpdate()->firstOrFail();
 
             $locked->user?->update([
@@ -54,6 +55,12 @@ class UpdateMemberDetails
 
             if ($memberUpdates !== [] && $locked->pending_fields_submitted_at === null) {
                 $memberUpdates['pending_fields_submitted_at'] = now();
+            }
+
+            // Gender is not one of the one-time Pending Fields (PAN/Aadhaar/photo/address/bank), so
+            // setting it must not stamp `pending_fields_submitted_at`.
+            if ($gender !== null) {
+                $locked->update(['gender' => $gender]);
             }
 
             if ($memberUpdates !== []) {

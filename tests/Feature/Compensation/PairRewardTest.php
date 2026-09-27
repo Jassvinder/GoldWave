@@ -9,6 +9,7 @@ use App\Models\MembershipPlan;
 use App\Models\PairEntry;
 use App\Models\PairRewardTransaction;
 use App\Models\Payment;
+use App\Models\RuleValue;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 
@@ -46,7 +47,7 @@ function addActiveDirect(Member $sponsor, string $customerId): Member
     ]);
 }
 
-function seedPairEntries(Member $beneficiary, string $side, int $count): void
+function seedPairEntries(Member $beneficiary, string $side, int $count, string $metal = 'silver'): void
 {
     for ($i = 0; $i < $count; $i++) {
         $payment = Payment::create([
@@ -61,6 +62,7 @@ function seedPairEntries(Member $beneficiary, string $side, int $count): void
         PairEntry::create([
             'member_id' => $beneficiary->id,
             'side' => $side,
+            'metal' => $metal,
             'source_payment_id' => $payment->id,
             'status' => 'unused',
         ]);
@@ -309,6 +311,53 @@ test('a single monthly run crosses multiple milestones when enough entries exist
     expect(PairEntry::where('member_id', $beneficiary->id)->where('status', 'unused')->count())->toBe(0);
 });
 
+test('T-110: a milestone consumed from a mix of Gold and Silver entries values each one by its own metal, not one flat rate', function () {
+    RuleValue::where('key', 'pair_value_per_entry')->update(['value' => 50]);
+    RuleValue::where('key', 'pair_value_per_entry_gold')->update(['value' => 40]);
+
+    $beneficiary = pairMember('MIXED-BENEFICIARY');
+    addActiveDirect($beneficiary, 'MIXED-D1');
+    addActiveDirect($beneficiary, 'MIXED-D2');
+
+    // Milestone 1 needs 5 Left + 5 Right. Seed 3 Silver + 2 Gold on each side.
+    seedPairEntries($beneficiary, 'left', 3, 'silver');
+    seedPairEntries($beneficiary, 'left', 2, 'gold');
+    seedPairEntries($beneficiary, 'right', 3, 'silver');
+    seedPairEntries($beneficiary, 'right', 2, 'gold');
+
+    app(EvaluatePairMilestones::class)($beneficiary, Carbon::create(2026, 1, 31));
+
+    // 6 Silver entries * 50 + 4 Gold entries * 40 = 300 + 160 = 460, never
+    // (5 + 5) * one flat value.
+    $transaction = PairRewardTransaction::where('member_id', $beneficiary->id)->firstOrFail();
+    expect((float) $transaction->reward_amount)->toBe(460.0);
+    expect((float) $beneficiary->fresh()->wallet_balance)->toBe(460.0);
+});
+
+test('T-110: CreatePairEntries tags every fanned-out entry with the joining member\'s own plan metal', function () {
+    $planF = MembershipPlan::where('code', 'F')->firstOrFail(); // Gold one-time.
+    $planE = MembershipPlan::where('code', 'E')->firstOrFail(); // Silver one-time.
+
+    $goldSponsor = pairMember('METALTAG-GOLD-SPONSOR');
+    $goldJoiner = pairMember('METALTAG-GOLD-JOINER', $goldSponsor, 'left', $planF);
+    $goldJoiner->update(['sponsor_id' => $goldSponsor->id]);
+    app(CreatePairEntries::class)(Payment::create([
+        'member_id' => $goldJoiner->id, 'type' => 'registration', 'amount' => 50000,
+        'mode' => 'cash', 'status' => 'paid', 'paid_at' => now(),
+    ]));
+
+    $silverSponsor = pairMember('METALTAG-SILVER-SPONSOR');
+    $silverJoiner = pairMember('METALTAG-SILVER-JOINER', $silverSponsor, 'left', $planE);
+    $silverJoiner->update(['sponsor_id' => $silverSponsor->id]);
+    app(CreatePairEntries::class)(Payment::create([
+        'member_id' => $silverJoiner->id, 'type' => 'registration', 'amount' => 20000,
+        'mode' => 'cash', 'status' => 'paid', 'paid_at' => now(),
+    ]));
+
+    expect(PairEntry::where('member_id', $goldSponsor->id)->value('metal'))->toBe('gold');
+    expect(PairEntry::where('member_id', $silverSponsor->id)->value('metal'))->toBe('silver');
+});
+
 test('registering a one-time plan under a placement chain triggers pair-entry creation automatically through PaymentConfirmed', function () {
     $root = pairMember('E2E-PAIR-ROOT');
     $planF = MembershipPlan::where('code', 'F')->firstOrFail();
@@ -316,6 +365,7 @@ test('registering a one-time plan under a placement chain triggers pair-entry cr
     $this->post('/join', [
         'sponsor_code' => $root->customer_id,
         'placement_side' => 'left',
+        'gender' => 'male',
         'name' => 'Pair Reward E2E Member',
         'email' => 'pair-reward-e2e@example.test',
         'mobile' => '9876530001',

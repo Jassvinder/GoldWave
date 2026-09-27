@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Member;
 
 use App\Actions\Payments\InitiateEmiInstallmentPayment;
+use App\Contracts\PaymentGatewayContract;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Payments\PayEmiInstallmentRequest;
 use App\Models\EmiInstallment;
@@ -44,6 +45,11 @@ class EmiController extends Controller
                 'rate_booking_method' => $schedule->rate_booking_method,
                 'installment_amount' => $schedule->installment_amount,
                 'total_installments' => $schedule->total_installments,
+                // T-116 — set only once booked at the Current Rate.
+                'booked_at' => Dates::date($schedule->current_rate_booked_at),
+                'rate_per_gram' => $schedule->rate_booking_method === 'current_rate' ? $schedule->rate_per_gram_at_booking : null,
+                'fixed_weight_grams' => $schedule->rate_booking_method === 'current_rate' ? $schedule->fixed_weight_grams : null,
+                'pending_installments' => $schedule->installments->where('status', '!=', 'paid')->count(),
             ] : null,
             'installments' => $schedule?->installments->map($this->mapInstallment(...))->all() ?? [],
             'pair_eligibility' => $plan?->isEmiPlan() ? [
@@ -73,6 +79,7 @@ class EmiController extends Controller
         PayEmiInstallmentRequest $request,
         EmiInstallment $installment,
         InitiateEmiInstallmentPayment $action,
+        PaymentGatewayContract $gateway,
     ): RedirectResponse {
         $member = $request->user()->member;
 
@@ -82,7 +89,8 @@ class EmiController extends Controller
         $payment = $action($member, $installment, $request->string('mode')->toString());
 
         if ($payment->mode === 'online') {
-            return redirect()->route('payments.dev-simulate.show', $payment);
+            // T-137 — through the bound gateway (Razorpay checkout, or the dev stand-in when no keys are set).
+            return redirect($gateway->createIntent($payment)['redirect_url']);
         }
 
         return redirect()->route('member.emi.index')

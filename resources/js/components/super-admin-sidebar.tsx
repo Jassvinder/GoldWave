@@ -1,14 +1,18 @@
 import {
     Banknote,
+    Bell,
     ClipboardEdit,
     ClipboardList,
     Coins,
     FileSpreadsheet,
     LayoutGrid,
+    LayoutTemplate,
     Percent,
     Settings2,
+    ShieldCheck,
     Store as StoreIcon,
     Trophy,
+    Truck,
     UserCheck,
     UserCog,
     UserPlus,
@@ -19,16 +23,21 @@ import { PortalSidebar } from '@/components/portal-sidebar';
 import { dashboard } from '@/routes';
 import { index as adminUsersIndex } from '@/routes/super-admin/admin-users';
 import { audit as compensationAudit } from '@/routes/super-admin/compensation';
+import { index as earningsVerificationIndex } from '@/routes/super-admin/earnings-verification';
 import { index as drawManagementIndex } from '@/routes/super-admin/draw-management';
 import { index as drawSettingsIndex } from '@/routes/super-admin/draw-settings';
 import { index as dummyAssignmentIndex } from '@/routes/super-admin/dummy-entry-assignment';
 import { index as dummySettingsIndex } from '@/routes/super-admin/dummy-entry-settings';
+import { index as landingHeroIndex } from '@/routes/super-admin/landing-hero';
 import { index as membersIndex } from '@/routes/super-admin/members';
+import { index as notificationsIndex } from '@/routes/super-admin/notifications';
 import { index as metalRatesIndex } from '@/routes/super-admin/metal-rates';
 import { index as payoutRequestsIndex } from '@/routes/super-admin/payout-requests';
 import { index as payoutTdsIndex } from '@/routes/super-admin/payout-tds-settings';
 import { index as profileChangeRequestsIndex } from '@/routes/super-admin/profile-change-requests';
+import { index as companyWalletIndex } from '@/routes/super-admin/company-wallet';
 import { index as reportsIndex } from '@/routes/super-admin/reports';
+import { index as restockShipmentsIndex } from '@/routes/super-admin/restock-shipments';
 import { index as ruleVersionsIndex } from '@/routes/super-admin/rule-versions';
 import { index as storeManagementIndex } from '@/routes/super-admin/store-management';
 import { index as storeWalletsIndex } from '@/routes/super-admin/store-wallets';
@@ -36,6 +45,7 @@ import type { NavGroup, NavItem } from '@/types';
 
 const overviewItems: NavItem[] = [
     { title: 'System Dashboard', href: dashboard(), icon: LayoutGrid },
+    { title: 'Notifications', href: notificationsIndex(), icon: Bell },
 ];
 
 const memberItems: NavItem[] = [
@@ -60,6 +70,11 @@ const compensationItems: NavItem[] = [
         href: compensationAudit(),
         icon: ClipboardList,
     },
+    {
+        title: 'Earnings Verification',
+        href: earningsVerificationIndex(),
+        icon: ShieldCheck,
+    },
 ];
 
 const drawItems: NavItem[] = [
@@ -79,6 +94,11 @@ const requestItems: NavItem[] = [
 const settingsItems: NavItem[] = [
     { title: 'Gold & Silver Rates', href: metalRatesIndex(), icon: Coins },
     { title: 'Payout & TDS Settings', href: payoutTdsIndex(), icon: Banknote },
+    {
+        title: 'Landing Page Hero',
+        href: landingHeroIndex(),
+        icon: LayoutTemplate,
+    },
 ];
 
 const storeItems: NavItem[] = [
@@ -88,6 +108,16 @@ const storeItems: NavItem[] = [
         icon: StoreIcon,
     },
     { title: 'Store Wallets', href: storeWalletsIndex(), icon: Wallet },
+    {
+        title: 'Restock Shipments',
+        href: restockShipmentsIndex(),
+        icon: Truck,
+    },
+    {
+        title: 'Company Wallet',
+        href: companyWalletIndex(),
+        icon: Banknote,
+    },
 ];
 
 const reportItems: NavItem[] = [

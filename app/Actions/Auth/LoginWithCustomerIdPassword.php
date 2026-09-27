@@ -4,6 +4,7 @@ namespace App\Actions\Auth;
 
 use App\Models\Member;
 use App\Models\User;
+use App\Support\Portal;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
@@ -32,6 +33,7 @@ class LoginWithCustomerIdPassword
 
         Auth::login($user);
         session(['goldwave_login_method' => 'password']);
+        Portal::stamp(Portal::MEMBER);
 
         return $user;
     }

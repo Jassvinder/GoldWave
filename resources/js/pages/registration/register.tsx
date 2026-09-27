@@ -1,6 +1,7 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
+import { PublicLogoLink } from '@/components/public-logo-link';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -41,17 +42,12 @@ export default function Register({ plans }: Props) {
         sponsor_code: '',
         placement_side: 'left' as 'left' | 'right',
         name: '',
+        gender: '' as 'male' | 'female' | 'other' | '',
         email: '',
         mobile: '',
         membership_plan_id: '' as number | '',
-        rate_booking_method: '' as 'current_rate' | 'future_rate' | '',
         payment_mode: 'online' as 'online' | 'cash',
     });
-
-    const selectedPlan =
-        plans.find((plan) => plan.id === form.data.membership_plan_id) ?? null;
-    const isEmiPlan =
-        selectedPlan !== null && selectedPlan.installment_count !== null;
 
     async function checkSponsorCode(code: string) {
         if (!code) {
@@ -101,6 +97,8 @@ export default function Register({ plans }: Props) {
             <Head title="Join GoldWave" />
 
             <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-6 px-4 py-10">
+                <PublicLogoLink />
+
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">
@@ -201,6 +199,32 @@ export default function Register({ plans }: Props) {
                                 <InputError message={form.errors.name} />
                             </div>
 
+                            <div className="grid gap-2">
+                                <Label htmlFor="gender">Gender</Label>
+                                <select
+                                    id="gender"
+                                    className="border-input bg-background rounded-md border px-3 py-2 text-sm"
+                                    value={form.data.gender}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            'gender',
+                                            e.target.value as
+                                                | 'male'
+                                                | 'female'
+                                                | 'other'
+                                                | '',
+                                        )
+                                    }
+                                    required
+                                >
+                                    <option value="">Select gender</option>
+                                    <option value="male">Male</option>
+                                    <option value="female">Female</option>
+                                    <option value="other">Other</option>
+                                </select>
+                                <InputError message={form.errors.gender} />
+                            </div>
+
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div className="grid gap-2">
                                     <Label htmlFor="email">Email</Label>
@@ -255,10 +279,6 @@ export default function Register({ plans }: Props) {
                                                     'membership_plan_id',
                                                     plan.id,
                                                 );
-                                                form.setData(
-                                                    'rate_booking_method',
-                                                    '',
-                                                );
                                             }}
                                             className={`rounded-md border p-3 text-left text-sm ${
                                                 form.data.membership_plan_id ===
@@ -287,52 +307,6 @@ export default function Register({ plans }: Props) {
                                     message={form.errors.membership_plan_id}
                                 />
                             </div>
-
-                            {/* Rate booking method — EMI plans only */}
-                            {isEmiPlan && (
-                                <div className="grid gap-2">
-                                    <Label>Rate Booking</Label>
-                                    <div className="flex gap-2">
-                                        {(
-                                            [
-                                                {
-                                                    value: 'current_rate',
-                                                    label: 'Current Rate Booking',
-                                                },
-                                                {
-                                                    value: 'future_rate',
-                                                    label: 'Future Rate Booking',
-                                                },
-                                            ] as const
-                                        ).map((option) => (
-                                            <button
-                                                key={option.value}
-                                                type="button"
-                                                onClick={() =>
-                                                    form.setData(
-                                                        'rate_booking_method',
-                                                        option.value,
-                                                    )
-                                                }
-                                                className={`flex-1 rounded-md border px-3 py-2 text-sm ${
-                                                    form.data
-                                                        .rate_booking_method ===
-                                                    option.value
-                                                        ? 'border-primary bg-primary text-primary-foreground'
-                                                        : 'border-input bg-transparent'
-                                                }`}
-                                            >
-                                                {option.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <InputError
-                                        message={
-                                            form.errors.rate_booking_method
-                                        }
-                                    />
-                                </div>
-                            )}
 
                             {/* Payment mode */}
                             <div className="grid gap-2">

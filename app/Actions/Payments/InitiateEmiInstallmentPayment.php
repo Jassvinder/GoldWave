@@ -5,6 +5,8 @@ namespace App\Actions\Payments;
 use App\Models\EmiInstallment;
 use App\Models\Member;
 use App\Models\Payment;
+use App\Notifications\CashPaymentAwaitingApproval;
+use App\Services\Notifier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -23,7 +25,9 @@ class InitiateEmiInstallmentPayment
 {
     public function __invoke(Member $member, EmiInstallment $installment, string $mode): Payment
     {
-        return DB::transaction(function () use ($member, $installment, $mode) {
+        $newCashPayment = null;
+
+        $payment = DB::transaction(function () use ($member, $installment, $mode, &$newCashPayment) {
             $schedule = $member->emiSchedule()->firstOrFail();
 
             if ($installment->emi_schedule_id !== $schedule->id) {
@@ -63,7 +67,19 @@ class InitiateEmiInstallmentPayment
 
             $installment->update(['payment_id' => $payment->id]);
 
+            if ($mode === 'cash') {
+                $newCashPayment = $payment;
+            }
+
             return $payment;
         });
+
+        // T-141 — a new cash payment waits for the Super Admin's approval, so the Super Admin is told (bell + page).
+        // Re-using an already-pending payment above never notifies a second time.
+        if ($newCashPayment !== null) {
+            Notifier::toSuperAdmins(new CashPaymentAwaitingApproval($newCashPayment));
+        }
+
+        return $payment;
     }
 }

@@ -1,4 +1,4 @@
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { index as adminUsersIndex } from '@/routes/super-admin/admin-users';
 import {
     show as showStore,
     store,
@@ -21,6 +22,7 @@ import {
 type Store = {
     id: number;
     name: string;
+    store_code: string | null;
     owner_name: string | null;
     status: string;
     jewellery_allocation_value: string;
@@ -45,6 +47,8 @@ export default function SuperAdminStoreManagement({
         location: '',
         jewellery_allocation_value: '0',
         advance_amount: '0',
+        password_mode: 'auto',
+        password: '',
     });
 
     const submit: FormEventHandler = (e) => {
@@ -109,7 +113,62 @@ export default function SuperAdminStoreManagement({
                                         ))}
                                     </SelectContent>
                                 </Select>
+                                {unassigned_admins.length === 0 && (
+                                    <p className="text-muted-foreground text-xs">
+                                        No unassigned Admin —{' '}
+                                        <Link
+                                            href={adminUsersIndex()}
+                                            className="text-primary underline underline-offset-2"
+                                        >
+                                            promote a member from Admin Users
+                                        </Link>{' '}
+                                        first.
+                                    </p>
+                                )}
                             </div>
+                            {data.owner_user_id && (
+                                <div className="grid gap-2 sm:col-span-2">
+                                    <Label>Admin/Store Login Password</Label>
+                                    <div className="flex items-center gap-4">
+                                        <Select
+                                            value={data.password_mode}
+                                            onValueChange={(v) =>
+                                                setData('password_mode', v)
+                                            }
+                                        >
+                                            <SelectTrigger className="w-56">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="auto">
+                                                    Generate automatically
+                                                </SelectItem>
+                                                <SelectItem value="manual">
+                                                    Enter manually
+                                                </SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        {data.password_mode === 'manual' && (
+                                            <Input
+                                                type="password"
+                                                placeholder="Password"
+                                                value={data.password}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'password',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            />
+                                        )}
+                                    </div>
+                                    {errors.password && (
+                                        <p className="text-destructive text-xs">
+                                            {errors.password}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
                             <div className="grid gap-2">
                                 <Label htmlFor="contact">
                                     Contact (optional)
@@ -203,6 +262,11 @@ const storeColumns: DataTableColumn<Store>[] = [
         key: 'name',
         header: 'Store Name',
         render: (row) => <span className="font-medium">{row.name}</span>,
+    },
+    {
+        key: 'store_code',
+        header: 'Store ID',
+        render: (row) => row.store_code ?? '—',
     },
     {
         key: 'owner_name',

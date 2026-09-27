@@ -21,6 +21,7 @@ class DummyEntrySettingsController extends Controller
         return Inertia::render('super-admin/dummy-entry-settings', [
             'enabled' => (bool) $rules->value('dummy_entry_enabled', false),
             'daily_count' => (int) $rules->value('dummy_entry_daily_count', 0),
+            'plan_code' => (string) $rules->value('dummy_entry_plan_code', 'A'),
             // `is_company_root` (the seeded placement anchor) is also flagged
             // `is_company_dummy=true` but is never a real daily-generated
             // entry — excluded here so these stats reflect actual generation.
@@ -37,6 +38,7 @@ class DummyEntrySettingsController extends Controller
         $action([
             'dummy_entry_enabled' => $request->boolean('enabled'),
             'dummy_entry_daily_count' => $request->integer('daily_count'),
+            'dummy_entry_plan_code' => $request->string('plan_code')->toString(),
         ], $request->user());
 
         return redirect()->route('super-admin.dummy-entry-settings.index')->with('status', 'Dummy entry settings updated.');

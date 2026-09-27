@@ -10,16 +10,21 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property-read Member|null $member
  * @property-read User|null $verifiedBy
  * @property-read EmiInstallment|null $emiInstallment
+ * @property-read Store|null $payingStore
+ * @property-read Member|null $payingMember
  */
 class Payment extends Model
 {
     protected $fillable = [
         'member_id',
+        'paying_store_id',
+        'paying_member_id',
         'type',
         'amount',
         'mode',
         'status',
         'provider_reference',
+        'gateway_order_id',
         'gateway_payload',
         'idempotency_key',
         'cash_status',
@@ -42,6 +47,18 @@ class Payment extends Model
     public function member(): BelongsTo
     {
         return $this->belongsTo(Member::class);
+    }
+
+    /** @return BelongsTo<Store, $this> */
+    public function payingStore(): BelongsTo
+    {
+        return $this->belongsTo(Store::class, 'paying_store_id');
+    }
+
+    /** @return BelongsTo<Member, $this> */
+    public function payingMember(): BelongsTo
+    {
+        return $this->belongsTo(Member::class, 'paying_member_id');
     }
 
     /** @return BelongsTo<User, $this> */

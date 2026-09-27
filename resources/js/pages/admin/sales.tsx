@@ -1,5 +1,5 @@
-import { Head, useForm, usePage } from '@inertiajs/react';
-import { Gem, RefreshCw, ShoppingBag } from 'lucide-react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
+import { Gem, RefreshCw, ShoppingBag, Wallet } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { FormSection } from '@/components/form-section';
@@ -14,7 +14,13 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { buyback, delivery, store as storeSale } from '@/routes/admin/sales';
+import {
+    buyback,
+    collectPayment,
+    delivery,
+    index as salesIndex,
+    store as storeSale,
+} from '@/routes/admin/sales';
 
 type InventoryItem = {
     id: number;
@@ -36,20 +42,56 @@ type Sale = {
     invoice_no: string | null;
 };
 
+type PendingPayment = {
+    id: number;
+    type: string;
+    amount: string;
+    created_at: string;
+};
+
+type CollectSearchResult = {
+    customer_id: string;
+    found: boolean;
+    member_name?: string;
+    payments: PendingPayment[];
+} | null;
+
 type Props = {
     inventory_items: InventoryItem[];
     recent_sales: Sale[];
+    collect_search: CollectSearchResult;
 };
 
 /** INSTRUCTIONS.md A03 — new joining payments, repurchases/sales, Store Wallet payment source, invoices (DOMAIN_LOGIC.md §16.2/§16.7/§16.10). */
-export default function AdminSales({ inventory_items, recent_sales }: Props) {
+export default function AdminSales({
+    inventory_items,
+    recent_sales,
+    collect_search,
+}: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
+    const [collectCustomerId, setCollectCustomerId] = useState(
+        collect_search?.customer_id ?? '',
+    );
+
+    const searchCollect: FormEventHandler = (e) => {
+        e.preventDefault();
+        router.get(
+            salesIndex.url(),
+            { collect_customer_id: collectCustomerId },
+            { preserveState: true },
+        );
+    };
+
+    const collect = (paymentId: number) => {
+        router.post(collectPayment.url(paymentId), {}, { preserveScroll: true });
+    };
 
     const saleForm = useForm({
-        transaction_type: 'new_sale',
+        transaction_type: 'purchase',
         customer_id: '',
         store_inventory_item_id: '',
         item_name: '',
+        metal: '',
         item_weight: '',
         quantity: '1',
         rate: '',
@@ -60,6 +102,8 @@ export default function AdminSales({ inventory_items, recent_sales }: Props) {
 
     const buybackForm = useForm({
         customer_id: '',
+        walk_in_name: '',
+        walk_in_mobile: '',
         item_name: '',
         metal: 'gold',
         weight: '',
@@ -102,10 +146,79 @@ export default function AdminSales({ inventory_items, recent_sales }: Props) {
                 )}
 
                 <FormSection
+                    icon={Wallet}
+                    color="green"
+                    title="Collect a Pending Cash Payment"
+                    description="A member paying you cash for their registration or an EMI installment — settle it instantly from this store's own Store Wallet (DOMAIN_LOGIC.md §12.2)."
+                >
+                    <form
+                        onSubmit={searchCollect}
+                        className="flex items-end gap-2"
+                    >
+                        <div className="grid gap-2">
+                            <Label>Customer ID</Label>
+                            <Input
+                                value={collectCustomerId}
+                                onChange={(e) =>
+                                    setCollectCustomerId(e.target.value)
+                                }
+                                placeholder="e.g. GWL00123"
+                            />
+                        </div>
+                        <Button type="submit" variant="outline">
+                            Search
+                        </Button>
+                    </form>
+
+                    {collect_search && !collect_search.found && (
+                        <p className="text-muted-foreground mt-3 text-sm">
+                            No member found with Customer ID "
+                            {collect_search.customer_id}".
+                        </p>
+                    )}
+
+                    {collect_search?.found && (
+                        <div className="mt-3">
+                            <p className="mb-2 text-sm font-medium">
+                                {collect_search.member_name} (
+                                {collect_search.customer_id})
+                            </p>
+                            {collect_search.payments.length === 0 ? (
+                                <p className="text-muted-foreground text-sm">
+                                    No pending cash payments for this member.
+                                </p>
+                            ) : (
+                                <ul className="flex flex-col gap-2">
+                                    {collect_search.payments.map((p) => (
+                                        <li
+                                            key={p.id}
+                                            className="flex items-center justify-between rounded-md border p-2"
+                                        >
+                                            <span className="text-sm">
+                                                {p.type === 'registration'
+                                                    ? 'Registration'
+                                                    : 'EMI Installment'}{' '}
+                                                — ₹{p.amount}
+                                            </span>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => collect(p.id)}
+                                            >
+                                                Collect via Store Wallet
+                                            </Button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    )}
+                </FormSection>
+
+                <FormSection
                     icon={ShoppingBag}
                     color="blue"
-                    title="Record a Sale / Purchase / Repurchase"
-                    description="Select a tracked inventory item, or enter a custom item name for an untracked sale."
+                    title="Record a Purchase / Repurchase"
+                    description="Purchase covers both a member's and a walk-in (non-member) customer's buy — leave Customer ID blank for a walk-in. Repurchase always needs an existing member. Select a tracked inventory item, or enter a custom item name for an untracked sale."
                 >
                     <form onSubmit={submitSale} className="flex flex-col gap-3">
                         <div className="grid grid-cols-2 gap-3">
@@ -121,20 +234,23 @@ export default function AdminSales({ inventory_items, recent_sales }: Props) {
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="new_sale">
-                                            New Sale
-                                        </SelectItem>
                                         <SelectItem value="purchase">
-                                            Purchase
+                                            Purchase (member or walk-in)
                                         </SelectItem>
                                         <SelectItem value="repurchase">
-                                            Repurchase
+                                            Repurchase (member only)
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div className="grid gap-2">
-                                <Label>Customer ID (optional)</Label>
+                                <Label>
+                                    Customer ID
+                                    {saleForm.data.transaction_type ===
+                                    'repurchase'
+                                        ? ''
+                                        : ' (optional)'}
+                                </Label>
                                 <Input
                                     value={saleForm.data.customer_id}
                                     onChange={(e) =>
@@ -143,8 +259,18 @@ export default function AdminSales({ inventory_items, recent_sales }: Props) {
                                             e.target.value,
                                         )
                                     }
-                                    placeholder="Leave blank for walk-in"
+                                    placeholder={
+                                        saleForm.data.transaction_type ===
+                                        'repurchase'
+                                            ? 'Required for a repurchase'
+                                            : 'Leave blank for walk-in'
+                                    }
                                 />
+                                {saleForm.errors.customer_id && (
+                                    <p className="text-destructive text-sm">
+                                        {saleForm.errors.customer_id}
+                                    </p>
+                                )}
                             </div>
                         </div>
 
@@ -192,6 +318,35 @@ export default function AdminSales({ inventory_items, recent_sales }: Props) {
                                 {saleForm.errors.item_name && (
                                     <p className="text-destructive text-sm">
                                         {saleForm.errors.item_name}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {!selectedItem && (
+                            <div className="grid gap-2">
+                                <Label>Metal</Label>
+                                <Select
+                                    value={saleForm.data.metal}
+                                    onValueChange={(v) =>
+                                        saleForm.setData('metal', v)
+                                    }
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select metal" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="gold">
+                                            Gold
+                                        </SelectItem>
+                                        <SelectItem value="silver">
+                                            Silver
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {saleForm.errors.metal && (
+                                    <p className="text-destructive text-sm">
+                                        {saleForm.errors.metal}
                                     </p>
                                 )}
                             </div>
@@ -313,7 +468,7 @@ export default function AdminSales({ inventory_items, recent_sales }: Props) {
                     icon={RefreshCw}
                     color="amber"
                     title="Item Buyback"
-                    description="Buys an item back from a member at the current market rate (DOMAIN_LOGIC.md §16.7)."
+                    description="Buys back old jewellery at the current market rate (DOMAIN_LOGIC.md §16.7) — usually from a non-member walk-in, but a member's Customer ID also works. Give either a Customer ID or a walk-in name, not both."
                 >
                     <form
                         onSubmit={submitBuyback}
@@ -321,7 +476,7 @@ export default function AdminSales({ inventory_items, recent_sales }: Props) {
                     >
                         <div className="grid grid-cols-2 gap-3">
                             <div className="grid gap-2">
-                                <Label>Customer ID</Label>
+                                <Label>Customer ID (member, optional)</Label>
                                 <Input
                                     value={buybackForm.data.customer_id}
                                     onChange={(e) =>
@@ -330,6 +485,7 @@ export default function AdminSales({ inventory_items, recent_sales }: Props) {
                                             e.target.value,
                                         )
                                     }
+                                    placeholder="Leave blank for a walk-in seller"
                                 />
                                 {buybackForm.errors.customer_id && (
                                     <p className="text-destructive text-sm">
@@ -350,6 +506,39 @@ export default function AdminSales({ inventory_items, recent_sales }: Props) {
                                 />
                             </div>
                         </div>
+                        {!buybackForm.data.customer_id && (
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="grid gap-2">
+                                    <Label>Walk-in Seller Name</Label>
+                                    <Input
+                                        value={buybackForm.data.walk_in_name}
+                                        onChange={(e) =>
+                                            buybackForm.setData(
+                                                'walk_in_name',
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                    {buybackForm.errors.walk_in_name && (
+                                        <p className="text-destructive text-sm">
+                                            {buybackForm.errors.walk_in_name}
+                                        </p>
+                                    )}
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label>Walk-in Mobile (optional)</Label>
+                                    <Input
+                                        value={buybackForm.data.walk_in_mobile}
+                                        onChange={(e) =>
+                                            buybackForm.setData(
+                                                'walk_in_mobile',
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </div>
+                            </div>
+                        )}
                         <div className="grid grid-cols-3 gap-3">
                             <div className="grid gap-2">
                                 <Label>Metal</Label>
@@ -515,7 +704,12 @@ const saleColumns: DataTableColumn<Sale>[] = [
     {
         key: 'customer_id',
         header: 'Customer',
-        render: (row) => row.customer_id ?? 'Walk-in',
+        render: (row) =>
+            row.customer_id ? (
+                <span>{row.customer_id}</span>
+            ) : (
+                <Badge variant="secondary">Walk-in</Badge>
+            ),
     },
     {
         key: 'total_invoice_amount',

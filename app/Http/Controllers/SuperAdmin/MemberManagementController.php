@@ -2,12 +2,21 @@
 
 namespace App\Http\Controllers\SuperAdmin;
 
+use App\Actions\Admin\ResetMemberPassword;
 use App\Actions\Admin\UpdateMemberDetails;
+use App\Actions\Emi\RevertCurrentRateBooking;
+use App\Actions\Profile\VerifyMemberBankDetail;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SuperAdmin\ResetMemberPasswordRequest;
+use App\Http\Requests\SuperAdmin\RevertCurrentRateBookingRequest;
 use App\Http\Requests\SuperAdmin\UpdateMemberDetailsRequest;
+use App\Models\EmiRateBookingEvent;
+use App\Models\EmiSchedule;
 use App\Models\Member;
 use App\Models\MembershipPlan;
+use App\Services\MemberNetworkSummary;
 use App\Support\Dates;
+use App\Support\WebpImageStore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -18,10 +27,13 @@ use Inertia\Response;
 /** INSTRUCTIONS.md's Admin Member Management — company-wide member list + detail. */
 class MemberManagementController extends Controller
 {
+    public function __construct(private readonly MemberNetworkSummary $networkSummary) {}
+
     public function index(Request $request): Response
     {
         $query = Member::query()
-            ->with(['user', 'membershipPlan', 'sponsor'])
+            ->with(['user.store', 'membershipPlan', 'sponsor', 'placementParent'])
+            ->withCount('directs')
             ->where('is_company_dummy', false);
 
         if ($request->filled('search')) {
@@ -40,13 +52,27 @@ class MemberManagementController extends Controller
             $query->where('status', $request->string('status')->toString());
         }
 
+        if ($request->boolean('store_owner')) {
+            $query->whereHas('user.store');
+        }
+
         $members = $query->orderByDesc('id')->paginate(25)->withQueryString();
 
-        $members->through(fn (Member $member): array => $this->summarize($member));
+        $network = $this->networkSummary->forMany($members->getCollection()->pluck('id')->all());
+
+        $members->through(fn (Member $member): array => array_merge($this->summarize($member), [
+            'directs_count' => $member->directs_count,
+            'placement_side' => $member->placement_side,
+            'placement_parent_customer_id' => $member->placementParent?->customer_id,
+            'team_left' => $network[$member->id]['left']['total'],
+            'team_right' => $network[$member->id]['right']['total'],
+            'team_total' => $network[$member->id]['team_total'],
+            'is_store_owner' => $member->user?->store !== null,
+        ]));
 
         return Inertia::render('super-admin/member-management', [
             'members' => $members,
-            'filters' => $request->only(['search', 'plan', 'status']),
+            'filters' => $request->only(['search', 'plan', 'status', 'store_owner']),
             'plan_options' => MembershipPlan::orderBy('code')->pluck('code'),
             'status_options' => ['draft', 'payment_pending', 'payment_confirmed', 'active', 'cancelled'],
             'stats' => [
@@ -89,8 +115,6 @@ class MemberManagementController extends Controller
     {
         $member->load(['user', 'membershipPlan', 'sponsor', 'placementParent', 'emiSchedule.installments', 'productBenefits', 'bankDetails']);
 
-        $teamSize = Member::where('placement_parent_id', $member->id)->count();
-
         $activity = collect()
             ->merge($member->profileChangeRequests->map(fn ($r) => [
                 'type' => 'Profile Change Request',
@@ -123,6 +147,7 @@ class MemberManagementController extends Controller
 
         return Inertia::render('super-admin/member-detail', [
             'member' => array_merge($this->summarize($member), [
+                'gender' => $member->gender,
                 'pan_card' => $member->pan_card,
                 'aadhaar_card' => $member->aadhaar_card,
                 'address' => $member->address,
@@ -130,7 +155,9 @@ class MemberManagementController extends Controller
                 'placement_parent_customer_id' => $member->placementParent?->customer_id,
                 'placement_side' => $member->placement_side,
                 'direct_count' => $member->directs()->count(),
-                'team_size' => $teamSize,
+                'network' => $this->networkSummary->forMember($member),
+                'store_owners_in_downline' => $this->networkSummary->storeOwnersIn($member),
+                'is_store_owner' => $member->user?->store !== null,
                 'wallet_balance' => (string) $member->wallet_balance,
             ]),
             'bank_details' => (function () use ($member) {
@@ -150,6 +177,7 @@ class MemberManagementController extends Controller
                 'delivered_at' => Dates::date($b->delivered_at),
             ]),
             'emi' => $member->emiSchedule ? [
+                'rate_booking' => $this->rateBookingSummary($member->emiSchedule),
                 'total_installments' => $member->emiSchedule->total_installments,
                 'installments' => $member->emiSchedule->installments->map(fn ($i) => [
                     'installment_no' => $i->installment_no,
@@ -200,7 +228,7 @@ class MemberManagementController extends Controller
         $photoPath = null;
 
         if ($request->hasFile('profile_photo')) {
-            $photoPath = $request->file('profile_photo')->store('profile-photos', 'public');
+            $photoPath = WebpImageStore::store($request->file('profile_photo'), 'profile-photos');
 
             if ($photoPath === false) {
                 throw ValidationException::withMessages(['profile_photo' => 'The uploaded file could not be stored.']);
@@ -210,7 +238,7 @@ class MemberManagementController extends Controller
         $proofPath = null;
 
         if ($request->hasFile('bank_proof_document')) {
-            $proofPath = $request->file('bank_proof_document')->store('bank-proofs', 'public');
+            $proofPath = WebpImageStore::store($request->file('bank_proof_document'), 'bank-proofs');
 
             if ($proofPath === false) {
                 throw ValidationException::withMessages(['bank_proof_document' => 'The uploaded file could not be stored.']);
@@ -235,9 +263,68 @@ class MemberManagementController extends Controller
             $request->string('address')->toString() ?: null,
             $photoPath,
             $bankFields === [] ? null : $bankFields,
+            $request->string('gender')->toString() ?: null,
         );
 
         return redirect()->route('super-admin.members.show', $member)->with('status', 'Member details updated.');
+    }
+
+    public function resetPassword(ResetMemberPasswordRequest $request, Member $member, ResetMemberPassword $action): RedirectResponse
+    {
+        $action($member, $request->string('password')->toString());
+
+        return redirect()->route('super-admin.members.show', $member)->with('status', "Password reset for {$member->customer_id}.");
+    }
+
+    /**
+     * The EMI card's rate-booking block: current state, whether a revert is allowed (and if not, why), and the log.
+     *
+     * @return array<string, mixed>
+     */
+    private function rateBookingSummary(EmiSchedule $schedule): array
+    {
+        $isCurrentRate = $schedule->rate_booking_method === 'current_rate';
+        $blocker = $isCurrentRate ? app(RevertCurrentRateBooking::class)->blocker($schedule) : null;
+
+        return [
+            'method' => $schedule->rate_booking_method,
+            'installment_amount' => $schedule->installment_amount,
+            'rate_per_gram' => $isCurrentRate ? $schedule->rate_per_gram_at_booking : null,
+            'fixed_weight_grams' => $isCurrentRate ? $schedule->fixed_weight_grams : null,
+            'booked_at' => Dates::date($schedule->current_rate_booked_at),
+            'can_revert' => $isCurrentRate && $blocker === null,
+            'revert_blocker' => $isCurrentRate ? $blocker : null,
+            'events' => $schedule->rateBookingEvents()->with('performedBy')->orderByDesc('id')->limit(10)->get()
+                ->map(fn (EmiRateBookingEvent $event): array => [
+                    'event' => $event->event,
+                    'by' => $event->performedBy?->name,
+                    'reason' => $event->reason,
+                    'occurred_at' => Dates::date($event->created_at),
+                ])->all(),
+        ];
+    }
+
+    public function revertCurrentRate(RevertCurrentRateBookingRequest $request, Member $member, RevertCurrentRateBooking $action): RedirectResponse
+    {
+        $action($member, $request->user(), $request->string('reason')->toString());
+
+        return redirect()->route('super-admin.members.show', $member)
+            ->with('status', "{$member->customer_id}'s EMI schedule is back on Future Rate.");
+    }
+
+    /** DOMAIN_LOGIC.md §11.2 point 8 — verifies the member's latest bank detail row, so it can be used for a payout request. */
+    public function verifyBankDetail(Request $request, Member $member, VerifyMemberBankDetail $action): RedirectResponse
+    {
+        $bankDetail = $member->bankDetails()->latest('id')->first();
+
+        abort_if($bankDetail === null, 404);
+
+        if ($bankDetail->verified_at === null) {
+            $action($bankDetail, $request->user());
+        }
+
+        return redirect()->route('super-admin.members.show', $member)
+            ->with('status', "{$member->customer_id}'s bank details are verified.");
     }
 
     /** @return array<string, mixed> */

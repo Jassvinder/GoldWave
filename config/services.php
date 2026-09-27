@@ -28,6 +28,23 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    /*
+    | T-137 — online payments. Razorpay is used automatically when both the key id and secret are set (see
+    | AppServiceProvider); `gateway` (PAYMENT_GATEWAY = razorpay|fake) is only an explicit override. The fake gateway is
+    | refused in production.
+    */
+    'payments' => [
+        'gateway' => env('PAYMENT_GATEWAY'),
+    ],
+
+    'razorpay' => [
+        'key_id' => env('RAZORPAY_KEY_ID'),
+        'key_secret' => env('RAZORPAY_KEY_SECRET'),
+        'webhook_secret' => env('RAZORPAY_WEBHOOK_SECRET'),
+        'base_url' => env('RAZORPAY_BASE_URL', 'https://api.razorpay.com/v1'),
+        'business_name' => env('RAZORPAY_BUSINESS_NAME', 'GoldWave'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

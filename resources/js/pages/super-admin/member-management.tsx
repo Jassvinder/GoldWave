@@ -28,11 +28,23 @@ type MemberRow = {
     sponsor_customer_id: string | null;
     status: string;
     activated_at: string | null;
+    directs_count: number;
+    placement_side: 'left' | 'right' | null;
+    placement_parent_customer_id: string | null;
+    team_left: number;
+    team_right: number;
+    team_total: number;
+    is_store_owner: boolean;
 };
 
 type Props = {
     members: Paginated<MemberRow>;
-    filters: { search?: string; plan?: string; status?: string };
+    filters: {
+        search?: string;
+        plan?: string;
+        status?: string;
+        store_owner?: string;
+    };
     plan_options: string[];
     status_options: string[];
     stats: { total: number; active: number; pending: number; inactive: number };
@@ -40,9 +52,9 @@ type Props = {
 
 const statusVariant: Record<
     string,
-    'default' | 'secondary' | 'outline' | 'destructive'
+    'default' | 'secondary' | 'outline' | 'destructive' | 'success'
 > = {
-    active: 'default',
+    active: 'success',
     payment_pending: 'secondary',
     payment_confirmed: 'secondary',
     draft: 'outline',
@@ -62,6 +74,9 @@ export default function SuperAdminMemberManagement({
     const [search, setSearch] = useState(filters.search ?? '');
     const [plan, setPlan] = useState(filters.plan ?? ANY);
     const [status, setStatus] = useState(filters.status ?? ANY);
+    const [storeOwner, setStoreOwner] = useState(
+        filters.store_owner ? '1' : ANY,
+    );
 
     const applyFilters = (overrides: Record<string, string | number> = {}) => {
         router.get(
@@ -70,6 +85,7 @@ export default function SuperAdminMemberManagement({
                 search,
                 plan: plan === ANY ? undefined : plan,
                 status: status === ANY ? undefined : status,
+                store_owner: storeOwner === ANY ? undefined : 1,
                 ...overrides,
             },
             { preserveState: true },
@@ -85,6 +101,7 @@ export default function SuperAdminMemberManagement({
         setSearch('');
         setPlan(ANY);
         setStatus(ANY);
+        setStoreOwner(ANY);
         router.get(index.url(), {}, { preserveState: true });
     };
 
@@ -96,7 +113,20 @@ export default function SuperAdminMemberManagement({
                 <span className="font-medium">{row.customer_id}</span>
             ),
         },
-        { key: 'name', header: 'Name', render: (row) => row.name ?? '—' },
+        {
+            key: 'name',
+            header: 'Name',
+            render: (row) => (
+                <span>
+                    {row.name ?? '—'}
+                    {row.is_store_owner && (
+                        <Badge variant="outline" className="ml-2">
+                            Store Owner
+                        </Badge>
+                    )}
+                </span>
+            ),
+        },
         { key: 'mobile', header: 'Mobile', render: (row) => row.mobile ?? '—' },
         {
             key: 'plan',
@@ -108,6 +138,31 @@ export default function SuperAdminMemberManagement({
             key: 'sponsor_customer_id',
             header: 'Sponsor ID',
             render: (row) => row.sponsor_customer_id ?? '—',
+        },
+        {
+            key: 'position',
+            header: 'Position',
+            render: (row) =>
+                row.placement_side
+                    ? `${row.placement_side === 'left' ? 'Left' : 'Right'} of ${row.placement_parent_customer_id ?? '—'}`
+                    : 'Root',
+        },
+        {
+            key: 'directs_count',
+            header: 'Directs',
+            render: (row) => row.directs_count,
+        },
+        {
+            key: 'team',
+            header: 'Team (L / R)',
+            render: (row) => (
+                <span title={`Total team ${row.team_total}`}>
+                    {row.team_total}{' '}
+                    <span className="text-muted-foreground">
+                        ({row.team_left} / {row.team_right})
+                    </span>
+                </span>
+            ),
         },
         {
             key: 'activated_at',
@@ -197,6 +252,16 @@ export default function SuperAdminMemberManagement({
                                     {value.replace('_', ' ')}
                                 </SelectItem>
                             ))}
+                        </SelectContent>
+                    </Select>
+
+                    <Select value={storeOwner} onValueChange={setStoreOwner}>
+                        <SelectTrigger className="w-full sm:w-44">
+                            <SelectValue placeholder="All Members" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={ANY}>All Members</SelectItem>
+                            <SelectItem value="1">Store Owners only</SelectItem>
                         </SelectContent>
                     </Select>
                 </FilterBar>

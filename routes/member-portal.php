@@ -1,11 +1,11 @@
 <?php
 
+use App\Http\Controllers\Member\AssistedRegistrationController;
 use App\Http\Controllers\Member\BoosterController;
 use App\Http\Controllers\Member\ChangeRequestController;
 use App\Http\Controllers\Member\DrawController;
 use App\Http\Controllers\Member\LevelIncomeController;
 use App\Http\Controllers\Member\MembershipController;
-use App\Http\Controllers\Member\NotificationController;
 use App\Http\Controllers\Member\PairRewardController;
 use App\Http\Controllers\Member\PaymentHistoryController;
 use App\Http\Controllers\Member\PayoutController;
@@ -13,6 +13,7 @@ use App\Http\Controllers\Member\PendingProfileController;
 use App\Http\Controllers\Member\ProfileController;
 use App\Http\Controllers\Member\ReportsController;
 use App\Http\Controllers\Member\WalletController;
+use App\Http\Controllers\NotificationController;
 use Illuminate\Support\Facades\Route;
 
 /**
@@ -21,7 +22,11 @@ use Illuminate\Support\Facades\Route;
  * (EMI) and M08/M09 (Directs/Tree) already have their own route files
  * (`member-emi.php`, `member-network.php`) from T-004/T-005.
  */
-Route::middleware(['auth', 'role:member'])->prefix('member')->name('member.')->group(function () {
+Route::middleware(['auth', 'member-portal'])->prefix('member')->name('member.')->group(function () {
+    // T-153 — Assisted Registration (DOMAIN_LOGIC.md §12.2(b)).
+    Route::get('register-new', [AssistedRegistrationController::class, 'show'])->name('assisted-registration.show');
+    Route::post('register-new', [AssistedRegistrationController::class, 'store'])->name('assisted-registration.store');
+
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
 
     Route::get('pending-profile', [PendingProfileController::class, 'create'])->name('pending-profile.create');
@@ -31,6 +36,7 @@ Route::middleware(['auth', 'role:member'])->prefix('member')->name('member.')->g
     Route::post('change-requests', [ChangeRequestController::class, 'store'])->name('change-requests.store');
 
     Route::get('membership', [MembershipController::class, 'show'])->name('membership.show');
+    Route::post('membership/book-current-rate', [MembershipController::class, 'bookCurrentRate'])->name('membership.book-current-rate');
 
     Route::get('payment-history', [PaymentHistoryController::class, 'index'])->name('payment-history.index');
 
@@ -46,10 +52,11 @@ Route::middleware(['auth', 'role:member'])->prefix('member')->name('member.')->g
 
     Route::get('payout', [PayoutController::class, 'index'])->name('payout.index');
     Route::post('payout', [PayoutController::class, 'store'])->name('payout.store');
+    Route::post('payout/{payout_request}/cancel', [PayoutController::class, 'cancel'])->name('payout.cancel');
 
     Route::get('reports', [ReportsController::class, 'index'])->name('reports.index');
     Route::get('reports/{report}/export', [ReportsController::class, 'download'])->name('reports.export');
 
-    Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
-    Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+    // T-140 — shared Notifications page (the read-state endpoints live in routes/web.php under `notifications/`).
+    Route::get('notifications', [NotificationController::class, 'index'])->defaults('portal', 'member')->name('notifications.index');
 });

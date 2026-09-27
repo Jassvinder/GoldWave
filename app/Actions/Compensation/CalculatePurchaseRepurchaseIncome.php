@@ -53,7 +53,8 @@ class CalculatePurchaseRepurchaseIncome
         }
 
         $payer = $storeSale->member()->firstOrFail();
-        $rates = $this->rules->value('purchase_repurchase_income_rates', []);
+        $metal = $storeSale->metal;
+        $rates = $this->rules->metalValue('purchase_repurchase_income_rates', $metal, []);
         $baseAmount = (float) $storeSale->sale_amount;
         $chain = $this->sponsorChain->ancestors($payer, self::MAX_LEVELS);
 
@@ -66,17 +67,15 @@ class CalculatePurchaseRepurchaseIncome
                 $rate = (float) ($rates[(string) $level] ?? 0);
 
                 if (! $beneficiary) {
-                    IncomeLedgerCalculation::create([
-                        'type' => 'purchase_repurchase',
-                        'source_store_sale_id' => $storeSale->id,
-                        'beneficiary_member_id' => null,
-                        'level_no' => $level,
-                        'rate_percent' => $rate,
-                        'amount' => 0,
-                        'rule_version_id' => $ruleVersion->id,
-                        'eligibility_status' => 'skipped',
-                        'skip_reason' => 'chain_too_short',
-                    ]);
+                    $this->recordSkipped($storeSale, $ruleVersion, $level, $rate, null, 'chain_too_short');
+
+                    continue;
+                }
+
+                // T-149 — an unassigned dummy (or the seeded company root, never assignable) must never itself become a
+                // paid compensation beneficiary, matching the same guard already applied to Pair entries/Booster.
+                if ($beneficiary->is_company_dummy && $beneficiary->dummy_status !== 'assigned') {
+                    $this->recordSkipped($storeSale, $ruleVersion, $level, $rate, $beneficiary, 'upline_dummy');
 
                     continue;
                 }
@@ -112,5 +111,20 @@ class CalculatePurchaseRepurchaseIncome
         ]);
 
         $this->wallet->credit($beneficiary, 'purchase_repurchase_income', $amount, $calculation, $description);
+    }
+
+    private function recordSkipped(StoreSale $storeSale, RuleVersion $ruleVersion, int $level, float $rate, ?Member $beneficiary, string $reason): void
+    {
+        IncomeLedgerCalculation::create([
+            'type' => 'purchase_repurchase',
+            'source_store_sale_id' => $storeSale->id,
+            'beneficiary_member_id' => $beneficiary?->id,
+            'level_no' => $level,
+            'rate_percent' => $rate,
+            'amount' => 0,
+            'rule_version_id' => $ruleVersion->id,
+            'eligibility_status' => 'skipped',
+            'skip_reason' => $reason,
+        ]);
     }
 }

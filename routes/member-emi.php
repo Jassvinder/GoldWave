@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
  * recurring installment Payment In flow. Member-only (Super Admin has no
  * standing reason to pay another member's installment).
  */
-Route::middleware(['auth', 'role:member'])->prefix('member')->name('member.')->group(function () {
+Route::middleware(['auth', 'member-portal'])->prefix('member')->name('member.')->group(function () {
     Route::get('emi', [EmiController::class, 'index'])->name('emi.index');
     Route::post('emi/{installment}/pay', [EmiController::class, 'pay'])->name('emi.pay');
 });

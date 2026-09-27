@@ -24,13 +24,18 @@ class RuleVersionController extends Controller
 {
     private const COMPENSATION_KEYS = [
         'level_income_rates',
+        'level_income_rates_gold',
         'pair_value_per_entry',
+        'pair_value_per_entry_gold',
         'pair_milestones',
         'pair_qualification_emis',
         'booster_levels',
         'purchase_repurchase_income_rates',
+        'purchase_repurchase_income_rates_gold',
         'store_profit_distribution_rates',
+        'store_profit_distribution_rates_gold',
         'item_buyback_percent',
+        'item_buyback_percent_gold',
         'store_gst_percent',
     ];
 

@@ -1,18 +1,23 @@
 <?php
 
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SuperAdmin\AdminUserController;
 use App\Http\Controllers\SuperAdmin\CashPaymentApprovalController;
+use App\Http\Controllers\SuperAdmin\CompanyWalletController;
 use App\Http\Controllers\SuperAdmin\CompensationManagementController;
 use App\Http\Controllers\SuperAdmin\DrawManagementController;
 use App\Http\Controllers\SuperAdmin\DrawSettingsController;
 use App\Http\Controllers\SuperAdmin\DummyEntryAssignmentController;
 use App\Http\Controllers\SuperAdmin\DummyEntrySettingsController;
+use App\Http\Controllers\SuperAdmin\EarningsVerificationController;
+use App\Http\Controllers\SuperAdmin\LandingHeroController;
 use App\Http\Controllers\SuperAdmin\MemberManagementController;
 use App\Http\Controllers\SuperAdmin\MetalRateController;
 use App\Http\Controllers\SuperAdmin\PayoutRequestController;
 use App\Http\Controllers\SuperAdmin\PayoutTdsSettingsController;
 use App\Http\Controllers\SuperAdmin\ProfileChangeRequestController;
 use App\Http\Controllers\SuperAdmin\ReportsController;
+use App\Http\Controllers\SuperAdmin\RestockShipmentsController;
 use App\Http\Controllers\SuperAdmin\RuleVersionController;
 use App\Http\Controllers\SuperAdmin\StoreManagementController;
 use App\Http\Controllers\SuperAdmin\StoreWalletManagementController;
@@ -23,6 +28,9 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('super-admin')->name('su
     Route::post('cash-payments/{payment}/approve', [CashPaymentApprovalController::class, 'approve'])->name('cash-payments.approve');
     Route::post('cash-payments/{payment}/reject', [CashPaymentApprovalController::class, 'reject'])->name('cash-payments.reject');
 
+    // T-140 — Notifications page (cash payments awaiting approval, requests, ...).
+    Route::get('notifications', [NotificationController::class, 'index'])->defaults('portal', 'super-admin')->name('notifications.index');
+
     // S02 — Admin Users & Permissions.
     Route::get('admin-users', [AdminUserController::class, 'index'])->name('admin-users.index');
     Route::post('admin-users/find-member', [AdminUserController::class, 'findMember'])->name('admin-users.find-member');
@@ -30,8 +38,12 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('super-admin')->name('su
     Route::patch('admin-users/{admin_user}', [AdminUserController::class, 'update'])->name('admin-users.update');
 
     // S03 — Compensation Rule Versions (also Admin Compensation Management's config page, see below).
-    Route::get('rule-versions', [RuleVersionController::class, 'index'])->name('rule-versions.index');
-    Route::post('rule-versions', [RuleVersionController::class, 'store'])->name('rule-versions.store');
+    // T-132 (20-09-2026) — the compensation % are the most sensitive setting in the product, so both the page and the publish endpoint
+    // require the Super Admin's own password re-entered within the last 5 minutes (300 s; `password.confirm`'s app-wide default is 3 h).
+    Route::middleware('password.confirm:password.confirm,300')->group(function () {
+        Route::get('rule-versions', [RuleVersionController::class, 'index'])->name('rule-versions.index');
+        Route::post('rule-versions', [RuleVersionController::class, 'store'])->name('rule-versions.store');
+    });
 
     // S04 — Daily Dummy Entry Settings.
     Route::get('dummy-entry-settings', [DummyEntrySettingsController::class, 'index'])->name('dummy-entry-settings.index');
@@ -56,33 +68,51 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('super-admin')->name('su
     Route::get('payout-tds-settings', [PayoutTdsSettingsController::class, 'index'])->name('payout-tds-settings.index');
     Route::post('payout-tds-settings', [PayoutTdsSettingsController::class, 'update'])->name('payout-tds-settings.update');
 
+    // T-115 — Public landing page's editable hero copy.
+    Route::get('landing-hero', [LandingHeroController::class, 'index'])->name('landing-hero.index');
+    Route::post('landing-hero', [LandingHeroController::class, 'update'])->name('landing-hero.update');
+
     // S09 — Store Management.
     Route::get('store-management', [StoreManagementController::class, 'index'])->name('store-management.index');
     Route::post('store-management', [StoreManagementController::class, 'store'])->name('store-management.store');
     Route::get('store-management/{store}', [StoreManagementController::class, 'show'])->name('store-management.show');
     Route::post('store-management/{store}/reassign-owner', [StoreManagementController::class, 'reassignOwner'])->name('store-management.reassign-owner');
+    Route::post('store-management/{store}/reset-password', [StoreManagementController::class, 'resetPassword'])->name('store-management.reset-password');
     Route::post('store-management/{store}/status', [StoreManagementController::class, 'updateStatus'])->name('store-management.status');
+    Route::post('store-management/{store}/inventory', [StoreManagementController::class, 'allocateInventory'])->name('store-management.inventory.store');
 
     // S10 — Store Wallet Management.
     Route::get('store-wallets', [StoreWalletManagementController::class, 'index'])->name('store-wallets.index');
     Route::get('store-wallets/{store}', [StoreWalletManagementController::class, 'show'])->name('store-wallets.show');
     Route::post('store-wallets/{store}/topup', [StoreWalletManagementController::class, 'topup'])->name('store-wallets.topup');
 
+    // Restock Shipments (T-152, DOMAIN_LOGIC.md §16.12).
+    Route::get('restock-shipments', [RestockShipmentsController::class, 'index'])->name('restock-shipments.index');
+    Route::post('restock-shipments/{shipment}/send', [RestockShipmentsController::class, 'markSent'])->name('restock-shipments.send');
+
+    // Company Wallet (T-153, DOMAIN_LOGIC.md §12.2(b)).
+    Route::get('company-wallet', [CompanyWalletController::class, 'index'])->name('company-wallet.index');
+
     // Admin Member Management.
     Route::get('members', [MemberManagementController::class, 'index'])->name('members.index');
     Route::get('members/export', [MemberManagementController::class, 'export'])->name('members.export');
     Route::get('members/{member}', [MemberManagementController::class, 'show'])->name('members.show');
     Route::patch('members/{member}', [MemberManagementController::class, 'update'])->name('members.update');
+    Route::patch('members/{member}/reset-password', [MemberManagementController::class, 'resetPassword'])->name('members.reset-password');
+    Route::post('members/{member}/verify-bank-detail', [MemberManagementController::class, 'verifyBankDetail'])->name('members.verify-bank-detail');
+    Route::post('members/{member}/revert-current-rate', [MemberManagementController::class, 'revertCurrentRate'])->name('members.revert-current-rate');
 
     // Admin Compensation Management.
     Route::get('compensation/config', [CompensationManagementController::class, 'config'])->name('compensation.config');
     Route::get('compensation/audit', [CompensationManagementController::class, 'audit'])->name('compensation.audit');
+    Route::get('earnings-verification', [EarningsVerificationController::class, 'index'])->name('earnings-verification.index');
 
     // T-109 — Payout Requests queue (ProcessPayoutRequest/FailPayoutRequest/RejectPayoutRequest have existed since T-009 with no page wired to them).
     Route::get('payout-requests', [PayoutRequestController::class, 'index'])->name('payout-requests.index');
     Route::post('payout-requests/{payout_request}/process', [PayoutRequestController::class, 'process'])->name('payout-requests.process');
     Route::post('payout-requests/{payout_request}/fail', [PayoutRequestController::class, 'fail'])->name('payout-requests.fail');
     Route::post('payout-requests/{payout_request}/reject', [PayoutRequestController::class, 'reject'])->name('payout-requests.reject');
+    Route::post('payout-requests/{payout_request}/cancel', [PayoutRequestController::class, 'cancel'])->name('payout-requests.cancel');
 
     // T-109 — Profile Change Requests queue (Approve/RejectProfileChangeRequest have existed since T-012 with no page wired to them).
     Route::get('profile-change-requests', [ProfileChangeRequestController::class, 'index'])->name('profile-change-requests.index');

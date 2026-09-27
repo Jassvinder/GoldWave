@@ -1,14 +1,32 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditMemberDialog } from '@/components/edit-member-dialog';
-import { formatDate } from '@/lib/utils';
+import { RevertCurrentRateDialog } from '@/components/revert-current-rate-dialog';
+import { ResetMemberPasswordDialog } from '@/components/reset-member-password-dialog';
+import { formatDate, formatGender } from '@/lib/utils';
+import { show as showDirects } from '@/routes/member/directs';
+import {
+    show as showMember,
+    verifyBankDetail,
+} from '@/routes/super-admin/members';
+import { show as showTree } from '@/routes/member/tree';
+
+type Leg = {
+    total: number;
+    active: number;
+    inactive: number;
+    dummy: number;
+    store_owners: number;
+};
 
 type MemberDetail = {
     id: number;
     customer_id: string;
     name: string | null;
     mobile: string | null;
+    gender: string | null;
     email: string | null;
     plan: string | null;
     sponsor_customer_id: string | null;
@@ -21,7 +39,20 @@ type MemberDetail = {
     placement_parent_customer_id: string | null;
     placement_side: string | null;
     direct_count: number;
-    team_size: number;
+    is_store_owner: boolean;
+    network: {
+        left: Leg;
+        right: Leg;
+        team_total: number;
+        store_owners: number;
+    };
+    store_owners_in_downline: {
+        member_id: number;
+        customer_id: string | null;
+        name: string | null;
+        store_name: string;
+        side: string;
+    }[];
     wallet_balance: string;
 };
 
@@ -42,6 +73,21 @@ type Props = {
         delivered_at: string | null;
     }[];
     emi: {
+        rate_booking: {
+            method: 'current_rate' | 'future_rate';
+            installment_amount: string;
+            rate_per_gram: string | null;
+            fixed_weight_grams: string | null;
+            booked_at: string | null;
+            can_revert: boolean;
+            revert_blocker: string | null;
+            events: {
+                event: 'booked' | 'reverted';
+                by: string | null;
+                reason: string | null;
+                occurred_at: string | null;
+            }[];
+        };
         total_installments: number;
         installments: {
             installment_no: number;
@@ -117,35 +163,20 @@ export default function SuperAdminMemberDetail({
                                 member={member}
                                 bankDetails={bank_details}
                             />
+                            <ResetMemberPasswordDialog member={member} />
                         </div>
                     </CardHeader>
                     <CardContent className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
                         <Field label="Mobile" value={member.mobile} />
+                        <Field
+                            label="Gender"
+                            value={formatGender(member.gender)}
+                        />
                         <Field label="Email" value={member.email} />
                         <Field label="Plan" value={member.plan} />
                         <Field
                             label="Activated"
                             value={formatDate(member.activated_at)}
-                        />
-                        <Field
-                            label="Sponsor"
-                            value={member.sponsor_customer_id}
-                        />
-                        <Field
-                            label="Placement Parent"
-                            value={member.placement_parent_customer_id}
-                        />
-                        <Field
-                            label="Placement Side"
-                            value={member.placement_side}
-                        />
-                        <Field
-                            label="Direct Count"
-                            value={String(member.direct_count)}
-                        />
-                        <Field
-                            label="Team Size"
-                            value={String(member.team_size)}
                         />
                         <Field
                             label="Wallet Balance"
@@ -165,15 +196,41 @@ export default function SuperAdminMemberDetail({
                                     : null
                             }
                         />
-                        <Field
-                            label="Bank Verified"
-                            value={
-                                bank_details
-                                    ? (bank_details.verified_at ??
-                                      'Not verified')
-                                    : null
-                            }
-                        />
+                        <div>
+                            <div className="text-muted-foreground text-xs">
+                                Bank Verified
+                            </div>
+                            {bank_details ? (
+                                bank_details.verified_at ? (
+                                    <div className="font-medium">
+                                        {bank_details.verified_at}
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-medium">
+                                            Not verified
+                                        </span>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() =>
+                                                router.post(
+                                                    verifyBankDetail.url(
+                                                        member.id,
+                                                    ),
+                                                    {},
+                                                    { preserveScroll: true },
+                                                )
+                                            }
+                                        >
+                                            Verify
+                                        </Button>
+                                    </div>
+                                )
+                            ) : (
+                                <div className="font-medium">—</div>
+                            )}
+                        </div>
                         <Field
                             label="Pending Fields Submitted"
                             value={
@@ -184,6 +241,101 @@ export default function SuperAdminMemberDetail({
                                     : 'Not submitted'
                             }
                         />
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between">
+                        <CardTitle>Network</CardTitle>
+                        <div className="flex gap-2">
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href={showDirects.url(member.id)}>
+                                    View Directs
+                                </Link>
+                            </Button>
+                            <Button variant="outline" size="sm" asChild>
+                                <Link href={showTree.url(member.id)}>
+                                    View Tree
+                                </Link>
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-4 text-sm">
+                        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                            <Field
+                                label="Sponsor"
+                                value={member.sponsor_customer_id}
+                            />
+                            <Field
+                                label="Position"
+                                value={
+                                    member.placement_side
+                                        ? `${member.placement_side === 'left' ? 'Left' : 'Right'} of ${member.placement_parent_customer_id ?? '—'}`
+                                        : 'Root'
+                                }
+                            />
+                            <Field
+                                label="Directs (Sponsor)"
+                                value={String(member.direct_count)}
+                            />
+                            <Field
+                                label="Total Team (Left + Right)"
+                                value={String(member.network.team_total)}
+                            />
+                            <Field
+                                label="Is Store Owner"
+                                value={member.is_store_owner ? 'Yes' : 'No'}
+                            />
+                            <Field
+                                label="Store Owners in Team"
+                                value={String(member.network.store_owners)}
+                            />
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <LegBox
+                                label="Left Leg"
+                                leg={member.network.left}
+                            />
+                            <LegBox
+                                label="Right Leg"
+                                leg={member.network.right}
+                            />
+                        </div>
+
+                        {member.store_owners_in_downline.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                <p className="text-muted-foreground text-xs">
+                                    Store Owners in this member&apos;s team
+                                </p>
+                                {member.store_owners_in_downline.map(
+                                    (owner) => (
+                                        <Link
+                                            key={owner.member_id}
+                                            href={showMember.url(
+                                                owner.member_id,
+                                            )}
+                                            className="hover:border-primary flex flex-wrap items-center justify-between gap-2 rounded-md border p-2"
+                                        >
+                                            <span className="font-medium">
+                                                {owner.customer_id} ·{' '}
+                                                {owner.name ?? '—'}
+                                            </span>
+                                            <span className="text-muted-foreground capitalize">
+                                                {owner.store_name} ·{' '}
+                                                {owner.side} leg
+                                            </span>
+                                        </Link>
+                                    ),
+                                )}
+                            </div>
+                        )}
+
+                        <p className="text-muted-foreground text-xs">
+                            Team counts use the same numbers as Income Booster
+                            and include unassigned dummy entries, shown
+                            separately as &quot;dummy&quot;.
+                        </p>
                     </CardContent>
                 </Card>
 
@@ -218,6 +370,50 @@ export default function SuperAdminMemberDetail({
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-2">
+                            <div className="mb-2 flex flex-col gap-2 rounded-md border p-3 text-sm">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <span className="font-medium">
+                                            {emi.rate_booking.method ===
+                                            'current_rate'
+                                                ? 'Current Rate'
+                                                : 'Future Rate'}
+                                        </span>
+                                        <span className="text-muted-foreground">
+                                            {emi.rate_booking.method ===
+                                            'current_rate'
+                                                ? ` — ${emi.rate_booking.fixed_weight_grams}g at ₹${emi.rate_booking.rate_per_gram}/g, EMI ₹${emi.rate_booking.installment_amount}${emi.rate_booking.booked_at ? `, booked ${formatDate(emi.rate_booking.booked_at)}` : ' (from registration)'}`
+                                                : ` — EMI ₹${emi.rate_booking.installment_amount}`}
+                                        </span>
+                                    </div>
+                                    {emi.rate_booking.can_revert && (
+                                        <RevertCurrentRateDialog
+                                            memberId={member.id}
+                                        />
+                                    )}
+                                </div>
+                                {emi.rate_booking.revert_blocker && (
+                                    <p className="text-muted-foreground text-xs">
+                                        Revert not available:{' '}
+                                        {emi.rate_booking.revert_blocker}
+                                    </p>
+                                )}
+                                {emi.rate_booking.events.map((event, index) => (
+                                    <p
+                                        key={index}
+                                        className="text-muted-foreground text-xs"
+                                    >
+                                        {formatDate(event.occurred_at)} —{' '}
+                                        {event.event === 'booked'
+                                            ? 'Booked at Current Rate'
+                                            : 'Reverted to Future Rate'}{' '}
+                                        by {event.by ?? 'unknown'}
+                                        {event.reason
+                                            ? ` — "${event.reason}"`
+                                            : ''}
+                                    </p>
+                                ))}
+                            </div>
                             {emi.installments.map((installment) => (
                                 <div
                                     key={installment.installment_no}
@@ -440,6 +636,19 @@ function Field({ label, value }: { label: string; value: string | null }) {
         <div>
             <div className="text-muted-foreground text-xs">{label}</div>
             <div className="font-medium">{value ?? '—'}</div>
+        </div>
+    );
+}
+
+function LegBox({ label, leg }: { label: string; leg: Leg }) {
+    return (
+        <div className="rounded-md border p-3">
+            <p className="text-muted-foreground text-xs">{label}</p>
+            <p className="text-2xl font-semibold">{leg.total}</p>
+            <p className="text-muted-foreground text-xs">
+                {leg.active} active · {leg.inactive} inactive · {leg.dummy}{' '}
+                dummy
+            </p>
         </div>
     );
 }

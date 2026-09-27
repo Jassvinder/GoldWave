@@ -10,6 +10,7 @@ use App\Http\Requests\Registration\RegisterMemberRequest;
 use App\Http\Requests\Registration\ValidateSponsorCodeRequest;
 use App\Models\Member;
 use App\Models\MembershipPlan;
+use App\Services\Payments\RazorpayGateway;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\URL;
@@ -57,7 +58,13 @@ class RegistrationController extends Controller
         abort_if($payment === null, 500, 'Registration payment record was not created.');
 
         if ($payment->mode === 'online') {
-            $intent = $gateway->createIntent($payment);
+            try {
+                $intent = $gateway->createIntent($payment);
+            } catch (ValidationException $e) {
+                // The registration is already saved; the status page offers "Pay now" so the member can retry.
+                return redirect(self::signedStatusUrl($member))
+                    ->with('payment_error', collect($e->errors())->flatten()->first());
+            }
 
             return redirect($intent['redirect_url']);
         }
@@ -86,7 +93,12 @@ class RegistrationController extends Controller
                 'status' => $member->status,
                 'plan' => $member->membershipPlan?->name,
             ],
-            'payment' => $member->payments->firstWhere('type', 'registration'),
+            'payment' => $payment = $member->payments->firstWhere('type', 'registration'),
+            // A still-pending online payment can always be (re)started from here through a fresh signed checkout link.
+            'pay_url' => $payment !== null && $payment->mode === 'online' && $payment->status === 'pending'
+                ? RazorpayGateway::checkoutUrl($payment)
+                : null,
+            'payment_error' => session('payment_error'),
         ]);
     }
 }

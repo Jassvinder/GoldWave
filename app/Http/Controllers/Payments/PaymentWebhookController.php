@@ -14,7 +14,9 @@ use Illuminate\Http\Request;
  * verified callback/webhook confirms a payment. CSRF-exempted in
  * bootstrap/app.php since a real gateway's webhook carries no Inertia/session
  * CSRF token — the HMAC signature (verified inside the gateway binding) is
- * the actual authenticity check.
+ * the actual authenticity check. A genuine event that needs no action (T-137:
+ * Razorpay's `payment.failed`, an order that is not ours, ...) is acknowledged
+ * with 200 so the provider does not keep retrying it.
  */
 class PaymentWebhookController extends Controller
 {
@@ -24,6 +26,10 @@ class PaymentWebhookController extends Controller
 
         if (! $result->verified) {
             return response()->json(['status' => 'invalid_signature'], 400);
+        }
+
+        if ($result->outcome !== 'paid') {
+            return response()->json(['status' => 'ignored']);
         }
 
         $payment = Payment::where('id', $result->paymentId)->where('mode', 'online')->firstOrFail();

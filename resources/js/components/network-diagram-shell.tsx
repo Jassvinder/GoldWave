@@ -5,24 +5,22 @@ type Props = {
     loggedInMember: { name: string | null; customer_id: string | null } | null;
     onSearch: (customerId: string) => void;
     searchError?: string;
+    rootHref?: string | null;
     children: React.ReactNode;
 };
 
 /**
  * Shared chrome for Directs View and Tree View (DOMAIN_LOGIC.md §4.1/§4.2) —
- * the user explicitly asked for identical UI (pan/zoom viewport, Back,
- * Search, zoom controls) between the two, differing only in the diagram
- * content passed as `children`. Kept as one component specifically so the
- * two pages cannot drift apart from each other by accident.
- *
- * Each toolbar concern (navigation, search, zoom) gets its own bordered/
- * tinted box per the user's explicit request for visually separated
- * sections, rather than one undifferentiated row of controls.
+ * the user explicitly asked (T-118) for the Directs page to have the exact
+ * same UI as Tree View (header, Back/Search, zoom/pan viewport), differing
+ * only in the member cards/diagram passed as `children`. Kept as one
+ * component so the two pages cannot drift apart from each other by accident.
  */
 export default function NetworkDiagramShell({
     loggedInMember,
     onSearch,
     searchError,
+    rootHref,
     children,
 }: Props) {
     const [scale, setScale] = useState(1);
@@ -60,12 +58,12 @@ export default function NetworkDiagramShell({
 
     return (
         <div className="flex flex-col gap-4 p-4">
-            <div className="flex flex-wrap items-stretch gap-3">
-                <div className="bg-muted/30 rounded-md border border-l-4 border-l-slate-400 px-3 py-2">
-                    <p className="text-muted-foreground text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <p className="text-muted-foreground text-sm">
                         Logged in as
                     </p>
-                    <p className="text-sm font-semibold">
+                    <p className="text-lg font-semibold">
                         {loggedInMember?.name ?? '—'}{' '}
                         <span className="text-muted-foreground font-normal">
                             ({loggedInMember?.customer_id ?? '—'})
@@ -73,14 +71,16 @@ export default function NetworkDiagramShell({
                     </p>
                 </div>
 
-                <div className="bg-muted/30 rounded-md border border-l-4 border-l-blue-400 px-3 py-2">
-                    <NetworkToolbar onSearch={onSearch} error={searchError} />
-                </div>
+                <NetworkToolbar
+                    onSearch={onSearch}
+                    error={searchError}
+                    rootHref={rootHref}
+                />
 
-                <div className="bg-muted/30 flex items-center gap-2 rounded-md border border-l-4 border-l-emerald-400 px-3 py-2">
+                <div className="flex gap-2">
                     <button
                         type="button"
-                        onClick={() => setScale((s) => Math.max(0.5, s - 0.1))}
+                        onClick={() => setScale((s) => Math.max(0.2, s - 0.1))}
                         className="rounded-md border px-3 py-1 text-sm"
                     >
                         −
