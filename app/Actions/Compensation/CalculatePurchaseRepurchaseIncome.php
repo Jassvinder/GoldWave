@@ -12,10 +12,10 @@ use App\Services\WalletLedgerService;
 use Illuminate\Support\Facades\DB;
 
 /**
- * DOMAIN_LOGIC.md §15 — fires only when a store sale is attributed to a
- * purchasing member (`store_sales.member_id` set); a no-op for a walk-in/
- * non-member sale (`DOMAIN_LOGIC.md` §16.4 scenario 1, Docs/TEST.md scenario
- * 5's regression case). Pays the purchasing member 2% ("self"), then walks
+ * DOMAIN_LOGIC.md §15 — for a sale attributed to a purchasing member
+ * (`store_sales.member_id` set); since T-170 (28-09-2026) a walk-in sale pays
+ * the whole percentage to the Store Owner instead (see
+ * `payWalkInIncomeToStoreOwner`). Pays the purchasing member 2% ("self"), then walks
  * their Sponsor/Direct chain: Level 1 (direct Sponsor) 1%, Levels 2-6 0.5%
  * each, Levels 7-12 0.25% each — a strict ancestor path, so the
  * duplicate-beneficiary rule (§15) is structurally satisfied without extra
@@ -36,10 +36,6 @@ class CalculatePurchaseRepurchaseIncome
 
     public function __invoke(StoreSale $storeSale): void
     {
-        if (! $storeSale->member_id) {
-            return;
-        }
-
         if (IncomeLedgerCalculation::where('source_store_sale_id', $storeSale->id)
             ->where('type', 'purchase_repurchase')
             ->exists()) {
@@ -52,10 +48,16 @@ class CalculatePurchaseRepurchaseIncome
             return;
         }
 
+        if (! $storeSale->member_id) {
+            $this->payWalkInIncomeToStoreOwner($storeSale, $ruleVersion);
+
+            return;
+        }
+
         $payer = $storeSale->member()->firstOrFail();
         $metal = $storeSale->metal;
         $rates = $this->rules->metalValue('purchase_repurchase_income_rates', $metal, []);
-        $baseAmount = (float) $storeSale->sale_amount;
+        $baseAmount = $storeSale->incomeBase();
         $chain = $this->sponsorChain->ancestors($payer, self::MAX_LEVELS);
 
         DB::transaction(function () use ($storeSale, $payer, $ruleVersion, $rates, $baseAmount, $chain) {
@@ -86,6 +88,30 @@ class CalculatePurchaseRepurchaseIncome
                 );
             }
         });
+    }
+
+    /**
+     * T-170 (28-09-2026, user decision — DOMAIN_LOGIC.md §15 note, TEST.md scenario 5): a walk-in buyer has no
+     * chain, so the whole Purchase/Repurchase percentage (self + every level of this metal's rates) goes to the
+     * Store Owner's member wallet as one entry, described as store income. No owner member → nothing (as for
+     * Store Profit Distribution).
+     */
+    private function payWalkInIncomeToStoreOwner(StoreSale $storeSale, RuleVersion $ruleVersion): void
+    {
+        $store = $storeSale->store()->first();
+        $owner = $store?->ownerMember();
+
+        if ($store === null || $owner === null) {
+            return;
+        }
+
+        $rates = $this->rules->metalValue('purchase_repurchase_income_rates', $storeSale->metal, []);
+        $totalRate = (float) array_sum(array_map('floatval', (array) $rates));
+
+        DB::transaction(fn () => $this->payBeneficiary(
+            $storeSale, $owner, $ruleVersion, null, $totalRate, $storeSale->incomeBase(),
+            "Walk-in store sale income — {$store->name} sale #{$storeSale->id}",
+        ));
     }
 
     private function payBeneficiary(

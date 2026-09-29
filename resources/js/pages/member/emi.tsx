@@ -10,7 +10,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatRatePer10g } from '@/lib/utils';
 import { pay as payInstallment } from '@/routes/member/emi';
 
 type Installment = {
@@ -42,6 +42,13 @@ type Props = {
     } | null;
     installments: Installment[];
     pair_eligibility: PairEligibility | null;
+    /** T-166 — the latest Current Rate booking request, unless it was approved. */
+    booking_request: {
+        status: 'pending' | 'cancelled';
+        requested_at: string | null;
+        decided_at: string | null;
+        cancel_message: string | null;
+    } | null;
 };
 
 const STATUS_VARIANT: Record<
@@ -66,6 +73,7 @@ export default function Emi({
     schedule,
     installments,
     pair_eligibility,
+    booking_request,
 }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const paymentError = (usePage().props.errors as Record<string, string>)
@@ -144,6 +152,36 @@ export default function Emi({
                     </p>
                 )}
 
+                {booking_request?.status === 'pending' && (
+                    <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                        Your Current Rate booking request (sent{' '}
+                        {formatDate(booking_request.requested_at)}) is waiting
+                        for Super Admin approval. The EMIs below stay as they
+                        are until it is approved.
+                    </div>
+                )}
+
+                {booking_request?.status === 'cancelled' && (
+                    <div
+                        role="alert"
+                        className="border-destructive/40 bg-destructive/10 text-destructive rounded-md border p-3 text-sm"
+                    >
+                        <p className="font-semibold">
+                            Your Current Rate booking request was cancelled on{' '}
+                            {formatDate(booking_request.decided_at)}.
+                        </p>
+                        {booking_request.cancel_message && (
+                            <p>
+                                Message from Super Admin: “
+                                {booking_request.cancel_message}”
+                            </p>
+                        )}
+                        <p className="mt-1">
+                            You can request again from the Membership Plan page.
+                        </p>
+                    </div>
+                )}
+
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">EMI Schedule</CardTitle>
@@ -153,8 +191,8 @@ export default function Emi({
                                 : schedule.rate_booking_method ===
                                     'current_rate'
                                   ? schedule.booked_at
-                                      ? `Current Rate Booking (booked ${formatDate(schedule.booked_at)}) — ${schedule.fixed_weight_grams}g at ₹${schedule.rate_per_gram}/g · ₹${schedule.installment_amount}/month × ${schedule.pending_installments} remaining`
-                                      : `Current Rate Booking — ${schedule.fixed_weight_grams}g at ₹${schedule.rate_per_gram}/g · ₹${schedule.installment_amount}/month × ${schedule.total_installments}`
+                                      ? `Current Rate Booking (booked ${formatDate(schedule.booked_at)}) — ${schedule.fixed_weight_grams}g at ${formatRatePer10g(schedule.rate_per_gram)} · ${schedule.pending_installments} EMIs, each a little less than the one before (see below)`
+                                      : `Current Rate Booking — ${schedule.fixed_weight_grams}g at ${formatRatePer10g(schedule.rate_per_gram)} · ${schedule.total_installments} EMIs, reducing every month (see below)`
                                   : `Future Rate — ₹${schedule.installment_amount}/month × ${schedule.total_installments}`}
                         </CardDescription>
                     </CardHeader>

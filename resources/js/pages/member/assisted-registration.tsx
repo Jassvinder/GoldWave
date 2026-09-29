@@ -1,5 +1,6 @@
 import { Head, usePage, useForm } from '@inertiajs/react';
-import { useState } from 'react';
+import { Check, Copy, Link2 } from 'lucide-react';
+import { useRef, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,6 +29,8 @@ type Plan = {
 type Props = {
     plans: Plan[];
     wallet_balance: number;
+    /** T-162 — permanent `/join?ref=…` link with this member as sponsor. */
+    referral_link: string;
 };
 
 type SponsorState =
@@ -40,9 +43,12 @@ type SponsorState =
 export default function MemberAssistedRegistration({
     plans,
     wallet_balance,
+    referral_link,
 }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const [sponsor, setSponsor] = useState<SponsorState>({ status: 'idle' });
+    const [copied, setCopied] = useState(false);
+    const linkInput = useRef<HTMLInputElement>(null);
 
     const form = useForm({
         sponsor_code: '',
@@ -98,6 +104,19 @@ export default function MemberAssistedRegistration({
         form.post(store.url());
     }
 
+    async function copyLink() {
+        try {
+            await navigator.clipboard.writeText(referral_link);
+        } catch {
+            // The Clipboard API needs HTTPS (or localhost); fall back to copying the selected field.
+            linkInput.current?.select();
+            document.execCommand('copy');
+        }
+
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+    }
+
     return (
         <>
             <Head title="Register a New Member" />
@@ -111,15 +130,50 @@ export default function MemberAssistedRegistration({
 
                 <Card>
                     <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Link2 className="size-5" />
+                            Your Registration Link
+                        </CardTitle>
+                        <CardDescription>
+                            Share this link with anyone who wants to join under
+                            you. It opens the join page with you already set as
+                            their sponsor, so they fill in their own details and
+                            pay. The link is permanent — it never changes.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                            <Input
+                                ref={linkInput}
+                                value={referral_link}
+                                readOnly
+                                onFocus={(e) => e.target.select()}
+                                aria-label="Your registration link"
+                                className="font-mono text-sm"
+                            />
+                            <Button
+                                type="button"
+                                onClick={copyLink}
+                                className="shrink-0"
+                            >
+                                {copied ? <Check /> : <Copy />}
+                                {copied ? 'Copied' : 'Copy link'}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
                         <CardTitle className="text-2xl">
                             Register a New Member
                         </CardTitle>
                         <CardDescription>
                             This registration is for someone else joining
-                            GoldWave — the sponsor still needs their own
-                            sponsor code, same as the public join form. Your
-                            wallet balance is ₹{wallet_balance.toFixed(2)} —
-                            you may optionally pay their registration from it.
+                            GoldWave — the sponsor still needs their own sponsor
+                            code, same as the public join form. Your wallet
+                            balance is ₹{wallet_balance.toFixed(2)} — you may
+                            optionally pay their registration from it.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -360,11 +414,11 @@ export default function MemberAssistedRegistration({
                                 </div>
                                 {form.data.payment_mode === 'wallet' && (
                                     <p className="text-muted-foreground text-sm">
-                                        The registration amount will be
-                                        deducted from your own wallet balance
-                                        (₹{wallet_balance.toFixed(2)}{' '}
-                                        available) and the new member is
-                                        activated immediately.
+                                        The registration amount will be deducted
+                                        from your own wallet balance (₹
+                                        {wallet_balance.toFixed(2)} available)
+                                        and the new member is activated
+                                        immediately.
                                     </p>
                                 )}
                                 <InputError

@@ -33,6 +33,27 @@ export function formatDate(value: string | null | undefined): string {
     return `${day}-${month}-${year}`;
 }
 
+/**
+ * T-165 (28-09-2026) — a metal rate is always shown per 10 gm (1 tola = 10 gm
+ * in this project), e.g. "₹73,450.00 / 10 gm". The backend stores and sends
+ * the per-gram rate; this multiplies by 10 for display. '—' when missing.
+ */
+export function formatRatePer10g(
+    ratePerGram: string | number | null | undefined,
+): string {
+    if (
+        ratePerGram === null ||
+        ratePerGram === undefined ||
+        ratePerGram === ''
+    ) {
+        return '—';
+    }
+
+    const per10 = Number(ratePerGram) * 10;
+
+    return `₹${per10.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / 10 gm`;
+}
+
 /** Human label for a `members.gender` value (male/female/other); '—' when not recorded. */
 export function formatGender(value: string | null | undefined): string {
     if (!value) {

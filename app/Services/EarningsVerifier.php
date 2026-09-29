@@ -163,7 +163,8 @@ class EarningsVerifier
 
             $rates = (array) $this->rule($stored->first()->rule_version_id, $this->metalKey('purchase_repurchase_income_rates', $this->saleMetal($sale)));
             $chain = $this->sponsorChain($sale->member_id, self::MAX_LEVELS);
-            $base = (float) $sale->sale_amount;
+            // T-169 — income is on the metal value; older sales without one used their typed sale amount.
+            $base = (float) ($sale->metal_value ?? $sale->sale_amount);
 
             $expectedCount = 1 + self::MAX_LEVELS;
 
@@ -190,6 +191,55 @@ class EarningsVerifier
 
                 $this->compareIncomeRow('purchase', $row, $ref." level {$level}", $chain[$level - 1] ?? null, (float) ($rates[(string) $level] ?? 0), $base, requireActive: false);
             }
+        }
+
+        $this->checkWalkInIncome($rows);
+    }
+
+    /**
+     * T-170 (28-09-2026) — a walk-in sale pays the whole Purchase/Repurchase percentage to the Store Owner in one
+     * row. Walk-in sales recorded before T-170 have no row at all, so only sales that do have rows are checked.
+     *
+     * @param  Collection<array-key, Collection<int, stdClass>>  $rows
+     */
+    private function checkWalkInIncome(Collection $rows): void
+    {
+        $sales = DB::table('store_sales')
+            ->join('stores', 'stores.id', '=', 'store_sales.store_id')
+            ->leftJoin('members as owner', 'owner.user_id', '=', 'stores.owner_user_id')
+            ->where('store_sales.status', 'confirmed')
+            ->whereNull('store_sales.member_id')
+            ->orderBy('store_sales.id')
+            ->get(['store_sales.*', 'owner.id as owner_member_id']);
+
+        foreach ($sales as $sale) {
+            $stored = $rows->get($sale->id, collect());
+
+            if ($stored->isEmpty()) {
+                continue;
+            }
+
+            $this->tick('purchase');
+            $ref = "walk-in store sale #{$sale->id}";
+
+            if ($stored->count() !== 1) {
+                $this->error('purchase', "A walk-in sale should have exactly 1 Store Owner row, found {$stored->count()}.", $ref);
+
+                continue;
+            }
+
+            $rates = (array) $this->rule($stored->first()->rule_version_id, $this->metalKey('purchase_repurchase_income_rates', $this->saleMetal($sale)));
+            $totalRate = (float) array_sum(array_map('floatval', $rates));
+            $base = (float) ($sale->metal_value ?? $sale->sale_amount);
+            $owner = $sale->owner_member_id !== null ? $this->members->get($sale->owner_member_id) : null;
+
+            if ($owner === null) {
+                $this->error('purchase', 'The store has no owner member, so no walk-in income should exist.', $ref);
+
+                continue;
+            }
+
+            $this->compareIncomeRow('purchase', $stored->first(), $ref.' store owner', $owner, $totalRate, $base, requireActive: false);
         }
     }
 
@@ -318,14 +368,15 @@ class EarningsVerifier
                 }
 
                 $rate = (float) ($rates[$type] ?? 0);
-                $amount = round((float) $sale->sale_amount * $rate / 100, 2);
+                $base = (float) ($sale->metal_value ?? $sale->sale_amount);
+                $amount = round($base * $rate / 100, 2);
 
                 if ((int) $row->beneficiary_member_id !== (int) $member->id) {
                     $this->error('store', "{$type} should be {$member->customer_id} but is member #{$row->beneficiary_member_id}.", $ref);
                 }
 
                 if (! $this->same((float) $row->amount, $amount)) {
-                    $this->error('store', "{$type}: ₹{$amount} expected ({$rate}% of ₹{$sale->sale_amount}) but ₹{$row->amount} stored.", $ref);
+                    $this->error('store', "{$type}: ₹{$amount} expected ({$rate}% of ₹{$base}) but ₹{$row->amount} stored.", $ref);
                 }
             }
 

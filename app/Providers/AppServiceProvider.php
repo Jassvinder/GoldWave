@@ -10,6 +10,7 @@ use App\Services\Sms\LogSmsGateway;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use RuntimeException;
@@ -41,11 +42,17 @@ class AppServiceProvider extends ServiceProvider
 
         // T-139 — one SMS gateway for OTP and notifications. Only the `log` driver exists until an SMS provider is chosen;
         // a real provider is added as another `match` arm here (and needs DLT template ids for India).
+        // 28-09-2026 (user decision): SMS is only really sent once a provider's API credentials are configured and
+        // enabled in .env; until then — including a driver name nobody implemented yet — it keeps going to the log
+        // (with a warning), so a half-finished SMS setup can never break OTP login or a notification.
         $this->app->bind(SmsGatewayContract::class, function ($app): SmsGatewayContract {
-            return match ((string) config('notifications.sms_driver')) {
-                'log' => $app->make(LogSmsGateway::class),
-                default => throw new RuntimeException('Unknown SMS_DRIVER "'.config('notifications.sms_driver').'" — only "log" exists until an SMS provider is added.'),
-            };
+            $driver = (string) config('notifications.sms_driver');
+
+            if ($driver !== 'log') {
+                Log::warning("SMS_DRIVER \"{$driver}\" has no implementation yet — SMS is written to the log instead.");
+            }
+
+            return $app->make(LogSmsGateway::class);
         });
     }
 

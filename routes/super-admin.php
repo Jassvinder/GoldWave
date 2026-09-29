@@ -3,6 +3,7 @@
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SuperAdmin\AdminUserController;
 use App\Http\Controllers\SuperAdmin\CashPaymentApprovalController;
+use App\Http\Controllers\SuperAdmin\CompanyDeliveryController;
 use App\Http\Controllers\SuperAdmin\CompanyWalletController;
 use App\Http\Controllers\SuperAdmin\CompensationManagementController;
 use App\Http\Controllers\SuperAdmin\DrawManagementController;
@@ -10,12 +11,14 @@ use App\Http\Controllers\SuperAdmin\DrawSettingsController;
 use App\Http\Controllers\SuperAdmin\DummyEntryAssignmentController;
 use App\Http\Controllers\SuperAdmin\DummyEntrySettingsController;
 use App\Http\Controllers\SuperAdmin\EarningsVerificationController;
+use App\Http\Controllers\SuperAdmin\FinancialSummaryController;
 use App\Http\Controllers\SuperAdmin\LandingHeroController;
 use App\Http\Controllers\SuperAdmin\MemberManagementController;
 use App\Http\Controllers\SuperAdmin\MetalRateController;
 use App\Http\Controllers\SuperAdmin\PayoutRequestController;
 use App\Http\Controllers\SuperAdmin\PayoutTdsSettingsController;
 use App\Http\Controllers\SuperAdmin\ProfileChangeRequestController;
+use App\Http\Controllers\SuperAdmin\RateBookingRequestController;
 use App\Http\Controllers\SuperAdmin\ReportsController;
 use App\Http\Controllers\SuperAdmin\RestockShipmentsController;
 use App\Http\Controllers\SuperAdmin\RuleVersionController;
@@ -92,6 +95,8 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('super-admin')->name('su
 
     // Company Wallet (T-153, DOMAIN_LOGIC.md §12.2(b)).
     Route::get('company-wallet', [CompanyWalletController::class, 'index'])->name('company-wallet.index');
+    Route::post('company-wallet/top-up', [CompanyWalletController::class, 'topUp'])->name('company-wallet.top-up');
+    Route::get('financial-summary', [FinancialSummaryController::class, 'index'])->name('financial-summary.index');
 
     // Admin Member Management.
     Route::get('members', [MemberManagementController::class, 'index'])->name('members.index');
@@ -101,6 +106,17 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('super-admin')->name('su
     Route::patch('members/{member}/reset-password', [MemberManagementController::class, 'resetPassword'])->name('members.reset-password');
     Route::post('members/{member}/verify-bank-detail', [MemberManagementController::class, 'verifyBankDetail'])->name('members.verify-bank-detail');
     Route::post('members/{member}/revert-current-rate', [MemberManagementController::class, 'revertCurrentRate'])->name('members.revert-current-rate');
+
+    // Company plan-jewellery delivery + bills (T-171).
+    Route::get('company-deliveries', [CompanyDeliveryController::class, 'index'])->name('company-deliveries.index');
+    Route::post('company-deliveries', [CompanyDeliveryController::class, 'store'])->name('company-deliveries.store');
+    Route::get('company-deliveries/{delivery}/invoice', [CompanyDeliveryController::class, 'invoice'])->name('company-deliveries.invoice');
+    Route::get('store-sales/{sale}/invoice', [CompanyDeliveryController::class, 'storeSaleInvoice'])->name('store-sales.invoice');
+
+    // Current Rate booking requests (T-166).
+    Route::get('rate-booking-requests', [RateBookingRequestController::class, 'index'])->name('rate-booking-requests.index');
+    Route::post('rate-booking-requests/{bookingRequest}/approve', [RateBookingRequestController::class, 'approve'])->name('rate-booking-requests.approve');
+    Route::post('rate-booking-requests/{bookingRequest}/cancel', [RateBookingRequestController::class, 'cancel'])->name('rate-booking-requests.cancel');
 
     // Admin Compensation Management.
     Route::get('compensation/config', [CompensationManagementController::class, 'config'])->name('compensation.config');

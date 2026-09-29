@@ -1,10 +1,12 @@
 <?php
 
+use App\Actions\Billing\GenerateStoreSaleBill;
 use App\Actions\Compensation\CalculatePurchaseRepurchaseIncome;
 use App\Actions\Compensation\CalculateStoreProfitDistribution;
 use App\Actions\Store\AllocateStoreInventoryItem;
 use App\Actions\Store\ConfirmStoreSale;
 use App\Actions\Store\CreateStore;
+use App\Actions\Store\PriceStoreSale;
 use App\Actions\Store\RecordItemBuyback;
 use App\Actions\Store\RecordPlanJewelleryDelivery;
 use App\Actions\Store\RecordStoreWalletTopup;
@@ -19,6 +21,7 @@ use App\Models\StoreActivityLog;
 use App\Models\StoreProfitDistribution;
 use App\Models\StoreSale;
 use App\Models\User;
+use App\Services\EarningsVerifier;
 use App\Services\StoreWalletService;
 use Illuminate\Validation\ValidationException;
 
@@ -126,7 +129,7 @@ test('a confirmed sale decrements tracked inventory atomically, and insufficient
 
     expect($item->fresh()->quantity)->toBe(7);
     expect($sale->quantity)->toBe(3);
-    expect($sale->invoice)->not->toBeNull();
+    expect($sale->invoice)->toBeNull(); // T-171 — bills are generated on request.
 
     expect(fn () => app(ConfirmStoreSale::class)(
         store: $store, member: null, transactionType: 'new_sale', itemName: $item->item_name,
@@ -303,13 +306,43 @@ test('Store Profit Distribution pays owner + 3 Sponsor/Direct levels on every st
 
     expect($sale->fresh()->distribution_status)->toBe('processed');
 
-    // A walk-in/non-member sale still gets Store Profit Distribution but zero income_ledger_calculations rows.
-    expect(IncomeLedgerCalculation::where('source_store_sale_id', $sale->id)->count())->toBe(0);
-
     // Idempotent.
     app(CalculateStoreProfitDistribution::class)($sale->fresh());
     expect(StoreProfitDistribution::where('store_sale_id', $sale->id)->count())->toBe(4);
     expect((float) $result['owner']->fresh()->wallet_balance)->toBe(1000.0);
+});
+
+test('a walk-in sale pays the whole Purchase/Repurchase percentage to the Store Owner as store income (T-170, TEST.md scenario 5)', function () {
+    $result = makeStoreWithOwnerChain('WALKIN7', 3);
+    $sale = StoreSale::create([
+        'store_id' => $result['store']->id, 'member_id' => null, 'transaction_type' => 'purchase',
+        'item_name' => 'Gold Necklace', 'metal' => 'gold', 'quantity' => 1, 'sale_amount' => 50000, 'gst_amount' => 0,
+        'total_invoice_amount' => 50000, 'payment_source' => 'cash', 'distribution_status' => 'pending', 'status' => 'confirmed',
+    ]);
+
+    app(CalculatePurchaseRepurchaseIncome::class)($sale);
+    app(CalculatePurchaseRepurchaseIncome::class)($sale->fresh()); // idempotent
+
+    $rows = IncomeLedgerCalculation::where('source_store_sale_id', $sale->id)->get();
+    expect($rows)->toHaveCount(1);
+    expect($rows->first()->beneficiary_member_id)->toBe($result['owner']->id)
+        ->and($rows->first()->level_no)->toBeNull()
+        ->and((float) $rows->first()->rate_percent)->toBe(7.0)   // 2 + 1 + 5×0.5 + 6×0.25
+        ->and((float) $rows->first()->amount)->toBe(3500.0);
+
+    // Only the owner — none of the owner's sponsors — gets it, and the wallet line says it came from the store.
+    expect((float) $result['owner']->fresh()->wallet_balance)->toBe(3500.0);
+    expect((float) $result['chain'][0]->fresh()->wallet_balance)->toBe(0.0);
+    expect($result['owner']->walletLedgerEntries()->latest('id')->value('description'))
+        ->toBe("Walk-in store sale income — WALKIN7 Store sale #{$sale->id}");
+
+    // The independent Earnings Verification agrees, and catches a tampered amount.
+    $report = app(EarningsVerifier::class)->run(['purchase']);
+    expect($report['checks']['purchase']['errors'])->toBe(0);
+
+    $rows->first()->update(['amount' => 3400]);
+    $report = app(EarningsVerifier::class)->run(['purchase']);
+    expect($report['checks']['purchase']['errors'])->toBe(1);
 });
 
 test('a member purchase fires both Store Profit Distribution and Purchase/Repurchase Income on the same sale', function () {
@@ -348,8 +381,11 @@ test('RecordPlanJewelleryDelivery marks the entitlement delivered, fires Store P
         'entry_date' => now()->toDateString(),
     ]);
 
-    $sale = app(RecordPlanJewelleryDelivery::class)($benefit, $store, 30000, 0, $operator);
+    // T-168 — handed over from stock: a 5 g gold piece, priced at the seeded ₹6,000/g = ₹30,000 metal value.
+    $item = app(AllocateStoreInventoryItem::class)($store, 'Gold Ring', 'gold', 5, 1, 30000, $operator);
+    $sale = app(RecordPlanJewelleryDelivery::class)($benefit, $store, $item, $operator);
 
+    expect($item->fresh()->quantity)->toBe(0);
     expect($benefit->fresh()->delivered_at)->not->toBeNull();
     expect($benefit->fresh()->store_id)->toBe($store->id);
     expect($sale->transaction_type)->toBe('new_sale');
@@ -362,24 +398,48 @@ test('RecordPlanJewelleryDelivery marks the entitlement delivered, fires Store P
     expect((float) $rows['sponsor_level_3']->amount)->toBe(75.0);
     expect((float) $ownerChain[0]->fresh()->wallet_balance)->toBe(150.0);
 
-    expect(fn () => app(RecordPlanJewelleryDelivery::class)($benefit->fresh(), $store, 30000, 0, $operator))
+    expect(fn () => app(RecordPlanJewelleryDelivery::class)($benefit->fresh(), $store, $item->fresh(), $operator))
         ->toThrow(ValidationException::class);
 });
 
-test('ConfirmStoreSale generates a printable invoice for every confirmed sale', function () {
-    $result = makeStoreWithOwnerChain('INVOICE');
+test('a bill is generated on request, once, with hallmarking per piece added before GST (T-171, the user\'s worked example)', function () {
+    // 5 g gold at ₹60,000 per 10 gm, 12% making, 3% GST, ₹45 hallmark → 30,000 + 3,600 + 45 = 33,645; GST 1,009.35; total 34,654.35.
+    MetalRate::create(['metal' => 'gold', 'rate_per_gram' => 6000, 'making_charge_percent' => 12, 'effective_from' => now()->toDateString(), 'created_by' => User::where('role', 'super_admin')->firstOrFail()->id]);
+    RuleValue::where('key', 'store_gst_percent')->update(['value' => 3]);
+    $result = makeStoreWithOwnerChain('BILL');
     $operator = User::where('role', 'super_admin')->firstOrFail();
+    $price = app(PriceStoreSale::class)('gold', 5, 1);
 
     $sale = app(ConfirmStoreSale::class)(
-        store: $result['store'], member: null, transactionType: 'new_sale', itemName: 'Gold Pendant',
-        inventoryItem: null, itemWeight: 3, quantity: 1, rate: 6000,
-        saleAmount: 18000, gstAmount: 540, paymentSource: 'cash', operator: $operator,
-        metal: 'gold',
+        store: $result['store'], member: null, transactionType: 'purchase', itemName: 'Gold Pendant',
+        inventoryItem: null, itemWeight: 5, quantity: 1, rate: $price['rate_per_gram'],
+        saleAmount: $price['subtotal'], gstAmount: $price['gst_amount'], paymentSource: 'cash', operator: $operator,
+        metal: 'gold', price: $price,
     );
+    expect($sale->invoice)->toBeNull();
+    expect((float) $sale->total_invoice_amount)->toBe(34608.0);
 
-    expect($sale->invoice)->not->toBeNull();
-    expect($sale->invoice->invoice_no)->toContain('INV-');
-    expect((float) $sale->total_invoice_amount)->toBe(18540.0);
+    // HUID count must match the quantity, and must look like a HUID.
+    expect(fn () => app(GenerateStoreSaleBill::class)($sale, $operator, [['huid' => 'AB12CD', 'charge' => 45], ['huid' => 'XY34ZW', 'charge' => 45]]))
+        ->toThrow(ValidationException::class);
+    expect(fn () => app(GenerateStoreSaleBill::class)($sale, $operator, [['huid' => 'A!', 'charge' => 45]]))
+        ->toThrow(ValidationException::class);
+
+    $invoice = app(GenerateStoreSaleBill::class)($sale, $operator, [['huid' => 'ab12cd', 'charge' => 45]]);
+
+    $sale = $sale->fresh();
+    expect($invoice->invoice_no)->toContain('INV-')
+        ->and((float) $sale->hallmark_charges)->toBe(45.0)
+        ->and((float) $sale->sale_amount)->toBe(33645.0)
+        ->and((float) $sale->gst_amount)->toBe(1009.35)
+        ->and((float) $sale->total_invoice_amount)->toBe(34654.35)
+        ->and($sale->hallmarks->pluck('huid')->all())->toBe(['AB12CD']);
+
+    // Income stays on the metal value (walk-in → Store Owner 2% of 30,000).
+    expect((float) $sale->profitDistributions()->where('beneficiary_type', 'store_owner')->value('amount'))->toBe(600.0);
+
+    // Generated once; a second attempt is refused (open the duplicate instead).
+    expect(fn () => app(GenerateStoreSaleBill::class)($sale, $operator))->toThrow(ValidationException::class);
 });
 
 test('every Store Action records a Store Activity Log entry (DOMAIN_LOGIC.md §16.3)', function () {

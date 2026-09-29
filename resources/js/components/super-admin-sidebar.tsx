@@ -5,9 +5,11 @@ import {
     ClipboardList,
     Coins,
     FileSpreadsheet,
+    Gem,
     LayoutGrid,
     LayoutTemplate,
     Percent,
+    Scale,
     Settings2,
     ShieldCheck,
     Store as StoreIcon,
@@ -28,6 +30,7 @@ import { index as drawManagementIndex } from '@/routes/super-admin/draw-manageme
 import { index as drawSettingsIndex } from '@/routes/super-admin/draw-settings';
 import { index as dummyAssignmentIndex } from '@/routes/super-admin/dummy-entry-assignment';
 import { index as dummySettingsIndex } from '@/routes/super-admin/dummy-entry-settings';
+import { index as financialSummaryIndex } from '@/routes/super-admin/financial-summary';
 import { index as landingHeroIndex } from '@/routes/super-admin/landing-hero';
 import { index as membersIndex } from '@/routes/super-admin/members';
 import { index as notificationsIndex } from '@/routes/super-admin/notifications';
@@ -35,7 +38,9 @@ import { index as metalRatesIndex } from '@/routes/super-admin/metal-rates';
 import { index as payoutRequestsIndex } from '@/routes/super-admin/payout-requests';
 import { index as payoutTdsIndex } from '@/routes/super-admin/payout-tds-settings';
 import { index as profileChangeRequestsIndex } from '@/routes/super-admin/profile-change-requests';
+import { index as companyDeliveriesIndex } from '@/routes/super-admin/company-deliveries';
 import { index as companyWalletIndex } from '@/routes/super-admin/company-wallet';
+import { index as rateBookingRequestsIndex } from '@/routes/super-admin/rate-booking-requests';
 import { index as reportsIndex } from '@/routes/super-admin/reports';
 import { index as restockShipmentsIndex } from '@/routes/super-admin/restock-shipments';
 import { index as ruleVersionsIndex } from '@/routes/super-admin/rule-versions';
@@ -45,6 +50,11 @@ import type { NavGroup, NavItem } from '@/types';
 
 const overviewItems: NavItem[] = [
     { title: 'System Dashboard', href: dashboard(), icon: LayoutGrid },
+    {
+        title: 'Financial Summary',
+        href: financialSummaryIndex(),
+        icon: Scale,
+    },
     { title: 'Notifications', href: notificationsIndex(), icon: Bell },
 ];
 
@@ -85,6 +95,11 @@ const drawItems: NavItem[] = [
 const requestItems: NavItem[] = [
     { title: 'Payout Requests', href: payoutRequestsIndex(), icon: Wallet },
     {
+        title: 'Rate Booking Requests',
+        href: rateBookingRequestsIndex(),
+        icon: Coins,
+    },
+    {
         title: 'Profile Change Requests',
         href: profileChangeRequestsIndex(),
         icon: ClipboardEdit,
@@ -106,6 +121,11 @@ const storeItems: NavItem[] = [
         title: 'Store Management',
         href: storeManagementIndex(),
         icon: StoreIcon,
+    },
+    {
+        title: 'Company Plan Deliveries',
+        href: companyDeliveriesIndex(),
+        icon: Gem,
     },
     { title: 'Store Wallets', href: storeWalletsIndex(), icon: Wallet },
     {

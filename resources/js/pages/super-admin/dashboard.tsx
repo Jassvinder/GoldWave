@@ -5,6 +5,7 @@ import {
     Dices,
     Gift,
     Receipt,
+    Scale,
     ShieldCheck,
     Store as StoreIcon,
     Users,
@@ -12,6 +13,7 @@ import {
 import { StatCard, StatGrid } from '@/components/stat-card';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDate } from '@/lib/utils';
+import { index as rateBookingRequestsIndex } from '@/routes/super-admin/rate-booking-requests';
 
 type Props = {
     members: { total: number; active: number; pending: number; today: number };
@@ -19,6 +21,8 @@ type Props = {
     emi: { due: number; overdue: number };
     income: { level_income: string; pair_reward: string; booster: string };
     payouts: { pending: number; processed: number };
+    /** T-166 — members waiting for Super Admin to approve a Current Rate booking. */
+    rate_booking_requests: { pending: number };
     draw: {
         active_groups: number;
         last_winner_customer_id: string | null;
@@ -44,6 +48,7 @@ export default function SuperAdminDashboard({
     emi,
     income,
     payouts,
+    rate_booking_requests,
     draw,
     dummy_entries,
     store,
@@ -130,6 +135,20 @@ export default function SuperAdminDashboard({
                             { label: 'Pending', value: payouts.pending },
                             { label: 'Processed', value: payouts.processed },
                         ]}
+                    />
+
+                    <StatCard
+                        icon={Scale}
+                        color="amber"
+                        label="Current Rate Booking Requests"
+                        value={rate_booking_requests.pending}
+                        stats={[
+                            {
+                                label: 'Waiting for approval',
+                                value: rate_booking_requests.pending,
+                            },
+                        ]}
+                        href={rateBookingRequestsIndex()}
                     />
 
                     <StatCard

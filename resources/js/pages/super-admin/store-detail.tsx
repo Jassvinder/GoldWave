@@ -31,6 +31,7 @@ import {
     status as updateStatus,
 } from '@/routes/super-admin/store-management';
 import { store as allocateInventory } from '@/routes/super-admin/store-management/inventory';
+import { invoice as storeSaleInvoice } from '@/routes/super-admin/store-sales';
 
 type Store = {
     id: number;
@@ -61,6 +62,7 @@ type Sale = {
     total_invoice_amount: string;
     status: string;
     created_at: string | null;
+    invoice_no: string | null;
 };
 
 type UnassignedAdmin = { id: number; name: string; email: string };
@@ -489,6 +491,24 @@ const saleColumns: DataTableColumn<Sale>[] = [
         header: 'Amount',
         render: (row) => `₹${row.total_invoice_amount}`,
     },
+    {
+        key: 'invoice_no',
+        header: 'Bill',
+        // T-171 — Super Admin can open (print / share) a store's bill once the store has generated it.
+        render: (row) =>
+            row.invoice_no ? (
+                <Link
+                    href={storeSaleInvoice.url(row.id)}
+                    className="text-primary font-medium underline-offset-4 hover:underline"
+                >
+                    {row.invoice_no}
+                </Link>
+            ) : (
+                <span className="text-muted-foreground text-xs">
+                    Not generated
+                </span>
+            ),
+    },
 ];
 
 const activityColumns: DataTableColumn<Activity>[] = [
@@ -554,7 +574,6 @@ type InventoryFormData = {
     metal: 'gold' | 'silver' | '';
     weight: string;
     quantity: string;
-    price: string;
     description: string;
 };
 
@@ -570,7 +589,6 @@ function AllocateInventoryDialog({ storeId }: { storeId: number }) {
             metal: '',
             weight: '',
             quantity: '1',
-            price: '',
             description: '',
         });
 
@@ -606,9 +624,9 @@ function AllocateInventoryDialog({ storeId }: { storeId: number }) {
                 <DialogHeader>
                     <DialogTitle>Add Inventory</DialogTitle>
                     <DialogDescription>
-                        Adding the same item, metal, weight and price again
-                        increases its quantity instead of creating a duplicate
-                        row.
+                        The price is set from today&apos;s rate. Adding the same
+                        item, metal and weight again on the same rate increases
+                        its quantity instead of creating a duplicate row.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -699,22 +717,11 @@ function AllocateInventoryDialog({ storeId }: { storeId: number }) {
                             )}
                         </div>
                         <div className="grid gap-2">
-                            <Label htmlFor="inv_price">Price (₹/unit)</Label>
-                            <Input
-                                id="inv_price"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={data.price}
-                                onChange={(e) =>
-                                    setData('price', e.target.value)
-                                }
-                            />
-                            {errors.price && (
-                                <p className="text-destructive text-sm">
-                                    {errors.price}
-                                </p>
-                            )}
+                            <Label>Price (₹/unit)</Label>
+                            <p className="text-muted-foreground rounded-md border border-dashed px-3 py-2 text-xs">
+                                Set automatically: weight × today&apos;s{' '}
+                                {data.metal || 'metal'} rate.
+                            </p>
                         </div>
                     </div>
 

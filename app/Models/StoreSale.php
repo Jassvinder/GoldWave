@@ -30,6 +30,12 @@ class StoreSale extends Model
         'item_weight',
         'quantity',
         'rate',
+        'metal_rate_id',
+        'metal_value',
+        'making_charge_percent',
+        'making_charges',
+        'hallmark_charges',
+        'gst_percent',
         'sale_amount',
         'gst_amount',
         'total_invoice_amount',
@@ -44,10 +50,25 @@ class StoreSale extends Model
         return [
             'item_weight' => 'decimal:3',
             'rate' => 'decimal:2',
+            'metal_value' => 'decimal:2',
+            'making_charge_percent' => 'decimal:2',
+            'making_charges' => 'decimal:2',
+            'hallmark_charges' => 'decimal:2',
+            'gst_percent' => 'decimal:2',
             'sale_amount' => 'decimal:2',
             'gst_amount' => 'decimal:2',
             'total_invoice_amount' => 'decimal:2',
         ];
+    }
+
+    /**
+     * T-169 (28-09-2026, user decision) — Store Profit Distribution and Purchase/Repurchase income are
+     * calculated on the metal value only (not making, hallmark or GST). A sale recorded before automatic
+     * pricing has no `metal_value`, so its typed `sale_amount` stays its base.
+     */
+    public function incomeBase(): float
+    {
+        return (float) ($this->metal_value ?? $this->sale_amount);
     }
 
     /** @return BelongsTo<Store, $this> */
@@ -78,6 +99,12 @@ class StoreSale extends Model
     public function invoice(): HasOne
     {
         return $this->hasOne(Invoice::class);
+    }
+
+    /** @return HasMany<HallmarkEntry, $this> */
+    public function hallmarks(): HasMany
+    {
+        return $this->hasMany(HallmarkEntry::class)->orderBy('piece_no');
     }
 
     /** @return HasMany<StoreProfitDistribution, $this> */

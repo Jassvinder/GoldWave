@@ -29,9 +29,14 @@ use Illuminate\Validation\ValidationException;
  *     maintenance_cost: float|null,
  *     rule_version_id: int|null,
  *     future_commitment_amount: float|null,
+ *     metal_value: float|null,
+ *     making_charge_percent: float|null,
+ *     making_charges: float|null,
  *     total_value: float|null,
  *     remaining_value: float|null,
  *     pending_installments: int|null,
+ *     installment_amounts: non-empty-list<float>|null,
+ *     total_maintenance: float|null,
  * }
  */
 class CalculateEmiRateBooking
@@ -77,9 +82,14 @@ class CalculateEmiRateBooking
             'maintenance_cost' => null,
             'rule_version_id' => null,
             'future_commitment_amount' => round((float) $plan->amount * $plan->installment_count, 2),
+            'metal_value' => null,
+            'making_charge_percent' => null,
+            'making_charges' => null,
             'total_value' => null,
             'remaining_value' => null,
             'pending_installments' => null,
+            'installment_amounts' => null,
+            'total_maintenance' => null,
         ];
     }
 
@@ -113,7 +123,12 @@ class CalculateEmiRateBooking
 
         $maintenancePercent = (float) $this->ruleVersionService->value('emi_current_rate_maintenance_cost_percent', 1.0);
 
-        $totalValue = round((float) $latestRate->rate_per_gram * (float) $plan->fixed_weight_grams, 2);
+        // T-165 (28-09-2026) — the booking's total value is metal value + making charges (the making % recorded
+        // with the rate), the same way a bill is priced; hallmark and GST are not part of the booking.
+        $metalValue = round((float) $latestRate->rate_per_gram * (float) $plan->fixed_weight_grams, 2);
+        $makingPercent = (float) $latestRate->making_charge_percent;
+        $makingCharges = round($metalValue * $makingPercent / 100, 2);
+        $totalValue = round($metalValue + $makingCharges, 2);
         $remainingValue = round($totalValue - $paidAmount, 2);
 
         if ($remainingValue <= 0) {
@@ -122,20 +137,55 @@ class CalculateEmiRateBooking
             ]);
         }
 
-        $maintenanceCost = round($remainingValue * $maintenancePercent / 100, 2);
-        $installmentAmount = round($remainingValue / $pendingInstallments + $maintenanceCost, 2);
+        $installmentAmounts = $this->decliningInstallments($remainingValue, $pendingInstallments, $maintenancePercent);
 
         return [
-            'installment_amount' => $installmentAmount,
+            // The first EMI after booking; each later one is smaller (see `installment_amounts`).
+            'installment_amount' => $installmentAmounts[0],
             'metal_rate_id' => $latestRate->id,
             'rate_per_gram' => (float) $latestRate->rate_per_gram,
             'fixed_weight_grams' => (float) $plan->fixed_weight_grams,
-            'maintenance_cost' => $maintenanceCost,
+            // The first month's maintenance (1% of the full remaining value).
+            'maintenance_cost' => round($remainingValue * $maintenancePercent / 100, 2),
             'rule_version_id' => $this->ruleVersionService->activeVersion()?->id,
             'future_commitment_amount' => null,
+            'metal_value' => $metalValue,
+            'making_charge_percent' => $makingPercent,
+            'making_charges' => $makingCharges,
             'total_value' => $totalValue,
             'remaining_value' => $remainingValue,
             'pending_installments' => $pendingInstallments,
+            'installment_amounts' => $installmentAmounts,
+            'total_maintenance' => round(array_sum($installmentAmounts) - $remainingValue, 2),
         ];
+    }
+
+    /**
+     * T-167 (28-09-2026, user decision — DOMAIN_LOGIC.md §21 / TEST.md scenario 21): the principal is the same
+     * every month, and each month's maintenance is the percentage of the value still remaining at that
+     * installment, so every EMI is a little smaller than the one before. Any principal rounding remainder goes
+     * into the last EMI, so the principals always add up to exactly the remaining value.
+     *
+     * @return non-empty-list<float>
+     */
+    private function decliningInstallments(float $remainingValue, int $pendingInstallments, float $maintenancePercent): array
+    {
+        $principal = round($remainingValue / $pendingInstallments, 2);
+
+        $amountFor = function (int $month) use ($remainingValue, $pendingInstallments, $maintenancePercent, $principal): float {
+            $stillRemaining = round($remainingValue - $principal * ($month - 1), 2);
+            $thisPrincipal = $month === $pendingInstallments ? $stillRemaining : $principal;
+
+            return round($thisPrincipal + round($stillRemaining * $maintenancePercent / 100, 2), 2);
+        };
+
+        // The caller guarantees at least one pending EMI.
+        $amounts = [$amountFor(1)];
+
+        for ($month = 2; $month <= $pendingInstallments; $month++) {
+            $amounts[] = $amountFor($month);
+        }
+
+        return $amounts;
     }
 }

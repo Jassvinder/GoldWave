@@ -45,7 +45,7 @@ type Props = {
         status?: string;
         store_owner?: string;
     };
-    plan_options: string[];
+    plan_options: { code: string; name: string }[];
     status_options: string[];
     stats: { total: number; active: number; pending: number; inactive: number };
 };
@@ -224,14 +224,17 @@ export default function SuperAdminMemberManagement({
                     onReset={resetFilters}
                 >
                     <Select value={plan} onValueChange={setPlan}>
-                        <SelectTrigger className="w-full sm:w-36">
+                        <SelectTrigger className="w-full sm:w-40">
                             <SelectValue placeholder="All Plans" />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value={ANY}>All Plans</SelectItem>
-                            {plan_options.map((code) => (
-                                <SelectItem key={code} value={code}>
-                                    Plan {code}
+                            {plan_options.map((option) => (
+                                <SelectItem
+                                    key={option.code}
+                                    value={option.code}
+                                >
+                                    {option.name}
                                 </SelectItem>
                             ))}
                         </SelectContent>

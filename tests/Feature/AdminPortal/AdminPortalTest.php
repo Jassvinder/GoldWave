@@ -10,8 +10,10 @@ use App\Models\MembershipPlan;
 use App\Models\MetalRate;
 use App\Models\Payment;
 use App\Models\ProductBenefit;
+use App\Models\RuleValue;
 use App\Models\Store;
 use App\Models\StoreActivityLog;
+use App\Models\StoreInventoryItem;
 use App\Models\StoreRestockShipment;
 use App\Models\StoreSale;
 use App\Models\User;
@@ -51,6 +53,12 @@ function makeAdminWithStore(string $prefix): array
     );
 
     return ['admin' => $adminUser, 'store' => $store];
+}
+
+/** Two 5 g gold rings in a store's stock (T-168 — plan jewellery is handed over from inventory). */
+function apGoldStock(Store $store): StoreInventoryItem
+{
+    return app(AllocateStoreInventoryItem::class)($store, 'Gold Ring', 'gold', 5, 2, 30000, adminOperator());
 }
 
 beforeEach(function () {
@@ -114,8 +122,13 @@ test('an admin can record a purchase (walk-in, no Customer ID), generating an in
     $sale = StoreSale::where('store_id', $store->id)->firstOrFail();
     expect($sale->item_name)->toBe('Gold Ring');
     expect($sale->member_id)->toBeNull();
-    expect($sale->invoice)->not->toBeNull();
+    // T-171 — no bill until someone generates it.
+    expect($sale->invoice)->toBeNull();
     expect(StoreActivityLog::where('store_id', $store->id)->where('action_type', 'store_sale_purchase')->exists())->toBeTrue();
+
+    $this->actingAs($result['admin'])->post("/admin/sales/{$sale->id}/bill")->assertRedirect("/admin/sales/{$sale->id}/invoice");
+    expect($sale->fresh()->invoice)->not->toBeNull();
+    expect(StoreActivityLog::where('store_id', $store->id)->where('action_type', 'invoice_generated')->exists())->toBeTrue();
 });
 
 test('a repurchase without a resolvable Customer ID is rejected (T-149 follow-up, 23-09-2026)', function () {
@@ -147,12 +160,120 @@ test('an admin can record a sale against tracked inventory, decrementing stock',
             'quantity' => 2,
             'sale_amount' => 4000,
             'gst_amount' => 0,
-            'payment_source' => 'store_wallet',
+            'payment_source' => 'cash',
         ])
         ->assertRedirect('/admin/sales');
 
     expect($item->fresh()->quantity)->toBe(3);
-    expect((float) $store->wallet->fresh()->balance)->toBe(46000.0); // 50,000 advance - 4,000.
+    expect((float) $store->wallet->fresh()->balance)->toBe(50000.0); // A sale never touches the Store Wallet (T-161).
+});
+
+test('a store can open its own sale\'s printable invoice, but not another store\'s (T-160)', function () {
+    $result = makeAdminWithStore('INVOICE');
+    $item = app(AllocateStoreInventoryItem::class)($result['store'], 'Gold Ring', 'gold', 5, 2, 30000, adminOperator());
+
+    $this->actingAs($result['admin'])
+        ->post('/admin/sales', [
+            'transaction_type' => 'purchase',
+            'store_inventory_item_id' => $item->id,
+            'quantity' => 1,
+            'payment_source' => 'cash',
+        ])
+        ->assertRedirect('/admin/sales');
+
+    $sale = StoreSale::where('store_id', $result['store']->id)->firstOrFail();
+
+    // T-171 — no bill yet → 404; generating it opens the original, later views are duplicates.
+    $this->actingAs($result['admin'])->get("/admin/sales/{$sale->id}/invoice")->assertNotFound();
+    $this->actingAs($result['admin'])
+        ->followingRedirects()
+        ->post("/admin/sales/{$sale->id}/bill")
+        ->assertInertia(fn ($page) => $page->where('invoice.copy', 'original'));
+
+    $this->actingAs($result['admin'])
+        ->get("/admin/sales/{$sale->id}/invoice")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('invoices/show')
+            ->where('invoice.copy', 'duplicate')
+            ->where('invoice.invoice_no', $sale->fresh()->invoice->invoice_no)
+            ->where('invoice.seller.name', 'INVOICE Store')
+            ->where('invoice.customer', null)
+            ->where('invoice.item_name', 'Gold Ring')
+            // 5 g × seeded ₹6,000/g, no making, GST 0% (seed defaults) — priced by the server (T-169).
+            ->where('invoice.total_invoice_amount', '30000.00'));
+
+    $other = makeAdminWithStore('OTHERINV');
+    $this->actingAs($other['admin'])->get("/admin/sales/{$sale->id}/invoice")->assertNotFound();
+
+    // T-171 — Super Admin can open (print / share) the store's bill too.
+    $this->actingAs(adminOperator())
+        ->get("/super-admin/store-sales/{$sale->id}/invoice")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('invoice.seller.name', 'INVOICE Store'));
+});
+
+test('a store sale is priced by the server at the current rate with making and GST, and income uses the metal value only (T-169, TEST.md scenario 31)', function () {
+    MetalRate::create(['metal' => 'gold', 'rate_per_gram' => 6000, 'making_charge_percent' => 12, 'effective_from' => now()->toDateString(), 'created_by' => adminOperator()->id]);
+    RuleValue::where('key', 'store_gst_percent')->update(['value' => 3]);
+    $result = makeAdminWithStore('PRICED');
+    // Store Profit Distribution needs the Store Owner to be a network member (§16.4).
+    Member::create(['user_id' => $result['admin']->id, 'customer_id' => 'AP-PRICED-OWNER', 'status' => 'active', 'activated_at' => now()]);
+    $item = app(AllocateStoreInventoryItem::class)($result['store'], 'Gold Ring', 'gold', 5, 3, 30000, adminOperator());
+
+    // Anything typed for rate / amount / GST is ignored.
+    $this->actingAs($result['admin'])
+        ->post('/admin/sales', [
+            'transaction_type' => 'purchase',
+            'store_inventory_item_id' => $item->id,
+            'quantity' => 1,
+            'rate' => 1,
+            'sale_amount' => 1,
+            'gst_amount' => 0,
+            'payment_source' => 'cash',
+        ])
+        ->assertRedirect('/admin/sales');
+
+    $sale = StoreSale::where('store_id', $result['store']->id)->firstOrFail();
+    expect((float) $sale->rate)->toBe(6000.0)
+        ->and((float) $sale->metal_value)->toBe(30000.0)
+        ->and((float) $sale->making_charge_percent)->toBe(12.0)
+        ->and((float) $sale->making_charges)->toBe(3600.0)
+        ->and((float) $sale->sale_amount)->toBe(33600.0)
+        ->and((float) $sale->gst_percent)->toBe(3.0)
+        ->and((float) $sale->gst_amount)->toBe(1008.0)
+        ->and((float) $sale->total_invoice_amount)->toBe(34608.0);
+
+    // Store Owner's 2% is on the metal value only: 2% of 30,000.
+    expect((float) $sale->profitDistributions()->where('beneficiary_type', 'store_owner')->value('amount'))->toBe(600.0);
+
+    // Quantity 2 doubles every figure; a manual item needs its weight.
+    $this->actingAs($result['admin'])
+        ->post('/admin/sales', ['transaction_type' => 'purchase', 'store_inventory_item_id' => $item->id, 'quantity' => 2, 'payment_source' => 'cash']);
+    expect((float) StoreSale::where('store_id', $result['store']->id)->latest('id')->value('total_invoice_amount'))->toBe(69216.0);
+
+    $this->actingAs($result['admin'])
+        ->post('/admin/sales', ['transaction_type' => 'purchase', 'item_name' => 'Loose chain', 'metal' => 'gold', 'quantity' => 1, 'payment_source' => 'cash'])
+        ->assertSessionHasErrors('item_weight');
+});
+
+test('the Store Wallet is no longer accepted as a sale payment source (T-161)', function () {
+    $result = makeAdminWithStore('NOWALLET');
+    $item = app(AllocateStoreInventoryItem::class)($result['store'], 'Silver Chain', 'silver', 20, 5, 2000, adminOperator());
+
+    $this->actingAs($result['admin'])
+        ->post('/admin/sales', [
+            'transaction_type' => 'purchase',
+            'store_inventory_item_id' => $item->id,
+            'quantity' => 1,
+            'sale_amount' => 2000,
+            'gst_amount' => 0,
+            'payment_source' => 'store_wallet',
+        ])
+        ->assertSessionHasErrors('payment_source');
+
+    expect($item->fresh()->quantity)->toBe(5);
+    expect((float) $result['store']->wallet->fresh()->balance)->toBe(50000.0);
 });
 
 test('an admin can record an Item Buyback for a member by Customer ID', function () {
@@ -238,7 +359,7 @@ test('a Plan Jewellery Delivery whose registration was paid online owes the deli
     ]);
 
     $this->actingAs($result['admin'])
-        ->post('/admin/sales/delivery', ['customer_id' => $member->customer_id, 'sale_amount' => 30000, 'gst_amount' => 0])
+        ->post('/admin/sales/delivery', ['customer_id' => $member->customer_id, 'store_inventory_item_id' => apGoldStock($store)->id])
         ->assertRedirect('/admin/sales');
 
     $shipment = StoreRestockShipment::where('product_benefit_id', $benefit->id)->firstOrFail();
@@ -271,7 +392,7 @@ test('a Plan Jewellery Delivery whose registration was settled by the SAME deliv
     ]);
 
     $this->actingAs($result['admin'])
-        ->post('/admin/sales/delivery', ['customer_id' => $member->customer_id, 'sale_amount' => 30000, 'gst_amount' => 0])
+        ->post('/admin/sales/delivery', ['customer_id' => $member->customer_id, 'store_inventory_item_id' => apGoldStock($store)->id])
         ->assertRedirect('/admin/sales');
 
     expect(StoreRestockShipment::where('product_benefit_id', $benefit->id)->exists())->toBeFalse();
@@ -298,7 +419,7 @@ test('a restock shipment goes owed -> sent (Super Admin) -> received (store), la
         'rate_per_gram_at_entry' => 7000,
         'entry_date' => now()->toDateString(),
     ]);
-    $this->actingAs($result['admin'])->post('/admin/sales/delivery', ['customer_id' => $member->customer_id, 'sale_amount' => 35000, 'gst_amount' => 0]);
+    $this->actingAs($result['admin'])->post('/admin/sales/delivery', ['customer_id' => $member->customer_id, 'store_inventory_item_id' => apGoldStock($store)->id]);
     $shipment = StoreRestockShipment::where('store_id', $store->id)->firstOrFail();
 
     // A different store must not be able to touch this one.
@@ -324,8 +445,9 @@ test('a restock shipment goes owed -> sent (Super Admin) -> received (store), la
     $item = $fresh->resultingInventoryItem;
     expect($item)->not->toBeNull();
     expect($item->store_id)->toBe($store->id);
-    expect((float) $item->price)->toBe(35000.0);
-    expect($item->quantity)->toBe(1);
+    // T-168 — the shipment is worth the delivered piece's metal value: 5 g × seeded ₹6,000/g.
+    expect((float) $item->price)->toBe(30000.0);
+    expect($item->quantity)->toBeGreaterThanOrEqual(1);
 });
 
 test('an admin can record a Plan Jewellery Delivery for a new joining', function () {
@@ -341,16 +463,50 @@ test('an admin can record a Plan Jewellery Delivery for a new joining', function
         'entry_date' => now()->toDateString(),
     ]);
 
+    $stock = apGoldStock($store);
+    $silver = app(AllocateStoreInventoryItem::class)($store, 'Silver Anklet', 'silver', 50, 1, 17500, adminOperator());
+
+    // A gold plan cannot be handed over as a silver piece, and nothing is marked delivered.
+    $this->actingAs($result['admin'])
+        ->post('/admin/sales/delivery', ['customer_id' => $member->customer_id, 'store_inventory_item_id' => $silver->id])
+        ->assertSessionHasErrors('store_inventory_item_id');
+    expect($benefit->fresh()->delivered_at)->toBeNull();
+
     $this->actingAs($result['admin'])
         ->post('/admin/sales/delivery', [
             'customer_id' => $member->customer_id,
-            'sale_amount' => 30000,
-            'gst_amount' => 0,
+            'store_inventory_item_id' => $stock->id,
         ])
         ->assertRedirect('/admin/sales');
 
     expect($benefit->fresh()->delivered_at)->not->toBeNull();
     expect($benefit->fresh()->store_id)->toBe($store->id);
+    // T-168 — the piece came out of stock and the sale is priced like a purchase (5 g × ₹6,000).
+    expect($stock->fresh()->quantity)->toBe(1);
+    $sale = StoreSale::where('store_id', $store->id)->where('transaction_type', 'new_sale')->firstOrFail();
+    expect($sale->item_name)->toBe('Gold Ring')
+        ->and((float) $sale->metal_value)->toBe(30000.0)
+        ->and($sale->store_inventory_item_id)->toBe($stock->id);
+});
+
+test('a Current Rate member\'s delivery is priced at the rate locked when they booked, not today\'s (T-168)', function () {
+    $result = makeAdminWithStore('LOCKED');
+    $member = adminPortalMember('AP-LOCKED');
+    $plan = MembershipPlan::where('code', 'C')->firstOrFail();
+    EmiSchedule::create([
+        'member_id' => $member->id, 'membership_plan_id' => $plan->id, 'total_installments' => 10,
+        'rate_booking_method' => 'current_rate', 'installment_amount' => 5000, 'rate_per_gram_at_booking' => 5000, 'fixed_weight_grams' => 5,
+    ]);
+    ProductBenefit::create(['member_id' => $member->id, 'membership_plan_id' => $plan->id, 'metal' => 'gold', 'entry_date' => now()->toDateString()]);
+
+    $this->actingAs($result['admin'])
+        ->post('/admin/sales/delivery', ['customer_id' => $member->customer_id, 'store_inventory_item_id' => apGoldStock($result['store'])->id])
+        ->assertRedirect('/admin/sales');
+
+    // 5 g × the locked ₹5,000/g, although today's seeded rate is ₹6,000/g.
+    $sale = StoreSale::where('store_id', $result['store']->id)->firstOrFail();
+    expect((float) $sale->rate)->toBe(5000.0)
+        ->and((float) $sale->metal_value)->toBe(25000.0);
 });
 
 test('an admin can view Inventory, Store Transactions, and Store Reports pages', function () {

@@ -7,23 +7,30 @@ use App\Actions\Payout\SubmitPayoutRequest;
 use App\Actions\Profile\SubmitProfileChangeRequest;
 use App\Actions\Store\CreateStore;
 use App\Events\PaymentConfirmed;
+use App\Models\CompanyDelivery;
+use App\Models\CompanyWalletLedgerEntry;
 use App\Models\DrawGroupMonthConfig;
+use App\Models\EmiInstallment;
+use App\Models\EmiSchedule;
 use App\Models\IncomeLedgerCalculation;
 use App\Models\Member;
 use App\Models\MemberBankDetail;
 use App\Models\MembershipPlan;
 use App\Models\MetalRate;
 use App\Models\PairEntry;
+use App\Models\Payment;
 use App\Models\RuleValue;
 use App\Models\RuleVersion;
 use App\Models\Store;
 use App\Models\User;
+use App\Services\CompanyFinancialSummary;
 use App\Services\CompanyWalletService;
 use App\Services\RuleVersionService;
 use App\Services\WalletLedgerService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 
 /**
  * T-017 — HTTP-layer coverage (routes, role gating, Form Requests) for the
@@ -72,6 +79,168 @@ test('a super admin sees the real S01 System Dashboard at the shared /dashboard 
 
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page->component('super-admin/dashboard'));
+});
+
+test('the dashboard and Member Management show the same Total Members, excluding company dummy entries (T-157)', function () {
+    spMember('SP-TOTAL-1');
+    Member::create([
+        'user_id' => User::factory()->create(['role' => 'member'])->id,
+        'customer_id' => 'SP-TOTAL-DUMMY',
+        'is_company_dummy' => true,
+        'dummy_status' => 'unassigned',
+        'status' => 'active',
+    ]);
+    $expected = Member::where('is_company_dummy', false)->count();
+
+    $this->actingAs(spSuperAdmin())
+        ->get('/dashboard')
+        ->assertInertia(fn ($page) => $page->where('members.total', $expected));
+
+    $this->actingAs(spSuperAdmin())
+        ->get('/super-admin/members')
+        ->assertInertia(fn ($page) => $page
+            ->where('stats.total', $expected)
+            // T-159 — the plan's marketing name, never the letter code; the filter keeps the code as its value.
+            ->where('members.data.0.customer_id', 'SP-TOTAL-1')
+            ->where('members.data.0.plan', MembershipPlan::where('code', 'E')->value('name'))
+            ->where('plan_options.0', ['code' => 'A', 'name' => MembershipPlan::where('code', 'A')->value('name')]));
+});
+
+test('the Financial Summary totals money in and member earnings for the chosen period (T-172)', function () {
+    $member = spMember('SP-FIN-1');
+    Payment::create([
+        'member_id' => $member->id, 'type' => 'registration', 'amount' => 20000,
+        'mode' => 'cash', 'status' => 'paid', 'paid_at' => '2030-01-15 10:00:00',
+    ]);
+    Payment::create([
+        'member_id' => $member->id, 'type' => 'registration', 'amount' => 999,
+        'mode' => 'cash', 'status' => 'paid', 'paid_at' => '2030-03-01 10:00:00', // outside the period
+    ]);
+    $credit = app(WalletLedgerService::class)->credit($member, 'level_income', 500, null, 'test credit');
+    $credit->forceFill(['created_at' => '2030-01-20 10:00:00'])->save();
+
+    $this->actingAs(spSuperAdmin())
+        ->get('/super-admin/financial-summary?from=2030-01-01&to=2030-01-31')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('super-admin/financial-summary')
+            ->where('summary.collections.total', 20000)
+            ->where('summary.collections.by_type.registration', 20000)
+            ->where('summary.collections.by_mode.cash', 20000)
+            ->where('summary.earnings.total', 500)
+            ->where('filters.from', '2030-01-01'));
+
+    $this->actingAs(spSuperAdmin())
+        ->get('/super-admin/financial-summary?from=2030-02-01&to=2030-01-01')
+        ->assertSessionHasErrors('to');
+});
+
+test('the Financial Summary separates the metal-rate effect on fixed-weight jewellery (29-09-2026)', function () {
+    MetalRate::create(['metal' => 'gold', 'rate_per_gram' => 6500, 'effective_from' => now()->toDateString(), 'created_by' => spSuperAdmin()->id]);
+    $summary = app(CompanyFinancialSummary::class);
+    $before = $summary->build(null, null)['estimate'];
+
+    // 10 g gold booked at ₹6,000/g, today ₹6,500/g → ₹5,000 of the jewellery cost is only the rate change.
+    $member = spMember('SP-RATEFX');
+    EmiSchedule::create([
+        'member_id' => $member->id, 'membership_plan_id' => MembershipPlan::where('code', 'D')->value('id'), 'total_installments' => 10,
+        'rate_booking_method' => 'current_rate', 'installment_amount' => 6000, 'rate_per_gram_at_booking' => 6000, 'fixed_weight_grams' => 10,
+    ]);
+    $after = $summary->build(null, null)['estimate'];
+
+    expect(round($after['rate_impact'] - $before['rate_impact'], 2))->toBe(5000.0);
+    expect(round($after['jewellery_cost'] - $before['jewellery_cost'], 2))->toBe(65000.0);
+    expect(round($after['surplus_at_booking_rates'] - $after['surplus'], 2))->toBe(round($after['rate_impact'], 2));
+});
+
+test('a super admin can top up the Company Wallet, which can never go below zero (T-163)', function () {
+    $wallet = app(CompanyWalletService::class);
+    $before = (float) $wallet->wallet()->balance;
+
+    $this->actingAs(spSuperAdmin())
+        ->post('/super-admin/company-wallet/top-up', ['amount' => 5000, 'description' => 'Prize fund'])
+        ->assertRedirect('/super-admin/company-wallet');
+
+    expect((float) $wallet->wallet()->fresh()->balance)->toBe($before + 5000);
+    $entry = CompanyWalletLedgerEntry::latest('id')->firstOrFail();
+    expect($entry->category)->toBe('manual_topup')
+        ->and($entry->entry_type)->toBe('credit')
+        ->and($entry->description)->toContain('Prize fund');
+
+    // Top-ups need a positive amount; the description is optional.
+    $this->actingAs(spSuperAdmin())
+        ->post('/super-admin/company-wallet/top-up', ['amount' => 0])
+        ->assertSessionHasErrors('amount');
+
+    // Any spend larger than the balance is refused and changes nothing.
+    expect(fn () => $wallet->debit('test_spend', $before + 5000.01, null, 'too much'))
+        ->toThrow(ValidationException::class);
+    expect((float) $wallet->wallet()->fresh()->balance)->toBe($before + 5000);
+
+    $wallet->debit('test_spend', 5000, null, 'within balance');
+    expect((float) $wallet->wallet()->fresh()->balance)->toBe($before);
+});
+
+test('Super Admin delivers plan jewellery directly after the last EMI, at the locked booking rate, with hallmarks and no income (T-171)', function () {
+    MetalRate::create(['metal' => 'silver', 'rate_per_gram' => 350, 'making_charge_percent' => 10, 'effective_from' => now()->toDateString(), 'created_by' => spSuperAdmin()->id]);
+    RuleValue::where('key', 'store_gst_percent')->update(['value' => 3]);
+
+    $plan = MembershipPlan::where('code', 'A')->firstOrFail(); // 100 g silver, 20 EMIs
+    $member = spMember('SP-CDL');
+    $member->update(['membership_plan_id' => $plan->id]);
+    $schedule = EmiSchedule::create([
+        'member_id' => $member->id, 'membership_plan_id' => $plan->id, 'total_installments' => 2,
+        'rate_booking_method' => 'current_rate', 'installment_amount' => 1000, 'rate_per_gram_at_booking' => 300, 'fixed_weight_grams' => 100,
+    ]);
+    EmiInstallment::create(['emi_schedule_id' => $schedule->id, 'installment_no' => 1, 'due_date' => now()->toDateString(), 'amount' => 1000, 'status' => 'paid']);
+    $second = EmiInstallment::create(['emi_schedule_id' => $schedule->id, 'installment_no' => 2, 'due_date' => now()->toDateString(), 'amount' => 1000, 'status' => 'due']);
+
+    // Before the last EMI: blocked.
+    $this->actingAs(spSuperAdmin())
+        ->get('/super-admin/company-deliveries?customer_id=SP-CDL')
+        ->assertInertia(fn ($page) => $page
+            ->component('super-admin/company-deliveries')
+            ->where('lookup.rate_is_locked', true)
+            ->where('lookup.blocked_reason', 'Delivered after the last EMI — 1 EMI(s) still to pay.'));
+    $payload = [
+        'customer_id' => 'SP-CDL', 'item_name' => 'Silver anklet', 'item_weight' => 50, 'quantity' => 2,
+        'hallmarked' => true, 'hallmarks' => [['huid' => 'HU1A2B', 'charge' => 45], ['huid' => 'HU3C4D', 'charge' => 45]],
+    ];
+    $this->actingAs(spSuperAdmin())->post('/super-admin/company-deliveries', $payload)->assertSessionHasErrors('customer_id');
+
+    $second->update(['status' => 'paid']);
+    $walletBefore = (float) $member->fresh()->wallet_balance;
+
+    $this->actingAs(spSuperAdmin())
+        ->followingRedirects()
+        ->post('/super-admin/company-deliveries', $payload)
+        ->assertInertia(fn ($page) => $page
+            ->component('invoices/show')
+            ->where('invoice.copy', 'original')
+            ->where('invoice.transaction_type', 'company_delivery')
+            ->has('invoice.hallmarks', 2));
+
+    // 100 g × locked ₹300 = 30,000 + today's 10% making 3,000 + hallmark 90 = 33,090; GST 3% 992.70 → 34,082.70.
+    $delivery = CompanyDelivery::where('member_id', $member->id)->firstOrFail();
+    expect((float) $delivery->rate)->toBe(300.0)
+        ->and((float) $delivery->metal_value)->toBe(30000.0)
+        ->and((float) $delivery->making_charges)->toBe(3000.0)
+        ->and((float) $delivery->hallmark_charges)->toBe(90.0)
+        ->and((float) $delivery->sale_amount)->toBe(33090.0)
+        ->and((float) $delivery->gst_amount)->toBe(992.7)
+        ->and((float) $delivery->total_invoice_amount)->toBe(34082.7)
+        ->and($delivery->invoice->invoice_no)->toContain('GWD-');
+
+    // The entitlement was created on delivery and is now delivered; no income anywhere.
+    expect($member->productBenefits()->whereNotNull('delivered_at')->count())->toBe(1);
+    expect((float) $member->fresh()->wallet_balance)->toBe($walletBefore);
+    expect(IncomeLedgerCalculation::where('beneficiary_member_id', $member->id)->where('type', 'purchase_repurchase')->exists())->toBeFalse();
+
+    // Later views are duplicates; a second delivery is refused.
+    $this->actingAs(spSuperAdmin())
+        ->get("/super-admin/company-deliveries/{$delivery->id}/invoice")
+        ->assertInertia(fn ($page) => $page->where('invoice.copy', 'duplicate'));
+    $this->actingAs(spSuperAdmin())->post('/super-admin/company-deliveries', $payload)->assertSessionHasErrors('customer_id');
 });
 
 test('a super admin can find and promote an existing member to admin (S02)', function () {
@@ -287,16 +456,29 @@ test('a super admin can update draw settings and reconcile an executed draw (S06
     expect($execution->fresh()->status)->toBe('reconciled');
 });
 
-test('a super admin can record a new metal rate (S07)', function () {
+test('a super admin records a metal rate per 10 gm with a making-charges %, stored per gram (S07, T-165)', function () {
     $this->actingAs(spSuperAdmin())
         ->post('/super-admin/metal-rates', [
             'metal' => 'gold',
-            'rate_per_gram' => 6500,
+            'rate_per_10_grams' => 65000.5,
+            'making_charge_percent' => 12,
             'effective_from' => now()->toDateString(),
         ])
         ->assertRedirect('/super-admin/metal-rates');
 
-    expect(MetalRate::where('metal', 'gold')->where('rate_per_gram', 6500)->exists())->toBeTrue();
+    $rate = MetalRate::where('metal', 'gold')->latest('id')->firstOrFail();
+    expect((float) $rate->rate_per_gram)->toBe(6500.05)
+        ->and((float) $rate->making_charge_percent)->toBe(12.0);
+
+    // More than one decimal per 10 gm would not be exact per gram, so it is refused.
+    $this->actingAs(spSuperAdmin())
+        ->post('/super-admin/metal-rates', [
+            'metal' => 'silver',
+            'rate_per_10_grams' => 2300.55,
+            'making_charge_percent' => 8,
+            'effective_from' => now()->toDateString(),
+        ])
+        ->assertSessionHasErrors('rate_per_10_grams');
 });
 
 test('a super admin can update payout and TDS settings (S08)', function () {
@@ -379,7 +561,8 @@ test('a super admin can allocate item-wise jewellery inventory to a store, and r
     $item = $store->inventoryItems()->where('item_name', 'Gold Bangle')->firstOrFail();
     expect($item->quantity)->toBe(4);
     expect((float) $item->weight)->toBe(10.5);
-    expect((float) $item->price)->toBe(65000.0);
+    // T-169 — the typed price is ignored: 10.5 g × today's seeded gold rate ₹6,000/g.
+    expect((float) $item->price)->toBe(63000.0);
     expect($item->description)->toBe('22K');
 
     // Same item/metal/weight/price again -> quantity increases, no duplicate row.
@@ -405,7 +588,7 @@ test('a super admin can allocate item-wise jewellery inventory to a store, and r
 
     $this->actingAs(spSuperAdmin())
         ->post($url, ['item_name' => '', 'metal' => 'bronze', 'weight' => 0, 'quantity' => 0, 'price' => -1])
-        ->assertSessionHasErrors(['item_name', 'metal', 'weight', 'quantity', 'price']);
+        ->assertSessionHasErrors(['item_name', 'metal', 'weight', 'quantity']);
 
     $member = spMember('SP-INV-MEMBER');
     $this->actingAs($member->user)
@@ -673,6 +856,58 @@ test('a super admin can view and process a pending payout request (T-109)', func
         ->assertRedirect();
 
     expect($payoutRequest->fresh()->status)->toBe('processed');
+});
+
+test('a processed payout moves from the queue into Payout History with its transaction, and reads as Paid in the member ledger (28-09-2026)', function () {
+    $member = spMember('SPPAYOUTHIST');
+    app(WalletLedgerService::class)->credit($member, 'level_income', 20000, null, 'seed credit');
+    $bankDetail = MemberBankDetail::create([
+        'member_id' => $member->id,
+        'account_holder_name' => 'SP History Holder',
+        'account_number' => '001122330036',
+        'ifsc_code' => 'TEST0007777',
+        'bank_name' => 'HDFC Bank',
+        'verified_at' => now(),
+    ]);
+    $payoutRequest = app(SubmitPayoutRequest::class)($member->fresh(), 20000, $bankDetail);
+
+    $this->actingAs($member->user)
+        ->get('/member/wallet')
+        ->assertInertia(fn ($page) => $page
+            ->where('entries.data.0.status_label', 'on hold')
+            ->where('entries.data.0.description', "Payout request #{$payoutRequest->id} — on hold, awaiting processing"));
+
+    $this->actingAs(spSuperAdmin())
+        ->post("/super-admin/payout-requests/{$payoutRequest->id}/process", [
+            'method' => 'bank_transfer',
+            'reference' => 'UTR777',
+        ])
+        ->assertRedirect();
+
+    $this->actingAs(spSuperAdmin())
+        ->get('/super-admin/payout-requests')
+        ->assertInertia(fn ($page) => $page
+            ->where('pending', [])
+            ->where('history.0.id', $payoutRequest->id)
+            ->where('history.0.status', 'processed')
+            ->where('history.0.member.customer_id', 'SPPAYOUTHIST')
+            ->where('history.0.transaction.method', 'Bank Transfer')
+            ->where('history.0.transaction.reference', 'UTR777')
+            ->where('history.0.transaction.net_amount', '20000.00'));
+
+    $this->actingAs($member->user)
+        ->get('/member/wallet')
+        ->assertInertia(fn ($page) => $page
+            ->where('entries.data.0.status', 'confirmed')
+            ->where('entries.data.0.status_label', 'paid')
+            ->where('entries.data.0.description', "Payout #{$payoutRequest->id} paid via Bank Transfer to HDFC Bank ••0036 (ref UTR777)"));
+
+    // "paid" is what the member sees, so searching for it must find the row.
+    $this->actingAs($member->user)
+        ->get('/member/wallet?search=paid')
+        ->assertInertia(fn ($page) => $page
+            ->has('entries.data', 1)
+            ->where('entries.data.0.category', 'payout'));
 });
 
 test('a super admin can reject a pending payout request, releasing its hold (T-109)', function () {

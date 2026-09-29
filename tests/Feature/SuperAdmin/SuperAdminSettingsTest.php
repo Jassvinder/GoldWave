@@ -123,8 +123,9 @@ test('reassigning a store owner updates ownership, force-resets the password, an
 });
 
 test('setting a metal rate creates a new effective-dated row without touching prior rates', function () {
-    $first = app(SetMetalRate::class)('gold', 6000, now()->subDay()->toDateString(), saSuperAdmin());
-    $second = app(SetMetalRate::class)('gold', 6200, now()->toDateString(), saSuperAdmin());
+    // T-165 — entered per 10 gm, stored per gram.
+    $first = app(SetMetalRate::class)('gold', 60000, 0, now()->subDay()->toDateString(), saSuperAdmin());
+    $second = app(SetMetalRate::class)('gold', 62000, 0, now()->toDateString(), saSuperAdmin());
 
     expect($first->fresh()->rate_per_gram)->toBe('6000.00');
     expect($second->rate_per_gram)->toBe('6200.00');

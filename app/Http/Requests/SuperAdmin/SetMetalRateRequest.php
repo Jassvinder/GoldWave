@@ -16,7 +16,9 @@ class SetMetalRateRequest extends FormRequest
     {
         return [
             'metal' => ['required', 'in:gold,silver'],
-            'rate_per_gram' => ['required', 'numeric', 'min:0'],
+            // T-165 — entered per 10 gm; at most 1 decimal so the stored per-gram rate stays exact.
+            'rate_per_10_grams' => ['required', 'numeric', 'decimal:0,1', 'min:0.1'],
+            'making_charge_percent' => ['required', 'numeric', 'decimal:0,2', 'min:0', 'max:100'],
             'effective_from' => ['required', 'date'],
         ];
     }

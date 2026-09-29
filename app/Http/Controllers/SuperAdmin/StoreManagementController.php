@@ -4,6 +4,7 @@ namespace App\Http\Controllers\SuperAdmin;
 
 use App\Actions\Store\AllocateStoreInventoryItem;
 use App\Actions\Store\CreateStore;
+use App\Actions\Store\PriceStoreSale;
 use App\Actions\Store\ReassignStoreOwner;
 use App\Actions\Store\ResetStorePassword;
 use App\Http\Controllers\Controller;
@@ -20,6 +21,7 @@ use App\Support\Dates;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -87,7 +89,7 @@ class StoreManagementController extends Controller
             ]);
 
         $recentSales = $store->sales()
-            ->with('member')
+            ->with(['member', 'invoice'])
             ->orderByDesc('id')
             ->limit(20)
             ->get()
@@ -99,6 +101,7 @@ class StoreManagementController extends Controller
                 'total_invoice_amount' => $sale->total_invoice_amount,
                 'status' => $sale->status,
                 'created_at' => Dates::date($sale->created_at),
+                'invoice_no' => $sale->invoice?->invoice_no,
             ]);
 
         $unassignedAdmins = User::where('role', 'admin')
@@ -131,13 +134,26 @@ class StoreManagementController extends Controller
     /** DOMAIN_LOGIC.md §16.5 — Super Admin's jewellery allocation to a store's item-wise inventory, new store or existing. */
     public function allocateInventory(AllocateStoreInventoryRequest $request, Store $store, AllocateStoreInventoryItem $action): RedirectResponse
     {
+        $metal = $request->string('metal')->toString();
+        $weight = (float) $request->input('weight');
+
+        // T-169 (28-09-2026, user decision) — the store's stock is valued at the current rate, picked up
+        // automatically: price per piece = weight × today's rate (making is added only when it is sold).
+        $rate = PriceStoreSale::currentRate($metal);
+
+        if ($rate === null) {
+            throw ValidationException::withMessages([
+                'metal' => "No {$metal} rate has been set yet — enter today's rate first.",
+            ]);
+        }
+
         $action(
             $store,
             $request->string('item_name')->toString(),
-            $request->string('metal')->toString(),
-            (float) $request->input('weight'),
+            $metal,
+            $weight,
             $request->integer('quantity'),
-            (float) $request->input('price'),
+            round($weight * (float) $rate->rate_per_gram, 2),
             $request->user(),
             $request->string('description')->toString() ?: null,
         );

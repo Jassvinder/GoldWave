@@ -6,6 +6,7 @@ use App\Actions\Payments\InitiateEmiInstallmentPayment;
 use App\Contracts\PaymentGatewayContract;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Payments\PayEmiInstallmentRequest;
+use App\Models\CurrentRateBookingRequest;
 use App\Models\EmiInstallment;
 use App\Services\RuleVersionService;
 use App\Support\Dates;
@@ -57,7 +58,30 @@ class EmiController extends Controller
                 'completed_emis' => $paidCount,
                 'eligible' => $pairEligible,
             ] : null,
+            'booking_request' => $schedule ? $this->bookingRequestStatus($schedule->id) : null,
         ]);
+    }
+
+    /**
+     * T-166 (28-09-2026) — the member's latest Current Rate booking request, so the page can say it is waiting for
+     * approval or show Super Admin's cancel message. Nothing once it was approved (the schedule itself shows that).
+     *
+     * @return array<string, string|null>|null
+     */
+    private function bookingRequestStatus(int $scheduleId): ?array
+    {
+        $latest = CurrentRateBookingRequest::where('emi_schedule_id', $scheduleId)->latest('id')->first();
+
+        if ($latest === null || $latest->status === 'approved') {
+            return null;
+        }
+
+        return [
+            'status' => $latest->status,
+            'requested_at' => Dates::date($latest->created_at),
+            'decided_at' => Dates::date($latest->decided_at),
+            'cancel_message' => $latest->cancel_message,
+        ];
     }
 
     /** @return array<string, mixed> */

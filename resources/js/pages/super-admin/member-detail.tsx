@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EditMemberDialog } from '@/components/edit-member-dialog';
 import { RevertCurrentRateDialog } from '@/components/revert-current-rate-dialog';
 import { ResetMemberPasswordDialog } from '@/components/reset-member-password-dialog';
-import { formatDate, formatGender } from '@/lib/utils';
+import { formatDate, formatGender, formatRatePer10g } from '@/lib/utils';
 import { show as showDirects } from '@/routes/member/directs';
 import {
     show as showMember,
@@ -382,7 +382,7 @@ export default function SuperAdminMemberDetail({
                                         <span className="text-muted-foreground">
                                             {emi.rate_booking.method ===
                                             'current_rate'
-                                                ? ` — ${emi.rate_booking.fixed_weight_grams}g at ₹${emi.rate_booking.rate_per_gram}/g, EMI ₹${emi.rate_booking.installment_amount}${emi.rate_booking.booked_at ? `, booked ${formatDate(emi.rate_booking.booked_at)}` : ' (from registration)'}`
+                                                ? ` — ${emi.rate_booking.fixed_weight_grams}g at ${formatRatePer10g(emi.rate_booking.rate_per_gram)}, EMI ₹${emi.rate_booking.installment_amount}${emi.rate_booking.booked_at ? `, booked ${formatDate(emi.rate_booking.booked_at)}` : ' (from registration)'}`
                                                 : ` — EMI ₹${emi.rate_booking.installment_amount}`}
                                         </span>
                                     </div>

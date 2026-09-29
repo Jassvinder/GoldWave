@@ -13,6 +13,7 @@ class MetalRate extends Model
     protected $fillable = [
         'metal',
         'rate_per_gram',
+        'making_charge_percent',
         'effective_from',
         'created_by',
     ];
@@ -21,6 +22,7 @@ class MetalRate extends Model
     {
         return [
             'rate_per_gram' => 'decimal:2',
+            'making_charge_percent' => 'decimal:2',
             'effective_from' => 'date',
         ];
     }

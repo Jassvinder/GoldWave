@@ -1,9 +1,11 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
+import { Banknote } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
 import { DataPagination } from '@/components/data-pagination';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { FilterBar } from '@/components/filter-bar';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
     Card,
     CardContent,
@@ -12,6 +14,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { formatDate } from '@/lib/utils';
+import { index as payoutIndex } from '@/routes/member/payout';
 import { index } from '@/routes/member/wallet';
 import type { Paginated } from '@/types';
 
@@ -21,6 +24,8 @@ type Entry = {
     category: string;
     amount: string;
     status: 'pending' | 'confirmed' | 'reversed';
+    /** What to show — payout holds read on hold / paid / released instead of the stored status. */
+    status_label: string;
     description: string | null;
     processed_at: string | null;
     created_at: string;
@@ -82,8 +87,9 @@ const columns: DataTableColumn<Entry>[] = [
         render: (row) => (
             <Badge
                 variant={row.status === 'confirmed' ? 'default' : 'secondary'}
+                className="capitalize"
             >
-                {row.status}
+                {row.status_label}
             </Badge>
         ),
     },
@@ -138,12 +144,21 @@ export default function Wallet({
 
             <div className="flex w-full flex-col gap-6 p-4">
                 <Card>
-                    <CardHeader>
-                        <CardTitle className="text-2xl">Wallet</CardTitle>
-                        <CardDescription>
-                            Balance ₹{wallet_balance} · On hold ₹
-                            {wallet_hold_amount}
-                        </CardDescription>
+                    <CardHeader className="flex-row flex-wrap items-center justify-between gap-4 space-y-0">
+                        <div className="flex flex-col gap-1.5">
+                            <CardTitle className="text-2xl">Wallet</CardTitle>
+                            <CardDescription>
+                                Balance ₹{wallet_balance} · On hold ₹
+                                {wallet_hold_amount}
+                            </CardDescription>
+                        </div>
+                        {/* Members look for withdrawals on the Wallet page, so point them to Payout from here. */}
+                        <Button asChild>
+                            <Link href={payoutIndex()}>
+                                <Banknote />
+                                Request Payout
+                            </Link>
+                        </Button>
                     </CardHeader>
                 </Card>
 

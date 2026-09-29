@@ -55,7 +55,7 @@ class CalculateStoreProfitDistribution
 
         $metal = $storeSale->metal;
         $rates = $this->rules->metalValue('store_profit_distribution_rates', $metal, []);
-        $baseAmount = (float) $storeSale->sale_amount;
+        $baseAmount = $storeSale->incomeBase();
         $chain = $this->sponsorChain->ancestors($ownerMember, self::SPONSOR_LEVELS);
 
         DB::transaction(function () use ($storeSale, $ownerMember, $ruleVersion, $rates, $baseAmount, $chain) {

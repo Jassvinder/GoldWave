@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Member;
 
 use App\Http\Controllers\Controller;
+use App\Services\PairPoolBreakdown;
 use App\Services\RuleVersionService;
 use App\Support\Dates;
 use Illuminate\Http\Request;
@@ -12,7 +13,10 @@ use Inertia\Response;
 /** INSTRUCTIONS.md M11 — progress, milestones (with each achieved milestone's reward and date), consumed/available business (DOMAIN_LOGIC.md §7). */
 class PairRewardController extends Controller
 {
-    public function __construct(private readonly RuleVersionService $rules) {}
+    public function __construct(
+        private readonly RuleVersionService $rules,
+        private readonly PairPoolBreakdown $pairPool,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -20,10 +24,7 @@ class PairRewardController extends Controller
 
         abort_if($member === null, 404);
 
-        $unusedLeft = $member->pairEntries()->where('side', 'left')->where('status', 'unused')->count();
-        $unusedRight = $member->pairEntries()->where('side', 'right')->where('status', 'unused')->count();
-        $consumedLeft = $member->pairEntries()->where('side', 'left')->where('status', 'consumed')->count();
-        $consumedRight = $member->pairEntries()->where('side', 'right')->where('status', 'consumed')->count();
+        $pool = $this->pairPool->forMember($member);
 
         /** @var list<array{milestone_no: int, name?: string, min_directs: int, left: int, right: int}> $milestoneRules */
         $milestoneRules = $this->rules->value('pair_milestones', []);
@@ -32,10 +33,14 @@ class PairRewardController extends Controller
         // (there is no separate Reward History list any more).
         $rewardsByMilestone = $member->pairRewardTransactions()->get()->keyBy('milestone_no');
 
-        $milestones = array_map(function (array $milestone) use ($rewardsByMilestone): array {
+        $milestones = array_map(function (array $milestone) use ($rewardsByMilestone, $pool): array {
             $reward = $rewardsByMilestone->get($milestone['milestone_no']);
+            $used = $pool['consumed_by_milestone'][$milestone['milestone_no']] ?? null;
 
             return [
+                // How many of this member's entries each achieved milestone actually consumed.
+                'used_left' => $used['left'] ?? null,
+                'used_right' => $used['right'] ?? null,
                 'milestone_no' => $milestone['milestone_no'],
                 'name' => $milestone['name'] ?? "Milestone #{$milestone['milestone_no']}",
                 'min_directs' => $milestone['min_directs'],
@@ -50,10 +55,15 @@ class PairRewardController extends Controller
 
         return Inertia::render('member/pair-reward', [
             'progress' => [
-                'unused_left' => $unusedLeft,
-                'unused_right' => $unusedRight,
-                'consumed_left' => $consumedLeft,
-                'consumed_right' => $consumedRight,
+                'unused_left' => $pool['left']['unused'],
+                'unused_right' => $pool['right']['unused'],
+                'consumed_left' => $pool['left']['consumed'],
+                'consumed_right' => $pool['right']['consumed'],
+            ],
+            'pool' => [
+                'left' => $pool['left'],
+                'right' => $pool['right'],
+                'awaiting_by_plan' => $pool['awaiting_by_plan'],
             ],
             'milestones' => $milestones,
             'next_milestone' => $nextMilestone,

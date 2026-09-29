@@ -46,9 +46,49 @@ class PayoutRequestController extends Controller
                 ] : null,
             ]);
 
+        // Everything that has left the queue — processed, rejected, failed or cancelled — so a
+        // decided payout never simply vanishes from the Super Admin's view.
+        $history = PayoutRequest::with(['member.user', 'transactions.processedBy'])
+            ->where('status', '!=', 'pending')
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (PayoutRequest $request): array => $this->mapHistory($request));
+
         return Inertia::render('super-admin/payout-requests', [
             'pending' => $pending,
+            'history' => $history,
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function mapHistory(PayoutRequest $request): array
+    {
+        // A failed attempt and a later retry are not possible today (failed is terminal), so the latest transaction is the outcome.
+        $transaction = $request->transactions->sortByDesc('id')->first();
+
+        return [
+            'id' => $request->id,
+            'status' => $request->status,
+            'requested_amount' => $request->requested_amount,
+            'requested_at' => Dates::date($request->created_at),
+            'decided_at' => Dates::date($transaction->processed_at ?? $request->updated_at),
+            'member' => [
+                'customer_id' => $request->member->customer_id,
+                'name' => $request->member->user?->name,
+            ],
+            'transaction' => $transaction ? [
+                'method' => $transaction->methodLabel(),
+                'reference' => $transaction->reference,
+                'batch_reference' => $transaction->batch_reference,
+                'tds_amount' => $transaction->tds_amount,
+                'processing_fee' => $transaction->processing_fee,
+                'net_amount' => number_format($transaction->netAmount(), 2, '.', ''),
+                'bank_name' => $transaction->beneficiary_snapshot['bank_name'] ?? null,
+                'account_number' => $transaction->beneficiary_snapshot['account_number'] ?? null,
+                'processed_by' => $transaction->processedBy->name,
+            ] : null,
+        ];
     }
 
     public function process(RecordPayoutOutcomeRequest $request, PayoutRequest $payout_request, ProcessPayoutRequest $action): RedirectResponse

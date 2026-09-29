@@ -6,11 +6,20 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
+ * @property array{account_holder_name?: string|null, account_number?: string|null, ifsc_code?: string|null, bank_name?: string|null} $beneficiary_snapshot
  * @property-read PayoutRequest $payoutRequest
  * @property-read User $processedBy
  */
 class PayoutTransaction extends Model
 {
+    /** Display names for `method` — the same four options the Super Admin's Process Payout dialog offers. */
+    public const METHOD_LABELS = [
+        'bank_transfer' => 'Bank Transfer',
+        'gpay_upi' => 'GPay / UPI',
+        'cheque' => 'Cheque',
+        'in_app_provider' => 'In-App Provider',
+    ];
+
     protected $fillable = [
         'payout_request_id',
         'amount_snapshot',
@@ -56,5 +65,10 @@ class PayoutTransaction extends Model
     public function netAmount(): float
     {
         return (float) $this->amount_snapshot - (float) $this->tds_amount - (float) $this->processing_fee;
+    }
+
+    public function methodLabel(): string
+    {
+        return self::METHOD_LABELS[$this->method];
     }
 }

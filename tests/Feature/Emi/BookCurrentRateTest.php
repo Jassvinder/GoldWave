@@ -1,8 +1,11 @@
 <?php
 
 use App\Actions\Emi\BookCurrentRate;
+use App\Actions\Emi\DecideCurrentRateBookingRequest;
 use App\Actions\Emi\QuoteCurrentRateBooking;
+use App\Actions\Emi\RequestCurrentRateBooking;
 use App\Actions\Emi\RevertCurrentRateBooking;
+use App\Models\CurrentRateBookingRequest;
 use App\Models\EmiInstallment;
 use App\Models\EmiSchedule;
 use App\Models\Member;
@@ -80,8 +83,14 @@ test('Plan A, 4 EMIs paid: the quote credits the ₹4,000 and charges 1% mainten
     expect($quote['remaining_value'])->toBe(31000.0);
     expect($quote['pending_installments'])->toBe(16);
     expect($quote['maintenance_cost'])->toBe(310.0);
+    // T-167 — maintenance declines monthly (TEST.md scenario 21, superseding note).
     expect($quote['installment_amount'])->toBe(2247.5);
-    expect($quote['total_remaining_payable'])->toBe(35960.0);
+    expect($quote['installment_amounts'][1])->toBe(2228.13);
+    expect($quote['installment_amounts'][2])->toBe(2208.75);
+    expect($quote['last_installment_amount'])->toBe(1956.88);
+    expect($quote['installment_amounts'])->toHaveCount(16);
+    expect($quote['total_maintenance'])->toBe(2635.04);
+    expect($quote['total_remaining_payable'])->toBe(33635.04);
 });
 
 test('booking re-prices only the unpaid installments, keeps due dates, and records the audit snapshot', function () {
@@ -104,7 +113,11 @@ test('booking re-prices only the unpaid installments, keeps due dates, and recor
 
     $installments = $schedule->installments()->orderBy('installment_no')->get();
     expect($installments->where('status', 'paid')->pluck('amount')->map(fn ($a) => (float) $a)->unique()->all())->toBe([1000.0]);
-    expect($installments->where('status', '!=', 'paid')->pluck('amount')->map(fn ($a) => (float) $a)->unique()->all())->toBe([2247.5]);
+    $unpaid = $installments->where('status', '!=', 'paid')->values()->pluck('amount')->map(fn ($a) => (float) $a);
+    expect($unpaid->first())->toBe(2247.5);
+    expect($unpaid->get(1))->toBe(2228.13);
+    expect($unpaid->last())->toBe(1956.88);
+    expect(round($unpaid->sum(), 2))->toBe(33635.04);
     expect($installments->where('status', '!=', 'paid'))->toHaveCount(16);
     expect($installments->pluck('due_date')->map->toDateString()->all())->toBe($dueDatesBefore);
 });
@@ -119,6 +132,26 @@ test('Plan D (gold), 2 EMIs paid: ₹60,000 total, ₹40,000 remaining over 8, �
     expect($quote['pending_installments'])->toBe(8);
     expect($quote['maintenance_cost'])->toBe(400.0);
     expect($quote['installment_amount'])->toBe(5400.0);
+    // T-167 — ₹5,000 principal each month, maintenance 1% of what is still remaining.
+    expect($quote['installment_amounts'])->toBe([5400.0, 5350.0, 5300.0, 5250.0, 5200.0, 5150.0, 5100.0, 5050.0]);
+    expect($quote['total_maintenance'])->toBe(1800.0);
+    expect($quote['total_remaining_payable'])->toBe(41800.0);
+});
+
+test('making charges from the current rate row are added to the booking value (T-165, TEST.md scenario 21)', function () {
+    MetalRate::where('metal', 'gold')->update(['making_charge_percent' => 12]);
+    $member = bcrMember('BCR-MAKING', 'D', 2);
+
+    $quote = app(QuoteCurrentRateBooking::class)($member);
+
+    expect($quote['metal_value'])->toBe(60000.0);
+    expect($quote['making_charges'])->toBe(7200.0);
+    expect($quote['total_value'])->toBe(67200.0);
+    expect($quote['remaining_value'])->toBe(47200.0);
+    expect($quote['installment_amount'])->toBe(6372.0);
+    expect($quote['installment_amounts'][1])->toBe(6313.0);
+    expect($quote['last_installment_amount'])->toBe(5959.0);
+    expect($quote['total_remaining_payable'])->toBe(49324.0);
 });
 
 test('a schedule already on Current Rate cannot be booked again and is left untouched', function () {
@@ -183,7 +216,16 @@ test('a fully paid schedule, a one-time plan and an inactive member cannot book'
     }
 });
 
-test('the Membership page shows no weight on Future Rate, offers the quote, and after booking shows the weight and no button', function () {
+/*
+ * T-166 (28-09-2026) — booking is a request that Super Admin approves (at the approval day's rate and pending EMIs)
+ * or cancels with a message. DOMAIN_LOGIC.md §3.0 note.
+ */
+function bcrPendingRequest(Member $member): CurrentRateBookingRequest
+{
+    return CurrentRateBookingRequest::where('member_id', $member->id)->where('status', 'pending')->firstOrFail();
+}
+
+test('a member\'s booking is only a request until Super Admin approves it, and every Super Admin is told at once', function () {
     $member = bcrMember('BCR-PAGE', 'A', 4);
 
     $this->actingAs($member->user)
@@ -192,17 +234,50 @@ test('the Membership page shows no weight on Future Rate, offers the quote, and 
             ->component('member/membership')
             ->where('plan.fixed_weight_grams', null)
             ->where('rate_booking.method', 'future_rate')
+            ->where('pending_booking_request', null)
             ->where('current_rate_quote.installment_amount', 2247.5)
             ->where('current_rate_quote.pending_installments', 16));
 
-    $quote = app(QuoteCurrentRateBooking::class)($member);
-
     $this->actingAs($member->user)
-        ->post('/member/membership/book-current-rate', [
+        ->post('/member/membership/book-current-rate')
+        ->assertRedirect(route('member.membership.show'));
+
+    // Nothing about the EMIs changes yet; the page shows the request instead of the button.
+    expect($member->emiSchedule->fresh()->rate_booking_method)->toBe('future_rate');
+    expect((float) $member->emiSchedule->fresh()->installments()->where('installment_no', 10)->value('amount'))->toBe(1000.0);
+    $this->actingAs($member->user)
+        ->get('/member/membership')
+        ->assertInertia(fn ($page) => $page
+            ->where('pending_booking_request.requested_at', now()->toDateString())
+            ->where('current_rate_quote', null));
+
+    // A second request while one is pending is refused.
+    $this->actingAs($member->user)
+        ->post('/member/membership/book-current-rate')
+        ->assertSessionHasErrors('booking');
+    expect(CurrentRateBookingRequest::where('member_id', $member->id)->count())->toBe(1);
+
+    // Super Admin: bell notification + the queue shows the metal to buy.
+    expect(rvtSuperAdmin()->notifications()->where('data->key', 'current_rate_booking_requested')->count())->toBe(1);
+    $this->actingAs(rvtSuperAdmin())
+        ->get('/super-admin/rate-booking-requests')
+        ->assertInertia(fn ($page) => $page
+            ->component('super-admin/rate-booking-requests')
+            ->where('pending.0.member.customer_id', 'BCR-PAGE')
+            ->where('pending.0.quote.fixed_weight_grams', 100)
+            ->where('pending.0.quote.total_value', 35000)
+            ->where('pending.0.quote.pending_installments', 16));
+    $this->actingAs(rvtSuperAdmin())
+        ->get('/dashboard')
+        ->assertInertia(fn ($page) => $page->where('rate_booking_requests.pending', 1));
+
+    $quote = app(QuoteCurrentRateBooking::class)($member->fresh());
+    $this->actingAs(rvtSuperAdmin())
+        ->post('/super-admin/rate-booking-requests/'.bcrPendingRequest($member)->id.'/approve', [
             'metal_rate_id' => $quote['metal_rate_id'],
             'paid_installments' => $quote['paid_installments'],
         ])
-        ->assertRedirect(route('member.membership.show'));
+        ->assertRedirect();
 
     $this->actingAs($member->user)
         ->get('/member/membership')
@@ -210,33 +285,72 @@ test('the Membership page shows no weight on Future Rate, offers the quote, and 
             ->where('plan.fixed_weight_grams', '100.000')
             ->where('rate_booking.method', 'current_rate')
             ->where('rate_booking.installment_amount', '2247.50')
+            ->where('pending_booking_request', null)
             ->where('current_rate_quote', null));
+
+    expect(CurrentRateBookingRequest::where('member_id', $member->id)->value('status'))->toBe('approved');
+    expect($member->emiSchedule->rateBookingEvents()->latest('id')->value('performed_by_user_id'))->toBe(rvtSuperAdmin()->id);
+    expect($member->user->notifications()->where('data->key', 'current_rate_booking_decided')->count())->toBe(1);
 });
 
-test('a rejected booking request over HTTP changes nothing and reports the reason', function () {
-    $member = bcrMember('BCR-HTTP', 'A', 4);
+test('approval uses the approval day\'s rate and only the EMIs still pending that day', function () {
+    $member = bcrMember('BCR-LATE', 'D', 2);
+    app(RequestCurrentRateBooking::class)($member);
 
-    $this->actingAs($member->user)
-        ->post('/member/membership/book-current-rate', ['metal_rate_id' => 999999, 'paid_installments' => 4])
+    // Before Super Admin approves: the member pays EMI 3, and the gold rate moves to ₹6,500/g.
+    $member->emiSchedule->installments()->where('installment_no', 3)->update(['status' => 'paid']);
+    MetalRate::create(['metal' => 'gold', 'rate_per_gram' => 6500, 'effective_from' => now()->toDateString(), 'created_by' => rvtSuperAdmin()->id]);
+
+    $quote = app(QuoteCurrentRateBooking::class)($member->fresh());
+    expect($quote['paid_installments'])->toBe(3)
+        ->and($quote['pending_installments'])->toBe(7)
+        ->and($quote['rate_per_gram'])->toBe(6500.0);
+
+    app(DecideCurrentRateBookingRequest::class)->approve(bcrPendingRequest($member), rvtSuperAdmin(), $quote['metal_rate_id'], 3);
+
+    // 65,000 − 30,000 paid = 35,000 over 7 → EMI 1 = 5,000 + 350.
+    $schedule = $member->emiSchedule->fresh();
+    expect((float) $schedule->rate_per_gram_at_booking)->toBe(6500.0);
+    expect($schedule->installments()->where('status', '!=', 'paid')->count())->toBe(7);
+    expect((float) $schedule->installments()->where('installment_no', 4)->value('amount'))->toBe(5350.0);
+});
+
+test('a stale approval is refused, and a cancel needs a message that the member then sees', function () {
+    $member = bcrMember('BCR-CANCEL', 'A', 4);
+    app(RequestCurrentRateBooking::class)($member);
+    $request = bcrPendingRequest($member);
+
+    // Super Admin saw 4 paid EMIs, but one more was paid meanwhile → refused, nothing changes.
+    $member->emiSchedule->installments()->where('installment_no', 5)->update(['status' => 'paid']);
+    $quote = app(QuoteCurrentRateBooking::class)($member->fresh());
+    $this->actingAs(rvtSuperAdmin())
+        ->post("/super-admin/rate-booking-requests/{$request->id}/approve", ['metal_rate_id' => $quote['metal_rate_id'], 'paid_installments' => 4])
         ->assertSessionHasErrors('booking');
+    expect($request->fresh()->status)->toBe('pending');
+
+    $this->actingAs(rvtSuperAdmin())
+        ->post("/super-admin/rate-booking-requests/{$request->id}/cancel", ['cancel_message' => ''])
+        ->assertSessionHasErrors('cancel_message');
+
+    $this->actingAs(rvtSuperAdmin())
+        ->post("/super-admin/rate-booking-requests/{$request->id}/cancel", ['cancel_message' => 'Gold stock not available this week'])
+        ->assertRedirect();
 
     expect($member->emiSchedule->fresh()->rate_booking_method)->toBe('future_rate');
-    expect((float) $member->emiSchedule->fresh()->installments()->where('installment_no', 10)->value('amount'))->toBe(1000.0);
-});
+    $this->actingAs($member->user)
+        ->get('/member/emi')
+        ->assertInertia(fn ($page) => $page
+            ->where('booking_request.status', 'cancelled')
+            ->where('booking_request.cancel_message', 'Gold stock not available this week'));
 
-test('a member only ever books their own schedule', function () {
-    $mine = bcrMember('BCR-MINE', 'A', 4);
+    // The member may ask again, and only for their own schedule.
     $other = bcrMember('BCR-OTHER', 'A', 4);
-    $quote = app(QuoteCurrentRateBooking::class)($mine);
+    $this->actingAs($member->user)->post('/member/membership/book-current-rate')->assertRedirect();
+    expect(CurrentRateBookingRequest::where('member_id', $member->id)->where('status', 'pending')->count())->toBe(1);
+    expect(CurrentRateBookingRequest::where('member_id', $other->id)->exists())->toBeFalse();
 
-    $this->actingAs($mine->user)
-        ->post('/member/membership/book-current-rate', [
-            'metal_rate_id' => $quote['metal_rate_id'],
-            'paid_installments' => $quote['paid_installments'],
-        ]);
-
-    expect($mine->emiSchedule->fresh()->rate_booking_method)->toBe('current_rate');
-    expect($other->emiSchedule->fresh()->rate_booking_method)->toBe('future_rate');
+    // A member cannot reach the Super Admin queue.
+    $this->actingAs($member->user)->get('/super-admin/rate-booking-requests')->assertForbidden();
 });
 
 /*
@@ -294,7 +408,8 @@ test('a revert is refused once an EMI was paid after the booking', function () {
     expect(fn () => app(RevertCurrentRateBooking::class)($member->fresh(), rvtSuperAdmin(), 'Too late'))->toThrow(ValidationException::class);
 
     expect($member->emiSchedule->fresh()->rate_booking_method)->toBe('current_rate');
-    expect((float) $member->emiSchedule->installments()->where('installment_no', 10)->value('amount'))->toBe(2247.5);
+    // Installment 10 is the 6th unpaid one: 1,937.50 + 1% of 21,312.50 (T-167 declining maintenance).
+    expect((float) $member->emiSchedule->installments()->where('installment_no', 10)->value('amount'))->toBe(2150.63);
 });
 
 test('a revert is refused while an installment payment is awaiting confirmation', function () {

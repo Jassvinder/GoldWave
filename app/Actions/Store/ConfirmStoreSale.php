@@ -3,7 +3,6 @@
 namespace App\Actions\Store;
 
 use App\Events\StoreSaleConfirmed;
-use App\Models\Invoice;
 use App\Models\Member;
 use App\Models\Store;
 use App\Models\StoreInventoryItem;
@@ -29,6 +28,8 @@ use Illuminate\Validation\ValidationException;
  * commit in the same transaction (§16.1). Fires `StoreSaleConfirmed` so
  * Store Profit Distribution and Purchase/Repurchase Upline Income process
  * independently (§16.4/§15) — the latter only when `member` is given.
+ *
+ * @phpstan-import-type SalePrice from PriceStoreSale
  */
 class ConfirmStoreSale
 {
@@ -37,6 +38,7 @@ class ConfirmStoreSale
         private readonly StoreActivityLogger $activityLog,
     ) {}
 
+    /** @param SalePrice|null $price */
     public function __invoke(
         Store $store,
         ?Member $member,
@@ -51,6 +53,8 @@ class ConfirmStoreSale
         string $paymentSource,
         User $operator,
         ?string $metal = null,
+        // T-169 — the server-side price breakdown (`PriceStoreSale`), when the sale was priced automatically.
+        ?array $price = null,
     ): StoreSale {
         // Revised 23-09-2026 (user decision) — a repurchase is always an
         // existing member's own repeat purchase, never a walk-in's; a
@@ -83,7 +87,7 @@ class ConfirmStoreSale
 
         $storeSale = DB::transaction(function () use (
             $store, $member, $transactionType, $itemName, $inventoryItem, $itemWeight,
-            $quantity, $rate, $saleAmount, $gstAmount, $paymentSource, $operator, $resolvedMetal,
+            $quantity, $rate, $saleAmount, $gstAmount, $paymentSource, $operator, $resolvedMetal, $price,
         ) {
             if ($inventoryItem) {
                 $lockedItem = StoreInventoryItem::whereKey($inventoryItem->id)->lockForUpdate()->firstOrFail();
@@ -121,6 +125,12 @@ class ConfirmStoreSale
                 'item_weight' => $itemWeight,
                 'quantity' => $quantity,
                 'rate' => $rate,
+                'metal_rate_id' => $price['metal_rate_id'] ?? null,
+                'metal_value' => $price['metal_value'] ?? null,
+                'making_charge_percent' => $price['making_charge_percent'] ?? null,
+                'making_charges' => $price['making_charges'] ?? null,
+                'hallmark_charges' => $price['hallmark_charges'] ?? null,
+                'gst_percent' => $price['gst_percent'] ?? null,
                 'sale_amount' => $saleAmount,
                 'gst_amount' => $gstAmount,
                 'total_invoice_amount' => $totalInvoiceAmount,
@@ -130,12 +140,8 @@ class ConfirmStoreSale
                 'status' => 'confirmed',
             ]);
 
-            Invoice::create([
-                'store_sale_id' => $storeSale->id,
-                'invoice_no' => 'INV-'.now()->format('Ymd').'-'.str_pad((string) $storeSale->id, 6, '0', STR_PAD_LEFT),
-                'generated_at' => now(),
-            ]);
-
+            // T-171 (28-09-2026) — no bill here any more: it is generated on request ("Generate bill",
+            // `GenerateStoreSaleBill`), when the hallmark details are known.
             $this->activityLog->record($store, $operator, "store_sale_{$transactionType}", $member, $storeSale);
 
             return $storeSale;

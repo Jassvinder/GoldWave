@@ -49,11 +49,7 @@ export default function AdminInventory({
     pending_restocks,
 }: Props) {
     const confirmReceived = (id: number) => {
-        router.post(
-            markRestockReceived.url(id),
-            {},
-            { preserveScroll: true },
-        );
+        router.post(markRestockReceived.url(id), {}, { preserveScroll: true });
     };
 
     return (

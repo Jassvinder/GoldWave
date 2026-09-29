@@ -5,6 +5,7 @@ namespace App\Actions\Emi;
 use App\Models\EmiRateBookingEvent;
 use App\Models\EmiSchedule;
 use App\Models\Member;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -23,9 +24,13 @@ class BookCurrentRate
 {
     public function __construct(private readonly QuoteCurrentRateBooking $quote) {}
 
-    public function __invoke(Member $member, int $quotedMetalRateId, int $quotedPaidInstallments): EmiSchedule
+    /**
+     * T-166 (28-09-2026) — since bookings need Super Admin approval, this is run by `ApproveCurrentRateBookingRequest`
+     * with the approving Super Admin as `$performedBy`, at the approval day's rate and pending EMIs.
+     */
+    public function __invoke(Member $member, int $quotedMetalRateId, int $quotedPaidInstallments, ?User $performedBy = null): EmiSchedule
     {
-        return DB::transaction(function () use ($member, $quotedMetalRateId, $quotedPaidInstallments) {
+        return DB::transaction(function () use ($member, $quotedMetalRateId, $quotedPaidInstallments, $performedBy) {
             $schedule = $member->emiSchedule()->lockForUpdate()->first();
 
             if ($schedule === null) {
@@ -42,9 +47,12 @@ class BookCurrentRate
                 ]);
             }
 
-            $schedule->installments()
-                ->where('status', '!=', 'paid')
-                ->update(['amount' => $quote['installment_amount']]);
+            // T-167 — each unpaid installment gets its own amount, in installment order (maintenance declines monthly).
+            $unpaid = $schedule->installments()->where('status', '!=', 'paid')->orderBy('installment_no')->get();
+
+            foreach ($unpaid->values() as $i => $installment) {
+                $installment->update(['amount' => $quote['installment_amounts'][$i] ?? $quote['last_installment_amount']]);
+            }
 
             $schedule->update([
                 'rate_booking_method' => 'current_rate',
@@ -62,10 +70,14 @@ class BookCurrentRate
             EmiRateBookingEvent::create([
                 'emi_schedule_id' => $schedule->id,
                 'event' => 'booked',
-                'performed_by_user_id' => $member->user_id,
+                'performed_by_user_id' => $performedBy->id ?? $member->user_id,
                 'details' => [
                     'rate_per_gram' => $quote['rate_per_gram'],
                     'fixed_weight_grams' => $quote['fixed_weight_grams'],
+                    'metal_value' => $quote['metal_value'],
+                    'making_charge_percent' => $quote['making_charge_percent'],
+                    'making_charges' => $quote['making_charges'],
+                    'total_value' => $quote['total_value'],
                     'paid_installments' => $quote['paid_installments'],
                     'paid_amount' => $quote['paid_amount'],
                     'remaining_value' => $quote['remaining_value'],

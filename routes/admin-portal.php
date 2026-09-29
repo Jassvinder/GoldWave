@@ -30,6 +30,8 @@ Route::middleware(['auth', 'role:admin', 'store-owner'])->prefix('admin')->name(
     Route::post('sales/buyback', [SalesController::class, 'storeBuyback'])->name('sales.buyback');
     Route::post('sales/delivery', [SalesController::class, 'storeDelivery'])->name('sales.delivery');
     Route::post('sales/collect-payment/{payment}', [SalesController::class, 'collectPayment'])->name('sales.collect-payment');
+    Route::get('sales/{sale}/invoice', [SalesController::class, 'invoice'])->name('sales.invoice');
+    Route::post('sales/{sale}/bill', [SalesController::class, 'generateBill'])->name('sales.bill');
 
     Route::get('inventory', [InventoryController::class, 'index'])->name('inventory.index');
     Route::post('inventory/restock/{shipment}/received', [InventoryController::class, 'markRestockReceived'])->name('inventory.restock.received');

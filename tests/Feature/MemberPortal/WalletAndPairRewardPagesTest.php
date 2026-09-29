@@ -2,7 +2,10 @@
 
 use App\Actions\Settings\PublishRuleVersion;
 use App\Models\Member;
+use App\Models\MembershipPlan;
+use App\Models\PairEntry;
 use App\Models\PairRewardTransaction;
+use App\Models\Payment;
 use App\Models\RuleVersion;
 use App\Models\User;
 use App\Models\WalletLedgerEntry;
@@ -135,6 +138,60 @@ test('Pair/Reward milestones carry names and each achieved milestone\'s reward a
             ->where('milestones.1.reward_amount', null)
             ->where('milestones.1.achieved_on', null)
             ->where('next_milestone.milestone_no', 2));
+});
+
+test('Pair/Reward page and dashboard card show where every team member is counted — used, unused, EMI-pending, inactive (28-09-2026)', function () {
+    $root = wpMember('WP-POOL');
+    $planA = MembershipPlan::where('code', 'A')->firstOrFail();
+
+    $child = function (string $customerId, Member $parent, string $side, string $status = 'active') use ($planA): Member {
+        return Member::create([
+            'user_id' => User::factory()->create(['role' => 'member'])->id,
+            'customer_id' => $customerId,
+            'membership_plan_id' => $planA->id,
+            'placement_parent_id' => $parent->id,
+            'placement_side' => $side,
+            'status' => $status,
+        ]);
+    };
+    $entryFrom = function (Member $source, string $side, string $status, ?int $milestoneNo = null) use ($root): void {
+        $payment = Payment::create(['member_id' => $source->id, 'type' => 'registration', 'amount' => 1000, 'mode' => 'online', 'status' => 'paid']);
+        PairEntry::create([
+            'member_id' => $root->id,
+            'side' => $side,
+            'metal' => 'silver',
+            'source_payment_id' => $payment->id,
+            'status' => $status,
+            'consumed_for_milestone_no' => $milestoneNo,
+        ]);
+    };
+
+    // Left: one entry already used by milestone 1, one active member still short of Plan A's EMI count.
+    $left1 = $child('WP-POOL-L1', $root, 'left');
+    $entryFrom($left1, 'left', 'consumed', 1);
+    $child('WP-POOL-L2', $left1, 'left');
+    // Right: one unused entry, one member not active yet.
+    $right1 = $child('WP-POOL-R1', $root, 'right');
+    $entryFrom($right1, 'right', 'unused');
+    $child('WP-POOL-R2', $right1, 'right', 'payment_pending');
+
+    $this->actingAs($root->user)
+        ->get('/member/pair-reward')
+        ->assertInertia(fn ($page) => $page
+            ->where('pool.left', ['team' => 2, 'unused' => 0, 'consumed' => 1, 'awaiting' => 1, 'inactive' => 0, 'dummy' => 0])
+            ->where('pool.right', ['team' => 2, 'unused' => 1, 'consumed' => 0, 'awaiting' => 0, 'inactive' => 1, 'dummy' => 0])
+            ->where('pool.awaiting_by_plan', [['plan_name' => $planA->name, 'required_emis' => 6, 'left' => 1, 'right' => 0]])
+            ->where('milestones.0.used_left', 1)
+            ->where('milestones.0.used_right', 0)
+            ->where('milestones.1.used_left', null));
+
+    $this->actingAs($root->user)
+        ->get('/dashboard')
+        ->assertInertia(fn ($page) => $page
+            ->where('pair.left.team', 2)
+            ->where('pair.left.consumed', 1)
+            ->where('pair.right.unused', 1)
+            ->where('pair.right.inactive', 1));
 });
 
 test('a milestone without a configured name falls back to its number', function () {

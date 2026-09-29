@@ -290,6 +290,45 @@ test("a member's own profile page shows their gender (T-122)", function () {
 
 // ---------------------------------------------------------------- T-153: Assisted Registration
 
+test('a member has one permanent registration link that opens the join page with them as sponsor (T-162)', function () {
+    $member = portalMember('REF-SPONSOR');
+
+    $first = null;
+    $this->actingAs($member->user)
+        ->get('/member/register-new')
+        ->assertInertia(function ($page) use (&$first) {
+            $first = $page->toArray()['props']['referral_link'];
+        });
+
+    $code = $member->fresh()->referral_code;
+    expect($code)->not->toBeNull()
+        ->and($first)->toBe(route('registration.show', ['ref' => $code]))
+        ->and($first)->not->toContain('REF-SPONSOR');
+
+    // Same link every time.
+    $this->actingAs($member->user)
+        ->get('/member/register-new')
+        ->assertInertia(fn ($page) => $page->where('referral_link', $first));
+    expect($member->fresh()->referral_code)->toBe($code);
+
+    $this->get("/join?ref={$code}")
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('registration/register')
+            ->where('referral.sponsor_customer_id', 'REF-SPONSOR')
+            ->where('referral_invalid', false));
+
+    $this->get('/join?ref=not-a-real-code')
+        ->assertInertia(fn ($page) => $page
+            ->where('referral', null)
+            ->where('referral_invalid', true));
+
+    $this->get('/join')
+        ->assertInertia(fn ($page) => $page
+            ->where('referral', null)
+            ->where('referral_invalid', false));
+});
+
 test('a member can register a different, new member and pay from their own wallet (T-153, DOMAIN_LOGIC.md §12.2(b))', function () {
     $sponsor = portalMember('AR-SPONSOR');
     $payer = portalMember('AR-PAYER');

@@ -18,6 +18,19 @@ import { index as emiIndex } from '@/routes/member/emi';
 import { index as pairRewardIndex } from '@/routes/member/pair-reward';
 import { index as walletIndex } from '@/routes/member/wallet';
 
+type PairSide = {
+    team: number;
+    unused: number;
+    consumed: number;
+    awaiting: number;
+    inactive: number;
+    dummy: number;
+};
+
+/** Team members that haven't produced a pair entry yet — EMI qualification pending, inactive, or an unassigned dummy. */
+const notYetEligible = (side: PairSide) =>
+    side.awaiting + side.inactive + side.dummy;
+
 type Props = {
     member: {
         customer_id: string;
@@ -30,7 +43,7 @@ type Props = {
     wallet_balance: string;
     direct_count: number;
     income: { level_income: string; purchase_repurchase: string };
-    pair: { unused_left: number; unused_right: number };
+    pair: { left: PairSide; right: PairSide };
     booster_active_levels: number;
     draw_active: boolean;
     alerts: string[];
@@ -133,7 +146,21 @@ export default function Dashboard({
                         icon={Award}
                         color="red"
                         label="Pair/Reward — Unused"
-                        value={`${pair.unused_left}L / ${pair.unused_right}R`}
+                        value={`${pair.left.unused}L / ${pair.right.unused}R`}
+                        stats={[
+                            {
+                                label: 'Team',
+                                value: `${pair.left.team}L / ${pair.right.team}R`,
+                            },
+                            {
+                                label: 'Used in milestones',
+                                value: `${pair.left.consumed}L / ${pair.right.consumed}R`,
+                            },
+                            {
+                                label: 'Not yet eligible',
+                                value: `${notYetEligible(pair.left)}L / ${notYetEligible(pair.right)}R`,
+                            },
+                        ]}
                         href={pairRewardIndex()}
                     />
 

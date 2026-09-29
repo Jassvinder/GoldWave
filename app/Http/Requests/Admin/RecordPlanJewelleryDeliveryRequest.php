@@ -17,8 +17,8 @@ class RecordPlanJewelleryDeliveryRequest extends FormRequest
     {
         return [
             'customer_id' => ['required', 'string', 'max:20'],
-            'sale_amount' => ['required', 'numeric', 'min:0'],
-            'gst_amount' => ['nullable', 'numeric', 'min:0'],
+            // T-168 — the delivered piece comes from this store's stock; the price is worked out by the server.
+            'store_inventory_item_id' => ['required', 'integer', 'exists:store_inventory_items,id'],
         ];
     }
 }

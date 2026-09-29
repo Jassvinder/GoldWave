@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers\Member;
 
-use App\Actions\Emi\BookCurrentRate;
 use App\Actions\Emi\QuoteCurrentRateBooking;
+use App\Actions\Emi\RequestCurrentRateBooking;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Emi\BookCurrentRateRequest;
+use App\Models\CurrentRateBookingRequest;
 use App\Models\EmiSchedule;
 use App\Models\Member;
 use App\Models\ProductBenefit;
@@ -29,6 +29,9 @@ class MembershipController extends Controller
 
         $schedule = $member->emiSchedule()->first();
         $isCurrentRate = $schedule?->rate_booking_method === 'current_rate';
+        $pendingRequest = $schedule
+            ? CurrentRateBookingRequest::where('emi_schedule_id', $schedule->id)->where('status', 'pending')->latest('id')->first()
+            : null;
 
         return Inertia::render('member/membership', [
             'plan' => $member->membershipPlan ? [
@@ -42,31 +45,38 @@ class MembershipController extends Controller
                 'fixed_weight_grams' => $isCurrentRate ? $member->membershipPlan->fixed_weight_grams : null,
             ] : null,
             'rate_booking' => $schedule ? $this->rateBooking($schedule) : null,
-            'current_rate_quote' => $schedule ? $this->quoteFor($member, $quote) : null,
+            // T-166 — while a request waits for Super Admin, the page shows that instead of the button.
+            'pending_booking_request' => $pendingRequest ? ['requested_at' => Dates::date($pendingRequest->created_at)] : null,
+            'current_rate_quote' => $schedule && ! $pendingRequest ? $this->quoteFor($member, $quote) : null,
             'product_benefits' => $member->productBenefits->map($this->mapBenefit(...))->all(),
         ]);
     }
 
-    public function bookCurrentRate(BookCurrentRateRequest $request, BookCurrentRate $action): RedirectResponse
+    /** T-166 (28-09-2026) — files a request; Super Admin approves it at the approval day's rate. */
+    public function bookCurrentRate(Request $request, RequestCurrentRateBooking $action): RedirectResponse
     {
         $member = $request->user()->member;
 
         abort_if($member === null, 404);
 
-        $action($member, $request->integer('metal_rate_id'), $request->integer('paid_installments'));
+        $action($member);
 
         return redirect()->route('member.membership.show')
-            ->with('status', 'Booked at the Current Rate. Your remaining EMIs have been updated.');
+            ->with('status', 'Request sent. Super Admin will confirm your Current Rate booking — until then your EMIs stay as they are.');
     }
 
     /** @return array<string, mixed> */
     private function rateBooking(EmiSchedule $schedule): array
     {
         $isCurrentRate = $schedule->rate_booking_method === 'current_rate';
+        // T-167 — on Current Rate every EMI is smaller than the one before, so show the next and the last one.
+        $unpaid = $isCurrentRate ? $schedule->installments()->where('status', '!=', 'paid')->orderBy('installment_no')->pluck('amount') : collect();
 
         return [
             'method' => $schedule->rate_booking_method,
             'installment_amount' => $schedule->installment_amount,
+            'next_installment_amount' => $unpaid->first(),
+            'last_installment_amount' => $unpaid->last(),
             'total_installments' => $schedule->total_installments,
             'rate_per_gram' => $isCurrentRate ? $schedule->rate_per_gram_at_booking : null,
             'fixed_weight_grams' => $isCurrentRate ? $schedule->fixed_weight_grams : null,
@@ -93,6 +103,9 @@ class MembershipController extends Controller
             'fixed_weight_grams' => $q['fixed_weight_grams'],
             'metal_rate_id' => $q['metal_rate_id'],
             'rate_per_gram' => $q['rate_per_gram'],
+            'metal_value' => $q['metal_value'],
+            'making_charge_percent' => $q['making_charge_percent'],
+            'making_charges' => $q['making_charges'],
             'total_value' => $q['total_value'],
             'paid_installments' => $q['paid_installments'],
             'paid_amount' => $q['paid_amount'],
@@ -100,6 +113,8 @@ class MembershipController extends Controller
             'pending_installments' => $q['pending_installments'],
             'maintenance_cost' => $q['maintenance_cost'],
             'installment_amount' => $q['installment_amount'],
+            'last_installment_amount' => $q['last_installment_amount'],
+            'total_maintenance' => $q['total_maintenance'],
             'total_remaining_payable' => $q['total_remaining_payable'],
             'current_installment_amount' => $q['schedule']->installment_amount,
         ];

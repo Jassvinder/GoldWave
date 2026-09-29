@@ -27,6 +27,12 @@ type Plan = {
 
 type Props = {
     plans: Plan[];
+    /** T-162 — set when the page was opened from a member's registration link. */
+    referral: {
+        sponsor_customer_id: string;
+        sponsor_name: string | null;
+    } | null;
+    referral_invalid: boolean;
 };
 
 type SponsorState =
@@ -35,11 +41,19 @@ type SponsorState =
     | { status: 'valid'; name: string | null; customerId: string }
     | { status: 'invalid'; message: string };
 
-export default function Register({ plans }: Props) {
-    const [sponsor, setSponsor] = useState<SponsorState>({ status: 'idle' });
+export default function Register({ plans, referral, referral_invalid }: Props) {
+    const [sponsor, setSponsor] = useState<SponsorState>(
+        referral
+            ? {
+                  status: 'valid',
+                  name: referral.sponsor_name,
+                  customerId: referral.sponsor_customer_id,
+              }
+            : { status: 'idle' },
+    );
 
     const form = useForm({
-        sponsor_code: '',
+        sponsor_code: referral?.sponsor_customer_id ?? '',
         placement_side: 'left' as 'left' | 'right',
         name: '',
         gender: '' as 'male' | 'female' | 'other' | '',
@@ -105,8 +119,9 @@ export default function Register({ plans }: Props) {
                             Join GoldWave
                         </CardTitle>
                         <CardDescription>
-                            Enter your sponsor&apos;s code to begin
-                            registration.
+                            {referral
+                                ? `You were invited by ${referral.sponsor_name ?? referral.sponsor_customer_id}. Fill in your details to join.`
+                                : "Enter your sponsor's code to begin registration."}
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -130,7 +145,18 @@ export default function Register({ plans }: Props) {
                                     }
                                     placeholder="GWL01"
                                     required
+                                    // A registration link fixes the sponsor — the link belongs to that member.
+                                    readOnly={referral !== null}
+                                    className={
+                                        referral ? 'bg-muted' : undefined
+                                    }
                                 />
+                                {referral_invalid && (
+                                    <p className="text-muted-foreground text-sm">
+                                        This invitation link is not valid —
+                                        please enter your sponsor&apos;s code.
+                                    </p>
+                                )}
                                 {sponsor.status === 'checking' && (
                                     <p className="text-muted-foreground text-sm">
                                         Checking…

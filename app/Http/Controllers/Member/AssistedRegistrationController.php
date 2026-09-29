@@ -40,6 +40,8 @@ class AssistedRegistrationController extends Controller
                 'id', 'code', 'name', 'amount', 'installment_count', 'product_category', 'fixed_weight_grams',
             ]),
             'wallet_balance' => $this->wallet->availableBalance($member),
+            // T-162 — this member's permanent link to the public join page with them as sponsor.
+            'referral_link' => route('registration.show', ['ref' => $member->referralCode()]),
         ]);
     }
 

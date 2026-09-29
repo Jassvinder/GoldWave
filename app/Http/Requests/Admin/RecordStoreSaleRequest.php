@@ -33,12 +33,13 @@ class RecordStoreSaleRequest extends FormRequest
             // own metal; a manual item entry has no other way to record
             // which Gold/Silver rate table this sale's compensation should use.
             'metal' => ['required_without:store_inventory_item_id', 'nullable', 'in:gold,silver'],
-            'item_weight' => ['nullable', 'numeric', 'min:0'],
+            // T-169 (28-09-2026) — the price is worked out by the server (`PriceStoreSale`) from the weight and today's
+            // rate; rate, amount and GST are never taken from the form. A manual item therefore needs its weight.
+            'item_weight' => ['required_without:store_inventory_item_id', 'nullable', 'numeric', 'min:0.001'],
             'quantity' => ['required', 'integer', 'min:1'],
-            'rate' => ['nullable', 'numeric', 'min:0'],
-            'sale_amount' => ['required', 'numeric', 'min:0'],
-            'gst_amount' => ['nullable', 'numeric', 'min:0'],
-            'payment_source' => ['required', 'in:cash,store_wallet,other'],
+            // T-161 (28-09-2026, user decision) — a store sale is never paid from the Store Wallet; the
+            // customer pays the store directly (§17.4). Older `store_wallet` rows stay as recorded.
+            'payment_source' => ['required', 'in:cash,other'],
         ];
     }
 }

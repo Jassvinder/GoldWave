@@ -20,6 +20,10 @@
 | Lint/format (backend)         | `vendor/bin/pint`            | Before committing PHP changes                                     | No style violations (Laravel Pint)                                        |
 | Static analysis (backend)     | `vendor/bin/phpstan analyse` | Before committing PHP changes                                     | No new static-analysis errors (Larastan)                                  |
 
+**`gw.cmd` shortcut (28-09-2026, user-requested):** on this dev machine Windows Smart App Control blocks `pnpm.exe` (pnpm 12 ships a native, unsigned exe), so `pnpm run …` fails with "An Application Control policy has blocked this file". `gw.cmd` in the project root runs the same tools directly and needs no pnpm. From the project root in PowerShell, run `.\gw build` (= `pnpm run build`), `.\gw dev`, `.\gw types` (= `types:check`), `.\gw check [files]` (= `check:fix`; pass file paths to avoid reformatting the whole project), `.\gw front` (types then build), `.\gw test [filter]`, `.\gw php` (Pint on changed files + Larastan), or `.\gw all` (types, Pint, Larastan, tests, build). Run `.\gw` alone to see this list.
+
+**Background processes for local manual testing (T-158, 28-09-2026):** `.\gw queue` (`queue:work`) and `.\gw schedule` (`schedule:work`) each keep running in their own terminal. With no queue worker, every queued job waits in the `jobs` table forever. That includes report exports, which stay "pending", queued notifications and broadcasts. This is how two Super Admin report requests got stuck on 28-09-2026. Production needs the same two processes (`Docs/DEPLOYMENT.md`).
+
 Do not fabricate commands. This table is verified against the actual scaffolded project (Laravel 13 + React starter kit + Pest + Pint + Larastan). Update it if any tooling changes.
 
 ## Risk-based Coverage
@@ -93,6 +97,7 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 **Then** 4 `store_profit_distributions` rows: Store Owner ₹1,000, L1 ₹250, L2 ₹125, L3 ₹125 — total ₹1,500 (3% of the sale).
 **When**, additionally, this same sale is a **member's own jewellery purchase** (scenario 2 of the 3 resolved store-sale scenarios, `DOMAIN_LOGIC.md` §16.4) rather than a walk-in/non-member sale.
 **Then** scenario 4's Purchase/Repurchase Upline Income (2% self / 1% direct Sponsor / 0.5% L2–6 / 0.25% L7–12) **also fires on this same transaction**, in addition to the 4 Store Profit Distribution rows above — the two ledgers are independent and both are created; this is no longer blocked on client confirmation (`DOMAIN_LOGIC.md` §21). **Regression to test:** a walk-in/non-member sale (no purchasing member) creates only the 4 `store_profit_distributions` rows and zero `income_ledger_calculations` rows — assert both shapes, not just the combined case.
+**SUPERSEDED 28-09-2026 (T-170, user decision):** a walk-in sale now also creates **one** `income_ledger_calculations` row (`purchase_repurchase`, `level_no` null). It pays the **Store Owner** the whole Purchase/Repurchase percentage that a member purchaser's chain would have shared: self + L1…L12 of that metal's rates (7% with the default rates), on the sale's income base. For the ₹50,000 sale above, the Store Owner therefore gets ₹1,000 (Store Profit) + **₹3,500** (walk-in income) in their member wallet. The wallet line reads "Walk-in store sale income — <store> sale #N" so the history shows it came from the store. A store whose owner is not a network member gets no walk-in income row (same as Store Profit). A member purchase is unchanged (scenario 4).
 
 ### 6. Monthly Draw — grouping, execution, upline benefit threshold
 
@@ -308,6 +313,13 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 **Then** the 16 unpaid `emi_installments` rows are ₹2,247.50 each, the 4 paid rows keep ₹1,000, due dates are unchanged; `emi_schedules` is `current_rate` with `rate_per_gram_at_booking = 350`, `fixed_weight_grams = 100`, `maintenance_cost = 310`, `installment_amount = 2247.50`, `installments_paid_at_booking = 4`, `amount_paid_at_booking = 4000`, `current_rate_booked_at` set; the Membership page now shows the 100gm weight; the button is gone.
 **Given** a second fixture — Plan D (₹10,000/month × 10, 10gm Gold), 2 EMIs paid (₹20,000), gold ₹6,000/gm.
 **Then** total ₹60,000; remaining ₹40,000; 8 pending; maintenance ₹400; **new EMI ₹5,400** (40,000 ÷ 8 = 5,000, + 400). (Do not special-case Plan A.)
+
+**SUPERSEDED 28-09-2026 (T-167, user decision): maintenance now declines every month.** The figures above were the flat-maintenance rule. From T-167, the principal is the same every month (remaining value ÷ pending EMIs), and each month's maintenance is 1% of the value **still remaining at that installment**, so every EMI is a little smaller than the one before. Maintenance is rounded to 2 decimals per month. Any principal rounding remainder goes into the last EMI, so the principals always add up to exactly the remaining value.
+
+- **Plan D fixture (clean numbers):** principal ₹5,000 × 8; maintenance ₹400, 350, 300, 250, 200, 150, 100, 50 → **EMIs ₹5,400, 5,350, 5,300, 5,250, 5,200, 5,150, 5,100, 5,050**. Still to pay **₹41,800** (40,000 + 1,800). The schedule stores `installment_amount = 5400` (the first EMI) and `maintenance_cost = 400` (the first month's).
+- **Plan A fixture:** principal ₹1,937.50 × 16; EMI 1 = 1,937.50 + 310.00 = **₹2,247.50**; EMI 2 = 1,937.50 + 290.63 (1% of 29,062.50) = **₹2,228.13**; EMI 3 = 1,937.50 + 271.25 = ₹2,208.75; … EMI 16 = 1,937.50 + 19.38 (1% of 1,937.50) = **₹1,956.88**. Total maintenance ₹2,635.04 (2,635 exact, plus 8 half-paisa round-ups). Still to pay **₹33,635.04**.
+- The unpaid installments are updated **in installment-number order** with these amounts. Paid rows and due dates are untouched.
+- **With making charges (T-165, 28-09-2026):** the booking's total value is metal value plus the making % recorded with the rate; hallmark and GST are not part of it. Plan D, gold ₹6,000/gm (₹60,000 per 10 gm), making **12%**, 2 EMIs paid (₹20,000) → metal ₹60,000 + making ₹7,200 = total **₹67,200**; remaining ₹47,200 over 8 → principal ₹5,900; **EMI 1 = 5,900 + 472 = ₹6,372**; EMI 2 = 5,900 + 413 = ₹6,313; … EMI 8 = 5,900 + 59 = ₹5,959. Still to pay **₹49,324** (47,200 + 2,124). With making 0% every earlier fixture is unchanged.
 **Regression / guard cases to test:** (a) a schedule already on Current Rate cannot be booked again and its amounts are untouched; (b) with the paid amount ≥ total value (e.g. silver at ₹30/gm → ₹3,000 < ₹4,000 paid) the request is rejected and nothing changes; (c) with an installment payment still `pending` (cash awaiting approval) the request is rejected; (d) if the metal rate changed, or another EMI was paid, between quote and confirm, the request is rejected as stale; (e) all EMIs paid → no button and a direct request is rejected; (f) a one-time plan (E/F) or a member with no EMI schedule never sees the button and cannot post; (g) a Future Rate member's Membership page exposes no weight; (h) a member cannot book another member's schedule (the action always resolves the caller's own schedule).
 
 ### 22. Super Admin reverts a Current Rate booking — only while no EMI was paid after it (NEW 21-09-2026 — user decision, DOMAIN_LOGIC.md §3.0)
@@ -423,6 +435,32 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 **Then** the request is blocked with an `amount` validation error; the new member and their `pending` payment row still exist (mirroring a normal registration's pending state) — no wallet was touched.
 **Given** payment mode Cash or Online is chosen instead (still available on this form).
 **Then** behavior is completely unchanged from the public `/join` flow — a pending cash payment (Super Admin approval) or a Razorpay checkout redirect.
+
+### 31. Store sale priced automatically at the current rate — locked amount, income on metal value only (NEW 28-09-2026 — user decision, DOMAIN_LOGIC.md §21 "28-09-2026 feedback batch", T-169)
+
+**Given** the current gold rate row is ₹60,000 per 10 gm (₹6,000/gm) with making **12%**, and Super Admin's `store_gst_percent` is **3**.
+**When** a store records a Purchase of one 5 gm gold item (from inventory, or entered with metal and weight).
+**Then** the store types **no** rate, amount or GST. The sale is priced by the server: metal ₹30,000 (5 × 6,000) + making ₹3,600 = subtotal (`sale_amount`) **₹33,600**; GST 3% = **₹1,008**; total **₹34,608**. The row snapshots `metal_rate_id`, `rate` (per gram), `metal_value` 30,000, `making_charge_percent` 12, `making_charges` 3,600 and `gst_percent` 3. (The user's own worked example adds ₹45 hallmark before GST → subtotal 33,645, GST 1,009.35, total 34,654.35. Hallmark comes with T-171.)
+**Then** Store Profit Distribution and Purchase/Repurchase income are calculated on the **metal value ₹30,000 only**, e.g. the Store Owner's 2% = ₹600, not 2% of 33,600. Historic rows without `metal_value` keep using `sale_amount`.
+**Given** quantity 2 of the same item → every figure doubles (metal 60,000, making 7,200, GST 2,016, total 69,216).
+**Given** no rate has ever been set for the metal → the sale is refused with a `metal` error. A rate entered on an earlier day keeps applying until a newer one is entered.
+**Given** a manual (non-inventory) item → metal **and** weight are required.
+
+### 32. Current Rate booking needs Super Admin approval (NEW 28-09-2026 — user decision, DOMAIN_LOGIC.md §3.0 T-166 note)
+
+**Given** scenario 21's member (Plan A, 4 EMIs paid) presses "Request Booking at Current Rate".
+**Then** a `current_rate_booking_requests` row is `pending`. The schedule and every installment are **unchanged** (still ₹1,000). The Membership page shows "Current Rate booking requested" instead of the button, and a second request is refused. Every Super Admin gets the notification immediately (bell + page; email and SMS channels too). The Super Admin dashboard shows 1 pending request and an alert. The Rate Booking Requests page shows the metal to buy: 100 g silver, rate per 10 gm, metal value, making, total ₹35,000, 16 pending EMIs, new EMI first → last.
+**When** Super Admin approves (posting the rate id and paid count they were shown).
+**Then** exactly scenario 21's booking is applied. The `booked` event is performed by the Super Admin, the request is `approved`, and the member is notified.
+**Approval-day rule:** Plan D with 2 paid requests; before approval the member pays EMI 3 and gold moves to ₹6,500/g → the approval quote is 3 paid / 7 pending at ₹6,500. Approving gives 65,000 − 30,000 = 35,000 over 7, so **EMI 4 = 5,000 + 350 = ₹5,350**. An overdue unpaid EMI still counts as pending.
+**Stale view:** if an EMI was paid after Super Admin loaded the page (they posted 4 paid, now 5) → refused, and the request stays pending.
+**Cancel:** an empty message is refused. With a message, the request is `cancelled`, the schedule is untouched, and the EMI Schedule page shows "cancelled on DD-MM-YYYY" with Super Admin's message. The member may request again. A member cannot open the Super Admin queue (403).
+
+### 33. Bills — generated on request, duplicates, hallmark/HUID, company delivery (NEW 28-09-2026 — user decisions, DOMAIN_LOGIC.md §16.2 T-171 note)
+
+**Store bill (the user's own worked example):** 5 g gold at ₹60,000 per 10 gm, 12% making, 3% GST. The sale is recorded at subtotal 33,600 / GST 1,008 / total 34,608 with **no bill**. When "Generate bill" is used with **Hallmarked** ticked and one piece (HUID `AB12CD`, charge ₹45), the result is subtotal **₹33,645**, GST **₹1,009.35**, total **₹34,654.35**. The HUID is stored (upper-cased) and `hallmark_charges` = 45. The Store Owner's income is unchanged at 2% of the ₹30,000 metal value = ₹600.
+**Guards:** the HUID count must equal the quantity; a HUID is 4–16 letters/digits and may not repeat. A second "Generate bill" is refused. Opening the bill right after generating shows **ORIGINAL**, and every later view shows **DUPLICATE COPY** with the same number. No bill → the invoice URL is 404. Super Admin can open any generated store bill.
+**Company delivery:** a Current Rate member (100 g silver locked at ₹300/g). Today's silver row has 10% making and GST is 3%. Super Admin delivers "Silver anklet" 50 g × 2 with 2 HUIDs at ₹45 each → metal **₹30,000** (locked rate) + making **₹3,000** + hallmark **₹90** = **₹33,090**; GST **₹992.70**; total **₹34,082.70**; bill `GWD-…`. Before the last EMI is paid, delivery is refused ("Delivered after the last EMI — N EMI(s) still to pay"). The entitlement row is created on delivery and marked delivered. There is **no income** (no store sale, no Purchase/Repurchase row, wallet unchanged), and a second delivery is refused.
 
 ## Concurrency Verification (T-020, 15-09-2026)
 

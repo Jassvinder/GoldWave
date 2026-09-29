@@ -5,6 +5,8 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Http\Controllers\Controller;
 use App\Models\CompanyWalletLedgerEntry;
 use App\Services\CompanyWalletService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -38,5 +40,19 @@ class CompanyWalletController extends Controller
             'balance' => $wallet->balance,
             'entries' => $entries,
         ]);
+    }
+
+    /** T-163 (28-09-2026) — Super Admin adds money to the Company Wallet by hand, with an optional note. */
+    public function topUp(Request $request, CompanyWalletService $companyWallet): RedirectResponse
+    {
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:1', 'max:999999999999'],
+            'description' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $companyWallet->topUp((float) $data['amount'], $request->user(), $data['description'] ?? null);
+
+        return redirect()->route('super-admin.company-wallet.index')
+            ->with('status', 'Company Wallet topped up by ₹'.number_format((float) $data['amount'], 2).'.');
     }
 }

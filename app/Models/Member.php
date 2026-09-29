@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 /**
  * @property-read User|null $user
@@ -81,6 +82,28 @@ class Member extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * T-162 — this member's permanent registration-link code. Generated once,
+     * the first time it is asked for, and never changed afterwards, so a
+     * shared link keeps working forever. Random (not derived from the
+     * Customer ID), so nobody can work out another member's link.
+     */
+    public function referralCode(): string
+    {
+        if ($this->referral_code) {
+            return $this->referral_code;
+        }
+
+        do {
+            $code = Str::lower(Str::random(12));
+        } while (self::where('referral_code', $code)->exists());
+
+        // Only fills a still-empty column, so two simultaneous first requests can never overwrite each other.
+        self::whereKey($this->id)->whereNull('referral_code')->update(['referral_code' => $code]);
+
+        return $this->referral_code = (string) self::whereKey($this->id)->value('referral_code');
     }
 
     /**

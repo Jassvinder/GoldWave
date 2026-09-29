@@ -28,6 +28,9 @@ class QuoteCurrentRateBooking
      *     metal_rate_id: int,
      *     rate_per_gram: float,
      *     rule_version_id: int|null,
+     *     metal_value: float,
+     *     making_charge_percent: float,
+     *     making_charges: float,
      *     total_value: float,
      *     paid_installments: int,
      *     paid_amount: float,
@@ -35,6 +38,9 @@ class QuoteCurrentRateBooking
      *     pending_installments: int,
      *     maintenance_cost: float,
      *     installment_amount: float,
+     *     installment_amounts: non-empty-list<float>,
+     *     last_installment_amount: float,
+     *     total_maintenance: float,
      *     total_remaining_payable: float,
      * }
      */
@@ -77,6 +83,8 @@ class QuoteCurrentRateBooking
 
         $installmentAmount = $booking['installment_amount'];
         $pending = (int) $booking['pending_installments'];
+        // Current Rate always returns the month-by-month list (T-167 — maintenance declines every month).
+        $amounts = $booking['installment_amounts'] ?? [$installmentAmount];
 
         return [
             'schedule' => $schedule,
@@ -85,6 +93,9 @@ class QuoteCurrentRateBooking
             'metal_rate_id' => (int) $booking['metal_rate_id'],
             'rate_per_gram' => (float) $booking['rate_per_gram'],
             'rule_version_id' => $booking['rule_version_id'],
+            'metal_value' => (float) $booking['metal_value'],
+            'making_charge_percent' => (float) $booking['making_charge_percent'],
+            'making_charges' => (float) $booking['making_charges'],
             'total_value' => (float) $booking['total_value'],
             'paid_installments' => $paidInstallments,
             'paid_amount' => $paidAmount,
@@ -92,7 +103,10 @@ class QuoteCurrentRateBooking
             'pending_installments' => $pending,
             'maintenance_cost' => (float) $booking['maintenance_cost'],
             'installment_amount' => $installmentAmount,
-            'total_remaining_payable' => round($installmentAmount * $pending, 2),
+            'installment_amounts' => $amounts,
+            'last_installment_amount' => $amounts[count($amounts) - 1],
+            'total_maintenance' => (float) $booking['total_maintenance'],
+            'total_remaining_payable' => round(array_sum($amounts), 2),
         ];
     }
 }

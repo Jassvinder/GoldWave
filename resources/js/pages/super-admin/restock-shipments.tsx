@@ -63,7 +63,10 @@ export default function SuperAdminRestockShipments({ shipments }: Props) {
             key: 'status',
             header: 'Status',
             render: (row) => (
-                <Badge variant={STATUS_VARIANT[row.status]} className="capitalize">
+                <Badge
+                    variant={STATUS_VARIANT[row.status]}
+                    className="capitalize"
+                >
                     {row.status}
                 </Badge>
             ),

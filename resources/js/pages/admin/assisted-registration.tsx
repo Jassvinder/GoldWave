@@ -116,11 +116,10 @@ export default function AdminAssistedRegistration({
                         </CardTitle>
                         <CardDescription>
                             This registration is for someone else joining
-                            GoldWave — the sponsor still needs their own
-                            sponsor code, same as the public join form. This
-                            store's Wallet balance is ₹
-                            {wallet_balance.toFixed(2)} — you may optionally
-                            pay their registration from it.
+                            GoldWave — the sponsor still needs their own sponsor
+                            code, same as the public join form. This store's
+                            Wallet balance is ₹{wallet_balance.toFixed(2)} — you
+                            may optionally pay their registration from it.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -361,11 +360,11 @@ export default function AdminAssistedRegistration({
                                 </div>
                                 {form.data.payment_mode === 'wallet' && (
                                     <p className="text-muted-foreground text-sm">
-                                        The registration amount will be
-                                        deducted from this store's Wallet
-                                        balance (₹{wallet_balance.toFixed(2)}{' '}
-                                        available) and the new member is
-                                        activated immediately.
+                                        The registration amount will be deducted
+                                        from this store's Wallet balance (₹
+                                        {wallet_balance.toFixed(2)} available)
+                                        and the new member is activated
+                                        immediately.
                                     </p>
                                 )}
                                 <InputError

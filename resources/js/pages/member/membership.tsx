@@ -19,7 +19,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatRatePer10g } from '@/lib/utils';
 import { bookCurrentRate } from '@/routes/member/membership';
 
 type Plan = {
@@ -34,6 +34,9 @@ type Plan = {
 type RateBooking = {
     method: 'current_rate' | 'future_rate';
     installment_amount: string;
+    /** Current Rate only (T-167): EMIs decline monthly, so the next and the last unpaid amounts. */
+    next_installment_amount: string | null;
+    last_installment_amount: string | null;
     total_installments: number;
     rate_per_gram: string | null;
     fixed_weight_grams: string | null;
@@ -45,6 +48,9 @@ type Quote = {
     fixed_weight_grams: number;
     metal_rate_id: number;
     rate_per_gram: number;
+    metal_value: number;
+    making_charge_percent: number;
+    making_charges: number;
     total_value: number;
     paid_installments: number;
     paid_amount: number;
@@ -52,6 +58,8 @@ type Quote = {
     pending_installments: number;
     maintenance_cost: number;
     installment_amount: number;
+    last_installment_amount: number;
+    total_maintenance: number;
     total_remaining_payable: number;
     current_installment_amount: string;
 };
@@ -67,6 +75,8 @@ type ProductBenefit = {
 type Props = {
     plan: Plan | null;
     rate_booking: RateBooking | null;
+    /** T-166 — set while a Current Rate booking request waits for Super Admin. */
+    pending_booking_request: { requested_at: string | null } | null;
     current_rate_quote: Quote | null;
     product_benefits: ProductBenefit[];
 };
@@ -78,6 +88,7 @@ const money = (value: number | string) =>
 export default function Membership({
     plan,
     rate_booking,
+    pending_booking_request,
     current_rate_quote,
     product_benefits,
 }: Props) {
@@ -107,12 +118,6 @@ export default function Membership({
                     </CardHeader>
                     {plan && (
                         <CardContent className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
-                            <div>
-                                <div className="text-muted-foreground text-xs">
-                                    Plan Code
-                                </div>
-                                <div className="font-medium">{plan.code}</div>
-                            </div>
                             <div>
                                 <div className="text-muted-foreground text-xs">
                                     Product
@@ -155,7 +160,9 @@ export default function Membership({
                                             Locked rate
                                         </div>
                                         <div className="font-medium">
-                                            ₹{rate_booking.rate_per_gram}/g
+                                            {formatRatePer10g(
+                                                rate_booking.rate_per_gram,
+                                            )}
                                         </div>
                                     </div>
                                     <div>
@@ -168,11 +175,12 @@ export default function Membership({
                                     </div>
                                     <div>
                                         <div className="text-muted-foreground text-xs">
-                                            EMI
+                                            EMI (reduces every month)
                                         </div>
                                         <div className="font-medium">
-                                            ₹{rate_booking.installment_amount}
-                                            /month
+                                            {rate_booking.next_installment_amount
+                                                ? `${money(rate_booking.next_installment_amount)} next → ${money(rate_booking.last_installment_amount ?? rate_booking.next_installment_amount)} last`
+                                                : 'All EMIs paid'}
                                         </div>
                                     </div>
                                 </div>
@@ -185,6 +193,23 @@ export default function Membership({
                                         ₹{rate_booking.installment_amount}/month
                                         × {rate_booking.total_installments}
                                     </div>
+                                </div>
+                            )}
+
+                            {pending_booking_request && (
+                                <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                                    <p className="font-semibold">
+                                        Current Rate booking requested
+                                    </p>
+                                    <p>
+                                        Sent on{' '}
+                                        {formatDate(
+                                            pending_booking_request.requested_at,
+                                        )}
+                                        . Super Admin will confirm it — the rate
+                                        is locked on the day they approve, and
+                                        your EMIs stay as they are until then.
+                                    </p>
                                 </div>
                             )}
 
@@ -216,13 +241,13 @@ export default function Membership({
     );
 }
 
-/** The "Book at Current Rate" button and its popup: the figures come from the server's quote, and the confirm request echoes the rate id and paid-EMI count so a stale quote is refused. */
+/**
+ * The "Book at Current Rate" button and its popup. T-166 (28-09-2026): confirming sends a request to Super Admin;
+ * the figures shown are today's estimate — the real ones are locked on the approval day.
+ */
 function BookCurrentRateDialog({ quote }: { quote: Quote }) {
     const [open, setOpen] = useState(false);
-    const form = useForm({
-        metal_rate_id: quote.metal_rate_id,
-        paid_installments: quote.paid_installments,
-    });
+    const form = useForm({});
     const error = (form.errors as Record<string, string | undefined>).booking;
 
     const submit: FormEventHandler = (e) => {
@@ -238,7 +263,12 @@ function BookCurrentRateDialog({ quote }: { quote: Quote }) {
             'Metal and weight',
             `${quote.fixed_weight_grams}g ${quote.metal ?? ''}`.trim(),
         ],
-        ['Today’s rate', `₹${quote.rate_per_gram}/g`],
+        ['Today’s rate', formatRatePer10g(quote.rate_per_gram)],
+        ['Metal value', money(quote.metal_value)],
+        [
+            `Making charges (${quote.making_charge_percent}%)`,
+            money(quote.making_charges),
+        ],
         ['Total value at this rate', money(quote.total_value)],
         [
             `Paid so far (${quote.paid_installments} EMI${quote.paid_installments === 1 ? '' : 's'})`,
@@ -246,7 +276,10 @@ function BookCurrentRateDialog({ quote }: { quote: Quote }) {
         ],
         ['Remaining value', money(quote.remaining_value)],
         ['EMIs pending', String(quote.pending_installments)],
-        ['Maintenance (1% of remaining value)', money(quote.maintenance_cost)],
+        [
+            'Maintenance (1% of the value still remaining, each month)',
+            `${money(quote.maintenance_cost)} first month · ${money(quote.total_maintenance)} in total`,
+        ],
     ];
 
     return (
@@ -261,17 +294,19 @@ function BookCurrentRateDialog({ quote }: { quote: Quote }) {
             }}
         >
             <DialogTrigger asChild>
-                <Button className="w-fit">Book at Current Rate</Button>
+                <Button className="w-fit">
+                    Request Booking at Current Rate
+                </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Book at Current Rate</DialogTitle>
+                    <DialogTitle>Request Booking at Current Rate</DialogTitle>
                     <DialogDescription>
-                        Your {quote.paid_installments} paid EMI
-                        {quote.paid_installments === 1 ? '' : 's'} are credited
-                        against the jewellery value, and the rest is spread over
-                        your {quote.pending_installments} pending EMIs. This
-                        cannot be undone.
+                        Your paid EMIs are credited against the jewellery value
+                        and the rest is spread over your pending EMIs. This is
+                        an <strong>estimate at today&apos;s rate</strong> — your
+                        request goes to Super Admin, and the rate and EMIs are
+                        fixed on the day they approve it.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -290,11 +325,12 @@ function BookCurrentRateDialog({ quote }: { quote: Quote }) {
                         ))}
                         <div className="flex justify-between gap-4 border-t pt-2">
                             <dt className="font-medium">New EMI</dt>
-                            <dd className="font-semibold">
-                                {money(quote.installment_amount)}
-                                <span className="text-muted-foreground ml-1 text-xs font-normal">
-                                    (now{' '}
-                                    {money(quote.current_installment_amount)})
+                            <dd className="text-right font-semibold">
+                                {money(quote.installment_amount)} first →{' '}
+                                {money(quote.last_installment_amount)} last
+                                <span className="text-muted-foreground block text-xs font-normal">
+                                    reduces every month · now{' '}
+                                    {money(quote.current_installment_amount)}
                                 </span>
                             </dd>
                         </div>
@@ -312,11 +348,13 @@ function BookCurrentRateDialog({ quote }: { quote: Quote }) {
                         role="alert"
                         className="border-destructive/40 bg-destructive/10 text-destructive rounded-md border p-3 text-sm"
                     >
-                        <p className="font-semibold">You can’t revert this.</p>
+                        <p className="font-semibold">
+                            Once approved, you can’t revert this.
+                        </p>
                         <p>
-                            If you book by mistake you will have to contact the
-                            Super Admin — and you must do it before you pay your
-                            next EMI.
+                            If it was approved by mistake you will have to
+                            contact the Super Admin — before you pay your next
+                            EMI.
                         </p>
                     </div>
 
@@ -333,7 +371,7 @@ function BookCurrentRateDialog({ quote }: { quote: Quote }) {
                             Cancel
                         </Button>
                         <Button type="submit" disabled={form.processing}>
-                            Confirm booking
+                            Send request
                         </Button>
                     </DialogFooter>
                 </form>
@@ -357,7 +395,7 @@ const benefitColumns: DataTableColumn<ProductBenefit>[] = [
         header: 'Rate at Entry',
         render: (row) =>
             row.rate_per_gram_at_entry
-                ? `₹${row.rate_per_gram_at_entry}/g`
+                ? formatRatePer10g(row.rate_per_gram_at_entry)
                 : '—',
     },
     {

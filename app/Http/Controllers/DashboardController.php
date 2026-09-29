@@ -8,6 +8,7 @@ use App\Models\BoosterQualification;
 use App\Models\DrawGroupMember;
 use App\Models\Member;
 use App\Models\Store;
+use App\Services\PairPoolBreakdown;
 use App\Support\Dates;
 use App\Support\Portal;
 use Illuminate\Http\Request;
@@ -30,6 +31,7 @@ class DashboardController extends Controller
         Request $request,
         StoreDashboardController $storeDashboard,
         SuperAdminDashboardController $superAdminDashboard,
+        PairPoolBreakdown $pairPool,
     ): Response {
         $user = $request->user();
         $member = $user?->member;
@@ -39,7 +41,7 @@ class DashboardController extends Controller
         $inStorePortal = $user?->role === 'admin' && Portal::current($request) !== Portal::MEMBER;
 
         if ($member && ! $inStorePortal) {
-            return $this->memberDashboard($member);
+            return $this->memberDashboard($member, $pairPool);
         }
 
         if ($user?->role === 'super_admin') {
@@ -57,7 +59,7 @@ class DashboardController extends Controller
         return Inertia::render('dashboard');
     }
 
-    private function memberDashboard(Member $member): Response
+    private function memberDashboard(Member $member, PairPoolBreakdown $pairPool): Response
     {
         $member->load(['membershipPlan', 'emiSchedule.installments']);
 
@@ -71,8 +73,7 @@ class DashboardController extends Controller
             ->groupBy('type')
             ->pluck('total', 'type');
 
-        $pairUnusedLeft = $member->pairEntries()->where('side', 'left')->where('status', 'unused')->count();
-        $pairUnusedRight = $member->pairEntries()->where('side', 'right')->where('status', 'unused')->count();
+        $pairPoolBreakdown = $pairPool->forMember($member);
 
         $activeBoosterCount = BoosterQualification::where('member_id', $member->id)
             ->whereHas('payoutSchedules', fn ($q) => $q->where('status', 'pending'))
@@ -114,9 +115,10 @@ class DashboardController extends Controller
                 'level_income' => (string) ($incomeTotals['level_income'] ?? 0),
                 'purchase_repurchase' => (string) ($incomeTotals['purchase_repurchase'] ?? 0),
             ],
+            // Team vs. unused vs. used vs. not-yet-eligible, so the unused count alone never looks like missing entries.
             'pair' => [
-                'unused_left' => $pairUnusedLeft,
-                'unused_right' => $pairUnusedRight,
+                'left' => $pairPoolBreakdown['left'],
+                'right' => $pairPoolBreakdown['right'],
             ],
             'booster_active_levels' => $activeBoosterCount,
             'draw_active' => $activeDrawGroup,

@@ -73,7 +73,8 @@ class MemberManagementController extends Controller
         return Inertia::render('super-admin/member-management', [
             'members' => $members,
             'filters' => $request->only(['search', 'plan', 'status', 'store_owner']),
-            'plan_options' => MembershipPlan::orderBy('code')->pluck('code'),
+            // The filter still submits the stable code; only the name is shown.
+            'plan_options' => MembershipPlan::orderBy('code')->get(['code', 'name']),
             'status_options' => ['draft', 'payment_pending', 'payment_confirmed', 'active', 'cancelled'],
             'stats' => [
                 'total' => Member::where('is_company_dummy', false)->count(),
@@ -95,7 +96,7 @@ class MemberManagementController extends Controller
                 $member->user?->name,
                 $member->user?->mobile,
                 $member->user?->email,
-                $member->membershipPlan?->code,
+                $member->membershipPlan?->name,
                 $member->sponsor?->customer_id,
                 $member->placement_side,
                 $member->status,
@@ -336,7 +337,8 @@ class MemberManagementController extends Controller
             'name' => $member->user?->name,
             'mobile' => $member->user?->mobile,
             'email' => $member->user?->email,
-            'plan' => $member->membershipPlan?->code,
+            // T-154 — the marketing name (e.g. Silver Start); the A–F letter code is never shown in the UI.
+            'plan' => $member->membershipPlan?->name,
             'sponsor_customer_id' => $member->sponsor?->customer_id,
             'status' => $member->status,
             'activated_at' => Dates::date($member->activated_at),

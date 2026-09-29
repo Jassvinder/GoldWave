@@ -20,7 +20,7 @@ class AllocateStoreInventoryRequest extends FormRequest
             'metal' => ['required', 'in:gold,silver'],
             'weight' => ['required', 'numeric', 'min:0.001'],
             'quantity' => ['required', 'integer', 'min:1'],
-            'price' => ['required', 'numeric', 'min:0'],
+            // T-169 (28-09-2026) — no typed price: it is weight × today's rate (see StoreManagementController).
             'description' => ['nullable', 'string', 'max:500'],
         ];
     }

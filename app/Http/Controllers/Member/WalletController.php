@@ -38,10 +38,20 @@ class WalletController extends Controller
             // Categories are stored snake_case but displayed as words, so "level income" must match `level_income`.
             $spacedTerm = '%'.mb_strtolower(str_replace(['%', '_', ' '], ['\%', '\_', '\_'], $search)).'%';
 
-            $query->where(function ($q) use ($term, $spacedTerm): void {
+            // Payout rows show On Hold / Paid / Released instead of their stored status, so those words must find them too.
+            $payoutStatuses = array_keys(array_filter(
+                WalletLedgerEntry::PAYOUT_STATUS_LABELS,
+                fn (string $label): bool => str_contains($label, mb_strtolower($search)),
+            ));
+
+            $query->where(function ($q) use ($term, $spacedTerm, $payoutStatuses): void {
                 $q->whereRaw("LOWER(category) LIKE ? ESCAPE '\\'", [$spacedTerm])
                     ->orWhereRaw("LOWER(COALESCE(description, '')) LIKE ? ESCAPE '\\'", [$term])
                     ->orWhereRaw("LOWER(status) LIKE ? ESCAPE '\\'", [$term]);
+
+                if ($payoutStatuses !== []) {
+                    $q->orWhere(fn ($payout) => $payout->where('category', 'payout')->whereIn('status', $payoutStatuses));
+                }
             });
         }
 
@@ -57,6 +67,9 @@ class WalletController extends Controller
         }
 
         $entries = $query->paginate(self::PER_PAGE)->withQueryString();
+
+        // Payout holds read their wording from the linked request + transaction (WalletLedgerEntry::displayDescription()).
+        $entries->getCollection()->where('category', 'payout')->load('source.transactions');
 
         $entries->through(fn (WalletLedgerEntry $entry): array => $this->mapEntry($entry));
 
@@ -78,7 +91,8 @@ class WalletController extends Controller
             'category' => $entry->category,
             'amount' => $entry->amount,
             'status' => $entry->status,
-            'description' => $entry->description,
+            'status_label' => $entry->statusLabel(),
+            'description' => $entry->displayDescription(),
             'processed_at' => Dates::date($entry->processed_at),
             'created_at' => Dates::date($entry->created_at),
         ];
