@@ -54,7 +54,8 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::authenticateUsing(function (Request $request) {
             $user = User::where('email', $request->email)->first();
 
-            if (! $user || $user->role === 'admin') {
+            // Store Admins use the Store Login; Super Admin and the company Admin (29-09-2026) use this form.
+            if (! $user || $user->isStoreAdmin()) {
                 return null;
             }
 

@@ -34,8 +34,6 @@ class RateBookingRequestController extends Controller
                         'fixed_weight_grams' => $q['fixed_weight_grams'],
                         'metal_rate_id' => $q['metal_rate_id'],
                         'rate_per_gram' => $q['rate_per_gram'],
-                        'metal_value' => $q['metal_value'],
-                        'making_charges' => $q['making_charges'],
                         'total_value' => $q['total_value'],
                         'paid_installments' => $q['paid_installments'],
                         'pending_installments' => $q['pending_installments'],

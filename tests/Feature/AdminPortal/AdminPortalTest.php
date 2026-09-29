@@ -46,7 +46,7 @@ function adminPortalMember(string $customerId): Member
 /** @return array{admin: User, store: Store} */
 function makeAdminWithStore(string $prefix): array
 {
-    $adminUser = User::factory()->create(['role' => 'admin']);
+    $adminUser = User::factory()->create(['role' => 'store_admin']);
 
     $store = app(CreateStore::class)(
         "{$prefix} Store", $adminUser, '9998887777', 'Test City', 1000000, 50000, adminOperator(),
@@ -72,7 +72,7 @@ test('a member cannot access any admin portal route', function () {
 });
 
 test('an admin user with no assigned store is forbidden from every admin portal route', function () {
-    $adminUser = User::factory()->create(['role' => 'admin']);
+    $adminUser = User::factory()->create(['role' => 'store_admin']);
 
     $this->actingAs($adminUser)->get('/admin/sales')->assertForbidden();
 });

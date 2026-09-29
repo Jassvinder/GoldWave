@@ -171,7 +171,9 @@ test('approving a change request updates the field, marks the request approved, 
     expect($approved->reviewed_by)->toBe($operator->id);
     expect($member->fresh()->pan_card)->toBe('ZYXWV9876G');
 
-    $notification = DatabaseNotification::where('notifiable_id', $member->id)
+    // Notifications go to the member's user (T-140), not the Member row.
+    $notification = DatabaseNotification::where('notifiable_id', $member->user_id)
+        ->where('notifiable_type', $member->user->getMorphClass())
         ->where('type', ProfileChangeRequestReviewed::class)
         ->first();
     expect($notification)->not->toBeNull();
@@ -189,7 +191,8 @@ test('rejecting a change request leaves the field unchanged, records a reason, a
     expect($rejected->rejection_reason)->toBe('address proof mismatch');
     expect($member->fresh()->address)->toBe('123 Test Street');
 
-    $notification = DatabaseNotification::where('notifiable_id', $member->id)
+    $notification = DatabaseNotification::where('notifiable_id', $member->user_id)
+        ->where('notifiable_type', $member->user->getMorphClass())
         ->where('type', ProfileChangeRequestReviewed::class)
         ->first();
     expect($notification)->not->toBeNull();

@@ -36,15 +36,16 @@ class DashboardController extends Controller
         $user = $request->user();
         $member = $user?->member;
 
-        // T-131: a Store Owner (role=admin) who is also a Member sees the dashboard of the door
+        // T-131: a Store Owner (role=store_admin) who is also a Member sees the dashboard of the door
         // they logged in through — Store ID login => Store Dashboard, Member login => member dashboard.
-        $inStorePortal = $user?->role === 'admin' && Portal::current($request) !== Portal::MEMBER;
+        $inStorePortal = $user?->isStoreAdmin() === true && Portal::current($request) !== Portal::MEMBER;
 
         if ($member && ! $inStorePortal) {
             return $this->memberDashboard($member, $pairPool);
         }
 
-        if ($user?->role === 'super_admin') {
+        // Super Admin and the company Admin (29-09-2026) share the company dashboard.
+        if ($user?->isCompanyStaff() === true) {
             return $superAdminDashboard->index($request);
         }
 

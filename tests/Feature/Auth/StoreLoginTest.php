@@ -11,7 +11,7 @@ use App\Models\User;
  */
 function loginStoreOwner(string $storeName, string $password): array
 {
-    $owner = User::factory()->create(['role' => 'admin']);
+    $owner = User::factory()->create(['role' => 'store_admin']);
     $store = app(CreateStore::class)($storeName, $owner, null, null, 0, 0, User::factory()->create(['role' => 'super_admin']), $password);
 
     return ['owner' => $owner, 'store' => $store];
@@ -49,7 +49,7 @@ test('a store with no owner yet cannot be logged into even with its own Store ID
 });
 
 test('an Admin (Store Owner) cannot use the generic Super Admin email+password login, even with the correct password', function () {
-    $admin = User::factory()->create(['role' => 'admin']);
+    $admin = User::factory()->create(['role' => 'store_admin']);
 
     $this->post(route('login.store'), ['email' => $admin->email, 'password' => 'password'])
         ->assertSessionHasErrors();

@@ -20,7 +20,9 @@ import {
     UserPlus,
     Users,
     Wallet,
+    Wrench,
 } from 'lucide-react';
+import { usePage } from '@inertiajs/react';
 import { PortalSidebar } from '@/components/portal-sidebar';
 import { dashboard } from '@/routes';
 import { index as adminUsersIndex } from '@/routes/super-admin/admin-users';
@@ -32,6 +34,7 @@ import { index as dummyAssignmentIndex } from '@/routes/super-admin/dummy-entry-
 import { index as dummySettingsIndex } from '@/routes/super-admin/dummy-entry-settings';
 import { index as financialSummaryIndex } from '@/routes/super-admin/financial-summary';
 import { index as landingHeroIndex } from '@/routes/super-admin/landing-hero';
+import { index as maintenanceIndex } from '@/routes/super-admin/maintenance';
 import { index as membersIndex } from '@/routes/super-admin/members';
 import { index as notificationsIndex } from '@/routes/super-admin/notifications';
 import { index as metalRatesIndex } from '@/routes/super-admin/metal-rates';
@@ -54,27 +57,35 @@ const overviewItems: NavItem[] = [
         title: 'Financial Summary',
         href: financialSummaryIndex(),
         icon: Scale,
+        superAdminOnly: true,
     },
     { title: 'Notifications', href: notificationsIndex(), icon: Bell },
 ];
 
 const memberItems: NavItem[] = [
-    { title: 'Admin Users', href: adminUsersIndex(), icon: UserCog },
+    { title: 'Store Admins', href: adminUsersIndex(), icon: UserCog },
     { title: 'Member Management', href: membersIndex(), icon: Users },
     {
         title: 'Dummy Entry Settings',
         href: dummySettingsIndex(),
         icon: UserPlus,
+        superAdminOnly: true,
     },
     {
         title: 'Dummy Entry Assignment',
         href: dummyAssignmentIndex(),
         icon: UserCheck,
+        superAdminOnly: true,
     },
 ];
 
 const compensationItems: NavItem[] = [
-    { title: 'Rule Versions', href: ruleVersionsIndex(), icon: Percent },
+    {
+        title: 'Rule Versions',
+        href: ruleVersionsIndex(),
+        icon: Percent,
+        superAdminOnly: true,
+    },
     {
         title: 'Compensation Audit',
         href: compensationAudit(),
@@ -113,6 +124,12 @@ const settingsItems: NavItem[] = [
         title: 'Landing Page Hero',
         href: landingHeroIndex(),
         icon: LayoutTemplate,
+    },
+    {
+        title: 'Maintenance',
+        href: maintenanceIndex(),
+        icon: Wrench,
+        superAdminOnly: true,
     },
 ];
 
@@ -155,7 +172,21 @@ const sections: NavGroup[] = [
     { label: 'Reports', items: reportItems },
 ];
 
-/** INSTRUCTIONS.md's Super Admin Portal (T-017) navigation — S01-S10 + Admin Dashboard/Member/Compensation/Draw management. Renders via the shared `PortalSidebar` (T-100). */
+/**
+ * INSTRUCTIONS.md's Super Admin Portal (T-017) navigation — S01-S10 + Admin Dashboard/Member/Compensation/Draw
+ * management. Renders via the shared `PortalSidebar` (T-100). Since 29-09-2026 the company Admin shares this portal;
+ * items marked `superAdminOnly` are left out for them (the routes refuse them too).
+ */
 export function SuperAdminSidebar() {
-    return <PortalSidebar sections={sections} />;
+    const role = (usePage().props.auth as { user?: { role?: string } }).user?.role;
+    const visible = sections
+        .map((section) => ({
+            ...section,
+            items: section.items.filter(
+                (item) => role === 'super_admin' || !item.superAdminOnly,
+            ),
+        }))
+        .filter((section) => section.items.length > 0);
+
+    return <PortalSidebar sections={visible} />;
 }

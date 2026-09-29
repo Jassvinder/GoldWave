@@ -236,7 +236,10 @@ test('a member\'s booking is only a request until Super Admin approves it, and e
             ->where('rate_booking.method', 'future_rate')
             ->where('pending_booking_request', null)
             ->where('current_rate_quote.installment_amount', 2247.5)
-            ->where('current_rate_quote.pending_installments', 16));
+            ->where('current_rate_quote.pending_installments', 16)
+            // T-175 — only the rate is shown; making is itemised on the final bill only.
+            ->missing('current_rate_quote.making_charges')
+            ->missing('current_rate_quote.making_charge_percent'));
 
     $this->actingAs($member->user)
         ->post('/member/membership/book-current-rate')
@@ -266,7 +269,8 @@ test('a member\'s booking is only a request until Super Admin approves it, and e
             ->where('pending.0.member.customer_id', 'BCR-PAGE')
             ->where('pending.0.quote.fixed_weight_grams', 100)
             ->where('pending.0.quote.total_value', 35000)
-            ->where('pending.0.quote.pending_installments', 16));
+            ->where('pending.0.quote.pending_installments', 16)
+            ->missing('pending.0.quote.making_charges'));
     $this->actingAs(rvtSuperAdmin())
         ->get('/dashboard')
         ->assertInertia(fn ($page) => $page->where('rate_booking_requests.pending', 1));

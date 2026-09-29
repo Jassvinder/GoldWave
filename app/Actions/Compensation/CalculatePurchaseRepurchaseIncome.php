@@ -62,7 +62,13 @@ class CalculatePurchaseRepurchaseIncome
 
         DB::transaction(function () use ($storeSale, $payer, $ruleVersion, $rates, $baseAmount, $chain) {
             $selfRate = (float) ($rates['self'] ?? 0);
-            $this->payBeneficiary($storeSale, $payer, $ruleVersion, null, $selfRate, $baseAmount, "Self Purchase/Repurchase Income on {$payer->customer_id}'s own purchase");
+
+            // T-174 — an entry inserted under the root earns Pair/Reward and Booster only, not even its own 2%.
+            if ($payer->benefits_limited) {
+                $this->recordSkipped($storeSale, $ruleVersion, null, $selfRate, $payer, 'benefits_limited');
+            } else {
+                $this->payBeneficiary($storeSale, $payer, $ruleVersion, null, $selfRate, $baseAmount, "Self Purchase/Repurchase Income on {$payer->customer_id}'s own purchase");
+            }
 
             for ($level = 1; $level <= self::MAX_LEVELS; $level++) {
                 $beneficiary = $chain[$level - 1] ?? null;
@@ -76,8 +82,9 @@ class CalculatePurchaseRepurchaseIncome
 
                 // T-149 — an unassigned dummy (or the seeded company root, never assignable) must never itself become a
                 // paid compensation beneficiary, matching the same guard already applied to Pair entries/Booster.
-                if ($beneficiary->is_company_dummy && $beneficiary->dummy_status !== 'assigned') {
-                    $this->recordSkipped($storeSale, $ruleVersion, $level, $rate, $beneficiary, 'upline_dummy');
+                // T-174 — nor does an entry inserted under the root (Pair/Reward and Booster only).
+                if ($beneficiary->isExcludedFromGeneralIncome()) {
+                    $this->recordSkipped($storeSale, $ruleVersion, $level, $rate, $beneficiary, $beneficiary->generalIncomeSkipReason());
 
                     continue;
                 }
@@ -139,7 +146,7 @@ class CalculatePurchaseRepurchaseIncome
         $this->wallet->credit($beneficiary, 'purchase_repurchase_income', $amount, $calculation, $description);
     }
 
-    private function recordSkipped(StoreSale $storeSale, RuleVersion $ruleVersion, int $level, float $rate, ?Member $beneficiary, string $reason): void
+    private function recordSkipped(StoreSale $storeSale, RuleVersion $ruleVersion, ?int $level, float $rate, ?Member $beneficiary, string $reason): void
     {
         IncomeLedgerCalculation::create([
             'type' => 'purchase_repurchase',

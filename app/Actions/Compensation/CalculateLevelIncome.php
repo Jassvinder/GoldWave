@@ -77,8 +77,9 @@ class CalculateLevelIncome
 
                 // T-149 — an unassigned dummy (or the seeded company root, never assignable) must never itself become a
                 // paid compensation beneficiary, matching the same guard already applied to Pair entries/Booster.
-                if ($beneficiary->is_company_dummy && $beneficiary->dummy_status !== 'assigned') {
-                    $this->recordSkipped($payment, $ruleVersion, $level, $rate, $beneficiary, 'upline_dummy');
+                // T-174 — nor does an entry inserted under the root (Pair/Reward and Booster only).
+                if ($beneficiary->isExcludedFromGeneralIncome()) {
+                    $this->recordSkipped($payment, $ruleVersion, $level, $rate, $beneficiary, $beneficiary->generalIncomeSkipReason());
 
                     continue;
                 }

@@ -35,7 +35,7 @@ class StoreManagementController extends Controller
             ->get()
             ->map(fn (Store $store): array => $this->summarize($store));
 
-        $unassignedAdmins = User::where('role', 'admin')
+        $unassignedAdmins = User::where('role', 'store_admin')
             ->whereDoesntHave('store')
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
@@ -104,7 +104,7 @@ class StoreManagementController extends Controller
                 'invoice_no' => $sale->invoice?->invoice_no,
             ]);
 
-        $unassignedAdmins = User::where('role', 'admin')
+        $unassignedAdmins = User::where('role', 'store_admin')
             ->whereDoesntHave('store')
             ->orderBy('name')
             ->get(['id', 'name', 'email']);

@@ -103,9 +103,7 @@ class MembershipController extends Controller
             'fixed_weight_grams' => $q['fixed_weight_grams'],
             'metal_rate_id' => $q['metal_rate_id'],
             'rate_per_gram' => $q['rate_per_gram'],
-            'metal_value' => $q['metal_value'],
-            'making_charge_percent' => $q['making_charge_percent'],
-            'making_charges' => $q['making_charges'],
+            // T-175 — the member sees only the rate; the total already includes making, which is itemised on the final bill only.
             'total_value' => $q['total_value'],
             'paid_installments' => $q['paid_installments'],
             'paid_amount' => $q['paid_amount'],

@@ -73,30 +73,42 @@ class GenerateDailyDummyEntries
 
             for ($i = 0; $i < $count; $i++) {
                 $placement = $this->placementChain->resolve($root, 'right');
-                $customerId = $this->customerIds->next();
 
-                $dummy = Member::create([
-                    'customer_id' => $customerId,
-                    'sponsor_id' => $root->id,
-                    'placement_parent_id' => $placement['parent_id'],
-                    'placement_side' => $placement['side'],
-                    'membership_plan_id' => $plan->id,
-                    'status' => 'active',
-                    'is_company_dummy' => true,
-                    'dummy_status' => 'generated',
-                    'dummy_generated_at' => now(),
-                    'placeholder_name' => "Company Direct — {$customerId}",
-                ]);
-
-                $this->seedFirstInstallment($dummy, $plan);
-
-                $dummy->update(['dummy_status' => 'unassigned']);
-
-                $created[] = $dummy->fresh();
+                $created[] = $this->createEntry($root, $plan, $placement['parent_id'], $placement['side']);
             }
 
             return $created;
         });
+    }
+
+    /**
+     * Creates one dummy entry (sponsor = the company root) with its silent paid installment #1, ending `unassigned`.
+     * Also used by `InsertEntryUnderRoot` (T-174), which creates it unplaced first and then slots it under the root.
+     * Callers wrap it in their own transaction.
+     */
+    public function createEntry(Member $root, MembershipPlan $plan, ?int $parentId, ?string $side, bool $benefitsLimited = false): Member
+    {
+        $customerId = $this->customerIds->next();
+
+        $dummy = Member::create([
+            'customer_id' => $customerId,
+            'sponsor_id' => $root->id,
+            'placement_parent_id' => $parentId,
+            'placement_side' => $side,
+            'membership_plan_id' => $plan->id,
+            'status' => 'active',
+            'is_company_dummy' => true,
+            'dummy_status' => 'generated',
+            'dummy_generated_at' => now(),
+            'placeholder_name' => "Company Direct — {$customerId}",
+            'benefits_limited' => $benefitsLimited,
+        ]);
+
+        $this->seedFirstInstallment($dummy, $plan);
+
+        $dummy->update(['dummy_status' => 'unassigned']);
+
+        return $dummy->fresh() ?? $dummy;
     }
 
     private function seedFirstInstallment(Member $dummy, MembershipPlan $plan): void

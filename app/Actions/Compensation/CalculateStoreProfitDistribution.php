@@ -70,7 +70,8 @@ class CalculateStoreProfitDistribution
 
                 // T-149 — an unassigned dummy (or the seeded company root, never assignable) must never itself become a
                 // paid compensation beneficiary, matching the same guard already applied to Pair entries/Booster.
-                if ($beneficiary->is_company_dummy && $beneficiary->dummy_status !== 'assigned') {
+                // T-174 — nor an entry inserted under the root (Pair/Reward and Booster only).
+                if ($beneficiary->isExcludedFromGeneralIncome()) {
                     continue;
                 }
 

@@ -13,10 +13,18 @@ return new class extends Migration
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
+            // GoldWave role (DOMAIN_LOGIC.md §2, 29-09-2026): member / store_admin (Store Owner) / admin (company
+            // manager — Super Admin minus a few pages) / super_admin.
+            $table->enum('role', ['member', 'store_admin', 'admin', 'super_admin'])->default('member');
             $table->string('name');
             $table->string('email')->unique();
+            // Login by mobile + password (DOMAIN_LOGIC.md §2.2).
+            $table->string('mobile')->nullable()->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            $table->text('two_factor_secret')->nullable();
+            $table->text('two_factor_recovery_codes')->nullable();
+            $table->timestamp('two_factor_confirmed_at')->nullable();
             $table->rememberToken();
             $table->timestamps();
         });

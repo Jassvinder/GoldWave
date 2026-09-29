@@ -89,9 +89,9 @@ export function HallmarkFields({
                             <div className="grid gap-1">
                                 <Input
                                     aria-label={`HUID for piece ${i + 1}`}
-                                    placeholder="HUID number"
+                                    placeholder="HUID (6–8 characters)"
                                     value={piece.huid}
-                                    maxLength={16}
+                                    maxLength={8}
                                     onChange={(e) =>
                                         update(
                                             i,

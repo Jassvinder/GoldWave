@@ -9,7 +9,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Gate for every Member Portal route (replaces `role:member`, T-131). A
- * `role=member` user always passes; a `role=admin` user (a Store Owner) passes
+ * `role=member` user always passes; a `role=store_admin` user (a Store Owner) passes
  * only if they also have a `members` row AND logged in through the Member
  * login this session — the Store ID login never opens the Member Portal.
  * Extra roles (e.g. `super_admin` for the Directs/Tree routes) are passed as
@@ -29,7 +29,7 @@ class EnsureMemberPortal
             return $next($request);
         }
 
-        if ($user->role === 'admin' && $user->member !== null && Portal::current($request) === Portal::MEMBER) {
+        if ($user->isStoreAdmin() && $user->member !== null && Portal::current($request) === Portal::MEMBER) {
             return $next($request);
         }
 

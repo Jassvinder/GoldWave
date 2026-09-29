@@ -13,6 +13,7 @@ use App\Http\Controllers\SuperAdmin\DummyEntrySettingsController;
 use App\Http\Controllers\SuperAdmin\EarningsVerificationController;
 use App\Http\Controllers\SuperAdmin\FinancialSummaryController;
 use App\Http\Controllers\SuperAdmin\LandingHeroController;
+use App\Http\Controllers\SuperAdmin\MaintenanceController;
 use App\Http\Controllers\SuperAdmin\MemberManagementController;
 use App\Http\Controllers\SuperAdmin\MetalRateController;
 use App\Http\Controllers\SuperAdmin\PayoutRequestController;
@@ -26,7 +27,9 @@ use App\Http\Controllers\SuperAdmin\StoreManagementController;
 use App\Http\Controllers\SuperAdmin\StoreWalletManagementController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth', 'role:super_admin'])->prefix('super-admin')->name('super-admin.')->group(function () {
+// DOMAIN_LOGIC.md §2 (29-09-2026): the company portal is shared by Super Admin and the company Admin; the few
+// Super-Admin-only pages sit in the nested `role:super_admin` groups below.
+Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->name('super-admin.')->group(function () {
     Route::get('cash-payments', [CashPaymentApprovalController::class, 'index'])->name('cash-payments.index');
     Route::post('cash-payments/{payment}/approve', [CashPaymentApprovalController::class, 'approve'])->name('cash-payments.approve');
     Route::post('cash-payments/{payment}/reject', [CashPaymentApprovalController::class, 'reject'])->name('cash-payments.reject');
@@ -43,19 +46,31 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('super-admin')->name('su
     // S03 — Compensation Rule Versions (also Admin Compensation Management's config page, see below).
     // T-132 (20-09-2026) — the compensation % are the most sensitive setting in the product, so both the page and the publish endpoint
     // require the Super Admin's own password re-entered within the last 5 minutes (300 s; `password.confirm`'s app-wide default is 3 h).
-    Route::middleware('password.confirm:password.confirm,300')->group(function () {
-        Route::get('rule-versions', [RuleVersionController::class, 'index'])->name('rule-versions.index');
-        Route::post('rule-versions', [RuleVersionController::class, 'store'])->name('rule-versions.store');
+    // Super Admin only (29-09-2026): Rule Versions, Dummy Entry Settings/Assignment, Financial Summary.
+    Route::middleware('role:super_admin')->group(function () {
+        Route::middleware('password.confirm:password.confirm,300')->group(function () {
+            Route::get('rule-versions', [RuleVersionController::class, 'index'])->name('rule-versions.index');
+            Route::post('rule-versions', [RuleVersionController::class, 'store'])->name('rule-versions.store');
+        });
+
+        // S04 — Daily Dummy Entry Settings.
+        Route::get('dummy-entry-settings', [DummyEntrySettingsController::class, 'index'])->name('dummy-entry-settings.index');
+        Route::post('dummy-entry-settings', [DummyEntrySettingsController::class, 'update'])->name('dummy-entry-settings.update');
+        Route::post('dummy-entry-settings/generate', [DummyEntrySettingsController::class, 'generateNow'])->name('dummy-entry-settings.generate');
+
+        // S05 — Dummy Entry Assignment.
+        Route::get('dummy-entry-assignment', [DummyEntryAssignmentController::class, 'index'])->name('dummy-entry-assignment.index');
+        Route::post('dummy-entry-assignment', [DummyEntryAssignmentController::class, 'store'])->name('dummy-entry-assignment.store');
+
+        Route::get('financial-summary', [FinancialSummaryController::class, 'index'])->name('financial-summary.index');
+
+        // Only a Super Admin can create a company Admin.
+        Route::post('company-admins', [AdminUserController::class, 'storeCompanyAdmin'])->name('company-admins.store');
+
+        // T-174 — System Maintenance (insert an entry directly under the root).
+        Route::get('maintenance', [MaintenanceController::class, 'index'])->name('maintenance.index');
+        Route::post('maintenance', [MaintenanceController::class, 'store'])->name('maintenance.store');
     });
-
-    // S04 — Daily Dummy Entry Settings.
-    Route::get('dummy-entry-settings', [DummyEntrySettingsController::class, 'index'])->name('dummy-entry-settings.index');
-    Route::post('dummy-entry-settings', [DummyEntrySettingsController::class, 'update'])->name('dummy-entry-settings.update');
-    Route::post('dummy-entry-settings/generate', [DummyEntrySettingsController::class, 'generateNow'])->name('dummy-entry-settings.generate');
-
-    // S05 — Dummy Entry Assignment.
-    Route::get('dummy-entry-assignment', [DummyEntryAssignmentController::class, 'index'])->name('dummy-entry-assignment.index');
-    Route::post('dummy-entry-assignment', [DummyEntryAssignmentController::class, 'store'])->name('dummy-entry-assignment.store');
 
     // S06 — Draw Master Settings + Admin Draw Management.
     Route::get('draw-settings', [DrawSettingsController::class, 'index'])->name('draw-settings.index');
@@ -96,7 +111,6 @@ Route::middleware(['auth', 'role:super_admin'])->prefix('super-admin')->name('su
     // Company Wallet (T-153, DOMAIN_LOGIC.md §12.2(b)).
     Route::get('company-wallet', [CompanyWalletController::class, 'index'])->name('company-wallet.index');
     Route::post('company-wallet/top-up', [CompanyWalletController::class, 'topUp'])->name('company-wallet.top-up');
-    Route::get('financial-summary', [FinancialSummaryController::class, 'index'])->name('financial-summary.index');
 
     // Admin Member Management.
     Route::get('members', [MemberManagementController::class, 'index'])->name('members.index');

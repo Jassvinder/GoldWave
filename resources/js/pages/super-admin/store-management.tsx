@@ -128,7 +128,7 @@ export default function SuperAdminStoreManagement({
                             </div>
                             {data.owner_user_id && (
                                 <div className="grid gap-2 sm:col-span-2">
-                                    <Label>Admin/Store Login Password</Label>
+                                    <Label>Store Admin Login Password</Label>
                                     <div className="flex items-center gap-4">
                                         <Select
                                             value={data.password_mode}

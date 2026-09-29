@@ -88,7 +88,7 @@ test('promoting a member to admin flips their existing user role, no new account
 
     $user = app(CreateAdminUser::class)($member);
 
-    expect($user->role)->toBe('admin');
+    expect($user->role)->toBe('store_admin');
     expect($user->id)->toBe($member->user_id);
     expect($user->fresh()->password)->toBe($originalPasswordHash);
     expect($member->fresh()->status)->toBe('active'); // Member row itself is untouched.
@@ -102,15 +102,15 @@ test('promoting an ineligible member (dummy, inactive, or already admin) is reje
         ->toThrow(ValidationException::class);
 
     $alreadyAdmin = saSettingsMember('SA-ALREADY-ADMIN');
-    $alreadyAdmin->user->update(['role' => 'admin']);
+    $alreadyAdmin->user->update(['role' => 'store_admin']);
 
     expect(fn () => app(CreateAdminUser::class)($alreadyAdmin))
         ->toThrow(ValidationException::class);
 });
 
 test('reassigning a store owner updates ownership, force-resets the password, and logs an activity entry (T-117)', function () {
-    $originalOwner = User::factory()->create(['role' => 'admin']);
-    $newOwner = User::factory()->create(['role' => 'admin']);
+    $originalOwner = User::factory()->create(['role' => 'store_admin']);
+    $newOwner = User::factory()->create(['role' => 'store_admin']);
     $store = app(CreateStore::class)('Reassign Test Store', $originalOwner, null, null, 100000, 0, saSuperAdmin(), 'OriginalPass123!');
 
     app(ReassignStoreOwner::class)($store, $newOwner, saSuperAdmin(), 'BrandNewPass456!');

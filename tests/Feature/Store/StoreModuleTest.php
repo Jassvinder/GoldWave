@@ -424,6 +424,11 @@ test('a bill is generated on request, once, with hallmarking per piece added bef
         ->toThrow(ValidationException::class);
     expect(fn () => app(GenerateStoreSaleBill::class)($sale, $operator, [['huid' => 'A!', 'charge' => 45]]))
         ->toThrow(ValidationException::class);
+    // T-175 — a HUID is 6–8 letters/digits.
+    expect(fn () => app(GenerateStoreSaleBill::class)($sale, $operator, [['huid' => 'AB12C', 'charge' => 45]]))
+        ->toThrow(ValidationException::class);
+    expect(fn () => app(GenerateStoreSaleBill::class)($sale, $operator, [['huid' => 'AB12CD345', 'charge' => 45]]))
+        ->toThrow(ValidationException::class);
 
     $invoice = app(GenerateStoreSaleBill::class)($sale, $operator, [['huid' => 'ab12cd', 'charge' => 45]]);
 

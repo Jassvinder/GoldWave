@@ -48,9 +48,6 @@ type Quote = {
     fixed_weight_grams: number;
     metal_rate_id: number;
     rate_per_gram: number;
-    metal_value: number;
-    making_charge_percent: number;
-    making_charges: number;
     total_value: number;
     paid_installments: number;
     paid_amount: number;
@@ -264,11 +261,6 @@ function BookCurrentRateDialog({ quote }: { quote: Quote }) {
             `${quote.fixed_weight_grams}g ${quote.metal ?? ''}`.trim(),
         ],
         ['Today’s rate', formatRatePer10g(quote.rate_per_gram)],
-        ['Metal value', money(quote.metal_value)],
-        [
-            `Making charges (${quote.making_charge_percent}%)`,
-            money(quote.making_charges),
-        ],
         ['Total value at this rate', money(quote.total_value)],
         [
             `Paid so far (${quote.paid_installments} EMI${quote.paid_installments === 1 ? '' : 's'})`,

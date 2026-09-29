@@ -24,8 +24,6 @@ type Quote = {
     fixed_weight_grams: number;
     metal_rate_id: number;
     rate_per_gram: number;
-    metal_value: number;
-    making_charges: number;
     total_value: number;
     paid_installments: number;
     pending_installments: number;
@@ -193,8 +191,6 @@ function PendingCard({ request }: { request: PendingRequest }) {
                   `${q.fixed_weight_grams} g ${q.metal ?? ''}`.trim(),
               ],
               ["Today's rate", formatRatePer10g(q.rate_per_gram)],
-              ['Metal value', inr(q.metal_value)],
-              ['Making charges', inr(q.making_charges)],
               ['Total value', inr(q.total_value)],
               [
                   'EMIs',

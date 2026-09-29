@@ -123,8 +123,8 @@ class NotificationFeed
 
         $portal = match (true) {
             in_array($first, ['member', 'admin', 'super-admin'], true) => $first,
-            $user->role === 'super_admin' => 'super-admin',
-            $user->role === 'admin' => 'admin',
+            $user->isCompanyStaff() => 'super-admin',
+            $user->isStoreAdmin() => 'admin',
             default => 'member',
         };
 

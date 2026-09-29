@@ -29,10 +29,10 @@ export default function Login({ status, canResetPassword }: Props) {
             <Tabs defaultValue="super-admin">
                 <TabsList className="w-full">
                     <TabsTrigger value="super-admin">
-                        Super Admin Login
+                        Super Admin / Admin Login
                     </TabsTrigger>
                     <TabsTrigger value="admin-store">
-                        Admin / Store Login
+                        Store Admin Login
                     </TabsTrigger>
                 </TabsList>
 
@@ -179,5 +179,5 @@ export default function Login({ status, canResetPassword }: Props) {
 Login.layout = {
     title: 'Log in to your account',
     description:
-        'Super Admin, or Admin / Store Owner — choose the matching tab below',
+        'Super Admin or Admin, or Store Admin — choose the matching tab below',
 };

@@ -19,14 +19,18 @@ use App\Models\MembershipPlan;
 use App\Models\MetalRate;
 use App\Models\PairEntry;
 use App\Models\Payment;
+use App\Models\PayoutRequest;
 use App\Models\RuleValue;
 use App\Models\RuleVersion;
 use App\Models\Store;
 use App\Models\User;
+use App\Notifications\PayoutRequestSubmitted;
 use App\Services\CompanyFinancialSummary;
 use App\Services\CompanyWalletService;
+use App\Services\Notifier;
 use App\Services\RuleVersionService;
 use App\Services\WalletLedgerService;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
@@ -243,6 +247,38 @@ test('Super Admin delivers plan jewellery directly after the last EMI, at the lo
     $this->actingAs(spSuperAdmin())->post('/super-admin/company-deliveries', $payload)->assertSessionHasErrors('customer_id');
 });
 
+test('four roles: a company Admin gets every company page except the Super-Admin-only ones, and the company alerts (T-173)', function () {
+    // Only a Super Admin can create a company Admin.
+    $this->actingAs(spSuperAdmin())
+        ->post('/super-admin/company-admins', ['name' => 'Ops Admin', 'email' => 'ops@goldwave.test', 'mobile' => '9876500001', 'password' => 'secret-pass-1'])
+        ->assertRedirect('/super-admin/admin-users');
+    $admin = User::where('email', 'ops@goldwave.test')->firstOrFail();
+    expect($admin->role)->toBe('admin');
+
+    $this->actingAs($admin)
+        ->post('/super-admin/company-admins', ['name' => 'X', 'email' => 'x@goldwave.test', 'password' => 'secret-pass-2'])
+        ->assertForbidden();
+
+    // Shared company pages, including the company dashboard.
+    foreach (['/super-admin/members', '/super-admin/payout-requests', '/super-admin/store-management', '/super-admin/metal-rates', '/super-admin/admin-users'] as $url) {
+        $this->actingAs($admin)->get($url)->assertOk();
+    }
+    $this->actingAs($admin)->get('/dashboard')->assertInertia(fn ($page) => $page->component('super-admin/dashboard'));
+
+    // Super-Admin-only pages.
+    foreach (['/super-admin/financial-summary', '/super-admin/rule-versions', '/super-admin/dummy-entry-settings', '/super-admin/dummy-entry-assignment'] as $url) {
+        $this->actingAs($admin)->get($url)->assertForbidden();
+    }
+
+    // Company alerts reach the Admin too.
+    Notifier::toSuperAdmins(new PayoutRequestSubmitted(Model::unguarded(fn () => new PayoutRequest(['requested_amount' => 100]))->setRelation('member', spMember('SP-T173'))));
+    expect($admin->notifications()->count())->toBe(1);
+
+    // A Store Admin (Store Owner) never reaches the company portal.
+    $storeAdmin = User::factory()->create(['role' => 'store_admin']);
+    $this->actingAs($storeAdmin)->get('/super-admin/members')->assertForbidden();
+});
+
 test('a super admin can find and promote an existing member to admin (S02)', function () {
     $member = spMember('SP-PROMOTE');
 
@@ -255,7 +291,7 @@ test('a super admin can find and promote an existing member to admin (S02)', fun
         ->post('/super-admin/admin-users', ['customer_id' => 'SP-PROMOTE'])
         ->assertRedirect('/super-admin/admin-users');
 
-    expect($member->user->fresh()->role)->toBe('admin');
+    expect($member->user->fresh()->role)->toBe('store_admin');
 });
 
 test('promoting a dummy or already-admin customer ID is rejected (S02)', function () {
@@ -494,7 +530,7 @@ test('a super admin can update payout and TDS settings (S08)', function () {
 });
 
 test('a super admin can create a store, reassign its owner, and change its status (S09)', function () {
-    $owner = User::factory()->create(['role' => 'admin']);
+    $owner = User::factory()->create(['role' => 'store_admin']);
 
     $this->actingAs(spSuperAdmin())
         ->post('/super-admin/store-management', [
@@ -512,7 +548,7 @@ test('a super admin can create a store, reassign its owner, and change its statu
     expect($store->store_code)->not->toBeNull();
     expect(Hash::check('InitialPass123!', $store->password))->toBeTrue();
 
-    $newOwner = User::factory()->create(['role' => 'admin']);
+    $newOwner = User::factory()->create(['role' => 'store_admin']);
 
     $this->actingAs(spSuperAdmin())
         ->post("/super-admin/store-management/{$store->id}/reassign-owner", [
@@ -543,7 +579,7 @@ test('a super admin can create a store, reassign its owner, and change its statu
 });
 
 test('a super admin can allocate item-wise jewellery inventory to a store, and re-adding the same item increases its quantity (§16.5)', function () {
-    $owner = User::factory()->create(['role' => 'admin']);
+    $owner = User::factory()->create(['role' => 'store_admin']);
     $store = app(CreateStore::class)('Inventory Test Store', $owner, null, null, 100000, 20000, spSuperAdmin(), 'InitialPass123!');
     $url = "/super-admin/store-management/{$store->id}/inventory";
 
@@ -597,9 +633,9 @@ test('a super admin can allocate item-wise jewellery inventory to a store, and r
 });
 
 test('reassigning a store owner requires the Super Admin\'s own password and auto-generates the new Store password (T-133)', function () {
-    $owner = User::factory()->create(['role' => 'admin']);
+    $owner = User::factory()->create(['role' => 'store_admin']);
     $store = app(CreateStore::class)('T133 Store', $owner, null, null, 100000, 20000, spSuperAdmin(), 'InitialPass123!');
-    $newOwner = User::factory()->create(['role' => 'admin']);
+    $newOwner = User::factory()->create(['role' => 'store_admin']);
     $url = "/super-admin/store-management/{$store->id}/reassign-owner";
 
     $this->actingAs(spSuperAdmin())
@@ -792,7 +828,7 @@ test('re-submitting a member\'s unchanged bank details does not reset an already
 });
 
 test('a super admin can edit an admin user\'s own details (T-106)', function () {
-    $admin = User::factory()->create(['role' => 'admin', 'email' => 'oldadminemail@goldwave.test']);
+    $admin = User::factory()->create(['role' => 'store_admin', 'email' => 'oldadminemail@goldwave.test']);
 
     $this->actingAs(spSuperAdmin())
         ->patch("/super-admin/admin-users/{$admin->id}", [

@@ -27,6 +27,8 @@ return new class extends Migration
             $table->decimal('amount', 14, 2);
             $table->unsignedSmallInteger('installment_count')->nullable(); // null = one-time plan
             $table->enum('product_category', ['silver', 'gold'])->nullable();
+            // The jewellery weight an EMI plan (A–D) owes once booked at the Current Rate (§3.0).
+            $table->decimal('fixed_weight_grams', 8, 3)->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });

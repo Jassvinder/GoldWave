@@ -77,7 +77,9 @@ class ExecuteMonthlyDraw
             $uplineBenefitMemberId = null;
             $sponsor = $winner->sponsor;
 
-            if ($sponsor && $sponsor->directs()->count() >= 10) {
+            // The company root / an unassigned dummy never receives it (it is never a beneficiary), and since T-174 nor
+            // does an entry inserted under the root (Pair/Reward and Booster only).
+            if ($sponsor && ! $sponsor->isExcludedFromGeneralIncome() && $sponsor->directs()->count() >= 10) {
                 $uplineBenefitMemberId = $sponsor->id;
             }
 

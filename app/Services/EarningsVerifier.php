@@ -262,10 +262,12 @@ class EarningsVerifier
         // T-149 — an unassigned dummy (or the seeded company root) never becomes a paid beneficiary; this is a
         // structural fact of who they are, never a "changed since" situation, so — unlike upline_inactive — it is
         // never a warning.
-        $isDummy = (bool) $beneficiary->is_company_dummy && $beneficiary->dummy_status !== 'assigned';
+        // T-174 — an entry inserted under the root (`benefits_limited`) is excluded the same way.
+        $isDummy = ((bool) $beneficiary->is_company_dummy && $beneficiary->dummy_status !== 'assigned')
+            || (bool) ($beneficiary->benefits_limited ?? false);
 
         if ($row->eligibility_status === 'skipped') {
-            if ($isDummy && $row->skip_reason === 'upline_dummy') {
+            if ($isDummy && in_array($row->skip_reason, ['upline_dummy', 'benefits_limited'], true)) {
                 return;
             }
 
@@ -285,7 +287,7 @@ class EarningsVerifier
         }
 
         if ($isDummy) {
-            $this->error($check, "{$beneficiary->customer_id} is an unassigned dummy entry (or the company root) and must never be a paid beneficiary, but ₹{$row->amount} was paid to them.", $ref);
+            $this->error($check, "{$beneficiary->customer_id} is an unassigned dummy entry, the company root or a root-inserted entry and must never be a paid beneficiary of this income, but ₹{$row->amount} was paid to them.", $ref);
 
             return;
         }
@@ -344,7 +346,7 @@ class EarningsVerifier
             // T-149 — an unassigned dummy (or the company root) ancestor is skipped by the Action, never credited.
             $level = 1;
             foreach ($chain as $sponsor) {
-                if ($sponsor->is_company_dummy && $sponsor->dummy_status !== 'assigned') {
+                if (($sponsor->is_company_dummy && $sponsor->dummy_status !== 'assigned') || ($sponsor->benefits_limited ?? false)) {
                     $level++;
 
                     continue;
@@ -413,6 +415,11 @@ class EarningsVerifier
                     continue;
                 }
 
+                // T-174 — an entry inserted under the root after this joining was not its ancestor at the time.
+                if ($this->createdAfter($ancestor, $payment->paid_at ?? $payment->created_at)) {
+                    continue;
+                }
+
                 $expected[] = $ancestor->id.':'.$side;
             }
 
@@ -461,7 +468,7 @@ class EarningsVerifier
 
             if ($this->isPairEligible($member)) {
                 $this->tick('pair');
-                $realAncestors = collect($this->placementChain($member->id))->filter(fn ($l) => ! ($l[0]->is_company_dummy && $l[0]->dummy_status !== 'assigned'));
+                $realAncestors = collect($this->placementChain($member->id))->filter(fn ($l) => ! ($l[0]->is_company_dummy && $l[0]->dummy_status !== 'assigned') && ! $this->createdAfter($l[0], $member->created_at));
 
                 if ($realAncestors->isNotEmpty()) {
                     $this->error('pair', 'Eligible for pair entries (paid enough) but none were created.', $this->memberRef($member->id));
@@ -677,6 +684,19 @@ class EarningsVerifier
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /**
+     * T-174 — normally every Binary Position ancestor is older than its descendants; only an entry inserted directly
+     * under the root (System Maintenance) sits above members that joined before it.
+     */
+    private function createdAfter(stdClass $ancestor, ?string $moment): bool
+    {
+        if ($moment === null || $ancestor->created_at === null) {
+            return false;
+        }
+
+        return strtotime((string) $ancestor->created_at) > strtotime($moment);
+    }
 
     /** @return list<stdClass> Sponsor/Direct ancestors, level 1 first. */
     private function sponsorChain(int $memberId, int $max): array

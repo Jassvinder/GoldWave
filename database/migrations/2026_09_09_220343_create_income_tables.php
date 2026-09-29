@@ -33,7 +33,8 @@ return new class extends Migration
             $table->enum('type', ['level_income', 'purchase_repurchase']);
             $table->foreignId('source_payment_id')->nullable()->constrained('payments');
             $table->unsignedBigInteger('source_store_sale_id')->nullable();
-            $table->foreignId('beneficiary_member_id')->constrained('members');
+            // Nullable: a skipped level with no upline has no beneficiary.
+            $table->foreignId('beneficiary_member_id')->nullable()->constrained('members');
             $table->unsignedTinyInteger('level_no')->nullable(); // 1-12
             $table->decimal('rate_percent', 6, 3);
             $table->decimal('amount', 14, 2);
@@ -44,18 +45,23 @@ return new class extends Migration
 
             $table->index(['beneficiary_member_id', 'type']);
             $table->index('source_store_sale_id');
+            // Level Income idempotency: one row per payment per level.
+            $table->unique(['source_payment_id', 'level_no'], 'income_ledger_calculations_payment_level_unique');
         });
 
         Schema::create('pair_entries', function (Blueprint $table) {
             $table->id();
             $table->foreignId('member_id')->constrained('members')->cascadeOnDelete();
             $table->enum('side', ['left', 'right']);
+            // T-110 — the joining's plan metal; a milestone values each consumed entry by it.
+            $table->enum('metal', ['gold', 'silver'])->nullable();
             $table->foreignId('source_payment_id')->constrained('payments');
             $table->enum('status', ['unused', 'consumed'])->default('unused');
             $table->unsignedInteger('consumed_for_milestone_no')->nullable();
             $table->timestamps();
 
             $table->index(['member_id', 'side', 'status']);
+            $table->unique(['source_payment_id', 'member_id'], 'pair_entries_payment_member_unique');
         });
 
         Schema::create('pair_reward_transactions', function (Blueprint $table) {

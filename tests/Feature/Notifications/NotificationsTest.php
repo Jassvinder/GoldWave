@@ -304,7 +304,7 @@ test('a notification can be marked read on its own, and each portal renders its 
 
     $this->actingAs($member->user)->get('/member/notifications')->assertInertia(fn ($page) => $page->component('member/notifications'));
 
-    $owner = User::factory()->create(['role' => 'admin']);
+    $owner = User::factory()->create(['role' => 'store_admin']);
     app(CreateStore::class)('Notif Store', $owner, null, null, 100000, 20000, ntfSuperAdmin(), 'StorePass123!');
     $this->actingAs($owner)->get('/admin/notifications')->assertInertia(fn ($page) => $page->component('admin/notifications'));
 });
@@ -316,7 +316,7 @@ test('the Notifications page never overwrites the shared header-bell prop, in al
     $member = ntfMember('NTF20');
     $this->actingAs($member->user)->post('/member/emi/'.ntfInstallment($member, 2)->id.'/pay', ['mode' => 'cash']);
 
-    $owner = User::factory()->create(['role' => 'admin']);
+    $owner = User::factory()->create(['role' => 'store_admin']);
     app(CreateStore::class)('Notif Store 2', $owner, null, null, 100000, 20000, ntfSuperAdmin(), 'StorePass123!');
 
     $assertBellIntact = function ($page) {

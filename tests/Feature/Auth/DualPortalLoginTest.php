@@ -14,7 +14,7 @@ use Tests\Fakes\RecordingOtpChannel;
  */
 function dualOwner(string $customerId = 'DUAL-1', string $storePassword = 'StorePass123!'): array
 {
-    $owner = User::factory()->create(['role' => 'admin', 'password' => $customerId, 'mobile' => '9876500777']);
+    $owner = User::factory()->create(['role' => 'store_admin', 'password' => $customerId, 'mobile' => '9876500777']);
     $member = Member::create([
         'user_id' => $owner->id,
         'customer_id' => $customerId,
@@ -96,7 +96,7 @@ test('plain members, admins without a member row, and Super Admin are unaffected
     $this->actingAs($memberUser)->get('/member/profile')->assertOk();
     $this->actingAs($memberUser)->get('/admin/sales')->assertForbidden();
 
-    $storeOnly = User::factory()->create(['role' => 'admin']);
+    $storeOnly = User::factory()->create(['role' => 'store_admin']);
     app(CreateStore::class)('Store Only', $storeOnly, null, null, 0, 0, User::factory()->create(['role' => 'super_admin']), 'StorePass123!');
     $this->actingAs($storeOnly)->withSession(['goldwave_portal' => 'member'])->get('/member/profile')->assertForbidden();
 

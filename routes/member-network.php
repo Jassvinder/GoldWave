@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Route;
  * the `{member?}` routes so the literal path segment "search" is never
  * swallowed by the optional model-binding parameter.
  */
-Route::middleware(['auth', 'member-portal:super_admin'])->prefix('member')->name('member.')->group(function () {
+Route::middleware(['auth', 'member-portal:super_admin,admin'])->prefix('member')->name('member.')->group(function () {
     Route::get('directs/search', [DirectsController::class, 'search'])->name('directs.search');
     Route::get('directs/{member?}', [DirectsController::class, 'show'])->name('directs.show');
 

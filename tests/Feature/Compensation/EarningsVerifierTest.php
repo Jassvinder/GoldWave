@@ -191,7 +191,7 @@ test('a Pair reward that does not match its milestone, its consumed entries or i
 
 test('Purchase/Repurchase and Store Profit distributions are re-derived and a changed amount is caught', function () {
     [$a, $b, $c] = evChain();
-    $ownerUser = User::factory()->create(['role' => 'admin']);
+    $ownerUser = User::factory()->create(['role' => 'store_admin']);
     $ownerMember = Member::create(['user_id' => $ownerUser->id, 'customer_id' => 'GWLOWN', 'sponsor_id' => $c->id, 'gender' => 'male', 'status' => 'active', 'activated_at' => now()]);
     $store = app(CreateStore::class)('Verify Store', $ownerUser, null, null, 500000, 200000, evSuperAdmin(), 'StorePass123!');
     expect($store)->toBeInstanceOf(Store::class);

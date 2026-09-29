@@ -371,7 +371,7 @@ class DemoSeedNetwork extends Command
         ]);
         $approveCash($ownerMember->payments()->where('type', 'registration')->firstOrFail(), $operator);
         $admin = $ownerMember->user;
-        $admin->update(['role' => 'admin']);
+        $admin->update(['role' => 'store_admin']);
 
         $store = app(CreateStore::class)($name, $admin, $contact, $location, $allocation, $advance, $operator);
 

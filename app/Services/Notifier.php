@@ -31,8 +31,9 @@ class Notifier
         }
     }
 
+    /** Every company-side user — Super Admins and (since 29-09-2026) Admins — gets the company alerts. */
     public static function toSuperAdmins(AppNotification $notification): void
     {
-        User::where('role', 'super_admin')->get()->each(fn (User $admin) => self::toUser($admin, $notification));
+        User::whereIn('role', ['super_admin', 'admin'])->get()->each(fn (User $admin) => self::toUser($admin, $notification));
     }
 }

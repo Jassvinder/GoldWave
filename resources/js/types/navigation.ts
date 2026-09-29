@@ -11,6 +11,8 @@ export type NavItem = {
     href: NonNullable<InertiaLinkProps['href']>;
     icon?: LucideIcon | null;
     isActive?: boolean;
+    /** Company portal only (29-09-2026): hidden from the company Admin role. */
+    superAdminOnly?: boolean;
 };
 
 export type NavGroup = {

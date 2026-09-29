@@ -53,6 +53,7 @@ class Member extends Model
         'dummy_assigned_at',
         'dummy_assigned_by',
         'is_company_root',
+        'benefits_limited',
         'placeholder_name',
         'gender',
         'pan_card',
@@ -73,6 +74,7 @@ class Member extends Model
             'pending_fields_submitted_at' => 'datetime',
             'is_company_dummy' => 'boolean',
             'is_company_root' => 'boolean',
+            'benefits_limited' => 'boolean',
             'wallet_balance' => 'decimal:2',
             'wallet_hold_amount' => 'decimal:2',
         ];
@@ -82,6 +84,22 @@ class Member extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Never a paid beneficiary of Level Income, Purchase/Repurchase income, Store Profit or the Monthly Draw: an
+     * unassigned company dummy (or the root), or an entry inserted under the root (T-174, `benefits_limited` — it
+     * keeps Pair/Reward and Income Booster only).
+     */
+    public function isExcludedFromGeneralIncome(): bool
+    {
+        return ($this->is_company_dummy && $this->dummy_status !== 'assigned') || $this->benefits_limited;
+    }
+
+    /** The skip reason recorded when such a member is passed over (T-174). */
+    public function generalIncomeSkipReason(): string
+    {
+        return $this->benefits_limited ? 'benefits_limited' : 'upline_dummy';
     }
 
     /**

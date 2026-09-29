@@ -32,8 +32,8 @@ class RecordHallmarks
         foreach ($pieces as $i => $piece) {
             $huid = strtoupper(trim((string) $piece['huid']));
 
-            if (! preg_match('/^[A-Z0-9]{4,16}$/', $huid)) {
-                throw ValidationException::withMessages(["hallmarks.{$i}.huid" => 'A HUID is 4–16 letters or digits.']);
+            if (! preg_match('/^[A-Z0-9]{6,8}$/', $huid)) {
+                throw ValidationException::withMessages(["hallmarks.{$i}.huid" => 'A HUID is 6–8 letters or digits.']);
             }
 
             if (in_array($huid, $huids, true)) {
