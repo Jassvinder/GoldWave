@@ -216,11 +216,12 @@ test('Purchase/Repurchase Upline Income pays self 2% and the full 12-level Spons
     expect($rows)->toHaveCount(13); // self (level_no null) + 12 levels.
     expect((float) $payer->fresh()->wallet_balance)->toBe(200.0); // 2% self.
 
-    $expected = [1 => 100.0, 2 => 50.0, 3 => 50.0, 4 => 50.0, 5 => 50.0, 6 => 50.0, 7 => 25.0, 8 => 25.0, 9 => 25.0, 10 => 25.0, 11 => 25.0, 12 => 25.0];
+    // Gold rates since 29-09-2026: Levels 1-2 1%, 3-6 0.5%, 7-12 0.25%.
+    $expected = [1 => 100.0, 2 => 100.0, 3 => 50.0, 4 => 50.0, 5 => 50.0, 6 => 50.0, 7 => 25.0, 8 => 25.0, 9 => 25.0, 10 => 25.0, 11 => 25.0, 12 => 25.0];
     foreach ($chain as $index => $beneficiary) {
         expect((float) $beneficiary->fresh()->wallet_balance)->toBe($expected[$index + 1]);
     }
-    expect((float) $rows->sum('amount'))->toBe(700.0); // 7% of ₹10,000: 2% self + 5% upline.
+    expect((float) $rows->sum('amount'))->toBe(750.0); // 7.5% of ₹10,000: 2% self + 5.5% upline.
 
     // Idempotent.
     app(CalculatePurchaseRepurchaseIncome::class)($sale);
@@ -327,11 +328,11 @@ test('a walk-in sale pays the whole Purchase/Repurchase percentage to the Store 
     expect($rows)->toHaveCount(1);
     expect($rows->first()->beneficiary_member_id)->toBe($result['owner']->id)
         ->and($rows->first()->level_no)->toBeNull()
-        ->and((float) $rows->first()->rate_percent)->toBe(7.0)   // 2 + 1 + 5×0.5 + 6×0.25
-        ->and((float) $rows->first()->amount)->toBe(3500.0);
+        ->and((float) $rows->first()->rate_percent)->toBe(7.5)   // gold: 2 + 1 + 1 + 4×0.5 + 6×0.25
+        ->and((float) $rows->first()->amount)->toBe(3750.0);
 
     // Only the owner — none of the owner's sponsors — gets it, and the wallet line says it came from the store.
-    expect((float) $result['owner']->fresh()->wallet_balance)->toBe(3500.0);
+    expect((float) $result['owner']->fresh()->wallet_balance)->toBe(3750.0);
     expect((float) $result['chain'][0]->fresh()->wallet_balance)->toBe(0.0);
     expect($result['owner']->walletLedgerEntries()->latest('id')->value('description'))
         ->toBe("Walk-in store sale income — WALKIN7 Store sale #{$sale->id}");

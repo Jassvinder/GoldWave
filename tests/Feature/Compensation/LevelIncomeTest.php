@@ -89,7 +89,8 @@ test('a confirmed ₹5,000 payment distributes exactly the TEST.md scenario-1 am
     expect($rows->every(fn ($r) => $r->eligibility_status === 'paid'))->toBeTrue();
 
     $expected = [
-        1 => 250.0, 2 => 100.0, 3 => 100.0,
+        // Level 3 is 1% since 29-09-2026 (seeded defaults = Super Admin's rule version 5).
+        1 => 250.0, 2 => 100.0, 3 => 50.0,
         4 => 50.0, 5 => 50.0, 6 => 50.0, 7 => 50.0, 8 => 50.0,
         9 => 25.0, 10 => 25.0, 11 => 25.0, 12 => 25.0,
     ];
@@ -99,7 +100,7 @@ test('a confirmed ₹5,000 payment distributes exactly the TEST.md scenario-1 am
         expect($row->beneficiary_member_id)->toBe($chain[$row->level_no - 1]->id);
     }
 
-    expect((float) $rows->sum('amount'))->toBe(800.0);
+    expect((float) $rows->sum('amount'))->toBe(750.0);
 
     // Each beneficiary's wallet was credited exactly their row's amount.
     foreach ($chain as $index => $beneficiary) {

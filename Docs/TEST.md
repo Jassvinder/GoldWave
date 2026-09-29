@@ -48,7 +48,7 @@ These are the concrete numeric acceptance tests every compensation Action (`Docs
 
 ### 1. Level Income — full 12-level chain
 
-**Given** a Sponsor/Direct chain A→B→C→D→E→F→G→H→I→J→K→L (A is the paying member's direct Sponsor, L is 12 levels up) and the active rule version's `level_income_rates` = `{1:5, 2:2, 3:2, 4-8:1, 9-12:0.5}` (percent).
+**Given** a Sponsor/Direct chain A→B→C→D→E→F→G→H→I→J→K→L (A is the paying member's direct Sponsor, L is 12 levels up) and the active rule version's `level_income_rates` = `{1:5, 2:2, 3:1, 4-8:1, 9-12:0.5}` (percent; Level 3 is 1% since 29-09-2026, it was 2%).
 **When** the paying member makes a confirmed ₹5,000 payment (one-time or EMI installment — same formula either way).
 **Then** exactly 12 `income_ledger_calculations` rows (type=`level_income`) are created:
 
@@ -56,11 +56,11 @@ These are the concrete numeric acceptance tests every compensation Action (`Docs
 | ----- | ------------- | --------- | -------- |
 | 1     | A             | 5%        | ₹250     |
 | 2     | B             | 2%        | ₹100     |
-| 3     | C             | 2%        | ₹100     |
+| 3     | C             | 1%        | ₹50      |
 | 4–8   | D, E, F, G, H | 1% each   | ₹50 each |
 | 9–12  | I, J, K, L    | 0.5% each | ₹25 each |
 
-Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shorter than 12 (e.g. only 5 sponsors exist above the payer), levels 6–12 get an `eligibility_status = skipped` row with a reason, not a silently missing row (`skip_reason = chain_too_short`, `beneficiary_member_id = null` — resolved 13-09-2026, `DOMAIN_LOGIC.md` §21, since no member exists at that level to attach). **Edge case:** if a resolved beneficiary's own `members.status` is anything other than `active` (e.g. `cancelled`), that level is likewise `skipped` with `skip_reason = upline_inactive`, `beneficiary_member_id` still recorded (unlike the chain-too-short case) — reuses the same Active/not-Active definition already settled for sponsor-inactive-at-registration, not a new rule (resolved 13-09-2026, `DOMAIN_LOGIC.md` §21).
+Total distributed: ₹750 (15% of ₹5,000). **Edge case:** if the chain is shorter than 12 (e.g. only 5 sponsors exist above the payer), levels 6–12 get an `eligibility_status = skipped` row with a reason, not a silently missing row (`skip_reason = chain_too_short`, `beneficiary_member_id = null` — resolved 13-09-2026, `DOMAIN_LOGIC.md` §21, since no member exists at that level to attach). **Edge case:** if a resolved beneficiary's own `members.status` is anything other than `active` (e.g. `cancelled`), that level is likewise `skipped` with `skip_reason = upline_inactive`, `beneficiary_member_id` still recorded (unlike the chain-too-short case) — reuses the same Active/not-Active definition already settled for sponsor-inactive-at-registration, not a new rule (resolved 13-09-2026, `DOMAIN_LOGIC.md` §21).
 
 ### 2. Pair/Reward — incremental consumption crossing a milestone, with carry-forward
 
@@ -86,9 +86,9 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 
 ### 4. Purchase/Repurchase Upline Income — full chain with the duplicate-beneficiary guard
 
-**Given** member P's Sponsor chain is A(L1, direct sponsor)→B(L2)→C(L3)→D(L4)→E(L5)→F(L6)→G(L7)→H(L8)→I(L9)→J(L10)→K(L11)→L(L12), and rates are self 2%, direct Sponsor 1%, L2–6 0.5% each, L7–12 0.25% each.
+**Given** member P's Sponsor chain is A(L1, direct sponsor)→B(L2)→C(L3)→D(L4)→E(L5)→F(L6)→G(L7)→H(L8)→I(L9)→J(L10)→K(L11)→L(L12), and the sale is **gold** at the Gold defaults since 29-09-2026: self 2%, L1 1%, L2 1%, L3–6 0.5% each, L7–12 0.25% each.
 **When** P makes a confirmed ₹10,000 store purchase.
-**Then**: P receives ₹200 (2%); A receives ₹100 (1%, as direct Sponsor — not the 0.5% a plain "Level 2" rate would imply); B–F receive ₹50 each (0.5%); G–L receive ₹25 each (0.25%). Total distributed: ₹700 (7% of the sale — 2% self + 5% upline). **Regression to test:** because a Sponsor/Direct chain is a strict ancestor path (see the clarification in `DOMAIN_LOGIC.md` §15/§21), no member can structurally appear twice in this list — the duplicate-beneficiary guard should never actually trigger in a correct chain walk; write a test asserting it stays inert (12 distinct beneficiaries, no member repeated) rather than trying to force a duplicate that shouldn't be reachable.
+**Then**: P receives ₹200 (2%); A receives ₹100 (1%); B receives ₹100 (1%); C–F receive ₹50 each (0.5%); G–L receive ₹25 each (0.25%). Total distributed: ₹750 (7.5% of the sale — 2% self + 5.5% upline). A **silver** sale of ₹10,000 at the Silver defaults (5% / 2% / 1% × 5 / 0.5% × 6) would pay P ₹500, A ₹200, B–F ₹100 each and G–L ₹50 each: ₹1,500 in total (15%). **Regression to test:** because a Sponsor/Direct chain is a strict ancestor path (see the clarification in `DOMAIN_LOGIC.md` §15/§21), no member can structurally appear twice in this list — the duplicate-beneficiary guard should never actually trigger in a correct chain walk; write a test asserting it stays inert (12 distinct beneficiaries, no member repeated) rather than trying to force a duplicate that shouldn't be reachable.
 
 ### 5. Store Profit Distribution — owner + 3 levels (RESOLVED 12-09-2026: co-application with scenario 4 confirmed)
 
@@ -97,7 +97,7 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 **Then** 4 `store_profit_distributions` rows: Store Owner ₹1,000, L1 ₹250, L2 ₹125, L3 ₹125 — total ₹1,500 (3% of the sale).
 **When**, additionally, this same sale is a **member's own jewellery purchase** (scenario 2 of the 3 resolved store-sale scenarios, `DOMAIN_LOGIC.md` §16.4) rather than a walk-in/non-member sale.
 **Then** scenario 4's Purchase/Repurchase Upline Income (2% self / 1% direct Sponsor / 0.5% L2–6 / 0.25% L7–12) **also fires on this same transaction**, in addition to the 4 Store Profit Distribution rows above — the two ledgers are independent and both are created; this is no longer blocked on client confirmation (`DOMAIN_LOGIC.md` §21). **Regression to test:** a walk-in/non-member sale (no purchasing member) creates only the 4 `store_profit_distributions` rows and zero `income_ledger_calculations` rows — assert both shapes, not just the combined case.
-**SUPERSEDED 28-09-2026 (T-170, user decision):** a walk-in sale now also creates **one** `income_ledger_calculations` row (`purchase_repurchase`, `level_no` null). It pays the **Store Owner** the whole Purchase/Repurchase percentage that a member purchaser's chain would have shared: self + L1…L12 of that metal's rates (7% with the default rates), on the sale's income base. For the ₹50,000 sale above, the Store Owner therefore gets ₹1,000 (Store Profit) + **₹3,500** (walk-in income) in their member wallet. The wallet line reads "Walk-in store sale income — <store> sale #N" so the history shows it came from the store. A store whose owner is not a network member gets no walk-in income row (same as Store Profit). A member purchase is unchanged (scenario 4).
+**SUPERSEDED 28-09-2026 (T-170, user decision):** a walk-in sale now also creates **one** `income_ledger_calculations` row (`purchase_repurchase`, `level_no` null). It pays the **Store Owner** the whole Purchase/Repurchase percentage that a member purchaser's chain would have shared: self + L1…L12 of that metal's rates (Gold 7.5% / Silver 15% with the 29-09-2026 defaults), on the sale's income base. For the ₹50,000 gold sale above, the Store Owner therefore gets ₹1,000 (Store Profit) + **₹3,750** (walk-in income) in their member wallet. The wallet line reads "Walk-in store sale income — <store> sale #N" so the history shows it came from the store. A store whose owner is not a network member gets no walk-in income row (same as Store Profit). A member purchase is unchanged (scenario 4).
 
 ### 6. Monthly Draw — grouping, execution, upline benefit threshold
 

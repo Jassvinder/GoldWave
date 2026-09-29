@@ -53,11 +53,21 @@ class RuleVersionSeeder extends Seeder
         // DOMAIN_LOGIC.md §6 — Level Income rates per Sponsor/Direct level
         // (1-12). Stored as a flat level=>percent map (not "4-8"/"9-12"
         // range keys) so CalculateLevelIncome (T-006) can look up each level
-        // directly without parsing a range string.
+        // directly without parsing a range string. Level 3 is 1% since
+        // 29-09-2026 (Super Admin's rule version 5, user request).
         $this->seedValue($version, 'level_income_rates', [
-            '1' => 5, '2' => 2, '3' => 2,
-            '4' => 1, '5' => 1, '6' => 1, '7' => 1, '8' => 1,
-            '9' => 0.5, '10' => 0.5, '11' => 0.5, '12' => 0.5,
+            '1' => 5,
+            '2' => 2,
+            '3' => 1,
+            '4' => 1,
+            '5' => 1,
+            '6' => 1,
+            '7' => 1,
+            '8' => 1,
+            '9' => 0.5,
+            '10' => 0.5,
+            '11' => 0.5,
+            '12' => 0.5,
         ]);
 
         // T-110 (19-09-2026) — user-requested Gold/Silver split for every
@@ -67,9 +77,18 @@ class RuleVersionSeeder extends Seeder
         // starting point — Super Admin tunes them apart via the new "Gold"
         // tab on Rule Versions once real numbers are decided.
         $this->seedValue($version, 'level_income_rates_gold', [
-            '1' => 5, '2' => 2, '3' => 2,
-            '4' => 1, '5' => 1, '6' => 1, '7' => 1, '8' => 1,
-            '9' => 0.5, '10' => 0.5, '11' => 0.5, '12' => 0.5,
+            '1' => 2,
+            '2' => 1,
+            '3' => 1,
+            '4' => 1,
+            '5' => 1,
+            '6' => 1,
+            '7' => 1,
+            '8' => 1,
+            '9' => 0.5,
+            '10' => 0.5,
+            '11' => 0.5,
+            '12' => 0.5,
         ]);
 
         // DOMAIN_LOGIC.md §7.3 — minimum completed EMIs before an EMI-plan
@@ -160,24 +179,41 @@ class RuleVersionSeeder extends Seeder
         // Super Admin can change it any time on the Dummy Entry Settings page (S04).
         $this->seedValue($version, 'dummy_entry_plan_code', 'A');
 
-        // DOMAIN_LOGIC.md §15 — Purchase/Repurchase Upline Income: self 2%,
-        // direct Sponsor (Level 1) 1%, Levels 2-6 0.5% each, Levels 7-12
-        // 0.25% each. Level 1 is deliberately 1%, not the 0.5% a plain
-        // "Level 2" rate might imply — the direct Sponsor's rate is its own
-        // distinct tier (§15's duplicate-beneficiary rule).
+        // DOMAIN_LOGIC.md §15 — Purchase/Repurchase Upline Income. The direct Sponsor's (Level 1) rate is its own
+        // tier (§15's duplicate-beneficiary rule). Defaults since 29-09-2026 = Super Admin's rule version 5 (user
+        // request): Silver self 5%, Level 1 2%, Levels 2-6 1%, Levels 7-12 0.5%.
         $this->seedValue($version, 'purchase_repurchase_income_rates', [
-            'self' => 2,
-            '1' => 1,
-            '2' => 0.5, '3' => 0.5, '4' => 0.5, '5' => 0.5, '6' => 0.5,
-            '7' => 0.25, '8' => 0.25, '9' => 0.25, '10' => 0.25, '11' => 0.25, '12' => 0.25,
+            'self' => 5,
+            '1' => 2,
+            '2' => 1,
+            '3' => 1,
+            '4' => 1,
+            '5' => 1,
+            '6' => 1,
+            '7' => 0.5,
+            '8' => 0.5,
+            '9' => 0.5,
+            '10' => 0.5,
+            '11' => 0.5,
+            '12' => 0.5,
         ]);
 
-        // T-110 (19-09-2026) — Gold rate, same shape as Silver above.
+        // T-110 (19-09-2026) — Gold rate, same shape as Silver above. Since 29-09-2026: self 2%, Levels 1-2 1%,
+        // Levels 3-6 0.5%, Levels 7-12 0.25%.
         $this->seedValue($version, 'purchase_repurchase_income_rates_gold', [
             'self' => 2,
             '1' => 1,
-            '2' => 0.5, '3' => 0.5, '4' => 0.5, '5' => 0.5, '6' => 0.5,
-            '7' => 0.25, '8' => 0.25, '9' => 0.25, '10' => 0.25, '11' => 0.25, '12' => 0.25,
+            '2' => 1,
+            '3' => 0.5,
+            '4' => 0.5,
+            '5' => 0.5,
+            '6' => 0.5,
+            '7' => 0.25,
+            '8' => 0.25,
+            '9' => 0.25,
+            '10' => 0.25,
+            '11' => 0.25,
+            '12' => 0.25,
         ]);
 
         // DOMAIN_LOGIC.md §16.4 — Store Profit Distribution: Owner 2%,

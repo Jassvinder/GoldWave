@@ -214,9 +214,11 @@ All benefits are **jewellery items, not solid/bullion metal**. Plans E and F are
 | ----- | --------- |
 | 1     | 5%        |
 | 2     | 2%        |
-| 3     | 2%        |
+| 3     | 1%        |
 | 4–8   | 1% each   |
 | 9–12  | 0.5% each |
+
+**Defaults changed 29-09-2026 (user, Super Admin rule version 5; now the seeded defaults in `RuleVersionSeeder`):** Level 3 is **1%** (was 2%), for Silver and Gold alike. The rates stay Super-Admin-editable per metal on Rule Versions.
 
 **Level Income Chain Rule:** Levels 1–12 always follow the Sponsor/Direct chain. Level 1 = the member's direct Sponsor, Level 2 = that Sponsor's Sponsor, and so on up to Level 12. Binary Position/placement and its upline chain are never used for Level Income.
 
@@ -234,7 +236,7 @@ All benefits are **jewellery items, not solid/bullion metal**. Plans E and F are
 
 ### 6.2 Example (illustration of source percentages, not an additional rule)
 
-For a confirmed ₹5,000 payment: Level 1 → direct Sponsor at 5%; Level 2 → that Sponsor's Sponsor at 2%; Level 3 → next Sponsor at 2%; Levels 4–8 → successive Sponsors at 1% each; Levels 9–12 → successive Sponsors at 0.5% each.
+For a confirmed ₹5,000 payment: Level 1 → direct Sponsor at 5%; Level 2 → that Sponsor's Sponsor at 2%; Level 3 → next Sponsor at 1% (2% before 29-09-2026); Levels 4–8 → successive Sponsors at 1% each; Levels 9–12 → successive Sponsors at 0.5% each.
 
 ---
 
@@ -514,14 +516,26 @@ When an MLM leader is ready to join, Super Admin selects an available dummy comp
 
 Generated when a member purchases a product through a Store and the Store records the confirmed transaction. The transaction must capture member/customer, item name, item weight, rate, amount, and applicable tax/invoice information.
 
-**T-170 (28-09-2026, user decision) — walk-in sales.** When the buyer is **not** a member, there is no chain to pay, so the **whole** percentage this section would have shared (self + every level of that metal's rates; 7% with the defaults) is paid to the **Store Owner's member wallet** as one `income_ledger_calculations` row (`level_no` null). It is calculated on the sale's metal value (§16.2 T-169 note). The wallet line reads "Walk-in store sale income — <store> sale #N", which keeps the history showing that the income came from the store. Store Profit Distribution (§16.4) is unchanged and still fires as well. A store whose owner is not a network member gets neither. Store-caused income stays in the owner's **member** wallet; there is no separate store income wallet and no store payout (user decision, §21 "28-09-2026 feedback batch"). `EarningsVerifier` checks these rows too; walk-in sales from before T-170 simply have none. This supersedes the "walk-in → §15 does not apply" wording in §16.4 scenario 1 and §16.11.
+**T-170 (28-09-2026, user decision) — walk-in sales.** When the buyer is **not** a member, there is no chain to pay, so the **whole** percentage this section would have shared (self + every level of that metal's rates; with the 29-09-2026 defaults 15% for Silver and 7.5% for Gold) is paid to the **Store Owner's member wallet** as one `income_ledger_calculations` row (`level_no` null). It is calculated on the sale's metal value (§16.2 T-169 note). The wallet line reads "Walk-in store sale income — <store> sale #N", which keeps the history showing that the income came from the store. Store Profit Distribution (§16.4) is unchanged and still fires as well. A store whose owner is not a network member gets neither. Store-caused income stays in the owner's **member** wallet; there is no separate store income wallet and no store payout (user decision, §21 "28-09-2026 feedback batch"). `EarningsVerifier` checks these rows too; walk-in sales from before T-170 simply have none. This supersedes the "walk-in → §15 does not apply" wording in §16.4 scenario 1 and §16.11.
 
-| Beneficiary                | Rate                                               |
+| Beneficiary                | Rate (original spec)                               |
 | -------------------------- | -------------------------------------------------- |
 | Purchasing member          | 2% of confirmed purchase/repurchase amount         |
 | Direct Sponsor (Level 1)   | 1% of confirmed purchase/repurchase amount         |
 | Sponsor/Direct Levels 2–6  | 0.5% each of confirmed purchase/repurchase amount  |
 | Sponsor/Direct Levels 7–12 | 0.25% each of confirmed purchase/repurchase amount |
+
+**Defaults changed 29-09-2026 (user, Super Admin rule version 5; now the seeded defaults in `RuleVersionSeeder`), per metal:**
+
+| Beneficiary      | Silver   | Gold      |
+| ---------------- | -------- | --------- |
+| Purchasing member | 5%      | 2%        |
+| Level 1          | 2%       | 1%        |
+| Level 2          | 1%       | 1%        |
+| Levels 3–6       | 1% each  | 0.5% each |
+| Levels 7–12      | 0.5% each | 0.25% each |
+
+Total: Silver 15% (5% self + 10% upline), Gold 7.5% (2% self + 5.5% upline). They stay Super-Admin-editable on Rule Versions.
 
 **Duplicate-beneficiary rule:** the direct Sponsor's 1% benefit is paid only once and takes precedence over any lower upline percentage — if the same person also appears deeper in the Sponsor/Direct chain, they do not receive a second, smaller payout for the same purchase. More generally, the same member never receives two earnings from one purchase for occupying more than one applicable level; only the highest applicable earning is paid.
 
