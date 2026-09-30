@@ -26,6 +26,12 @@ export type StatCardProps = {
     value: ReactNode;
     stats?: { label: string; value: ReactNode }[];
     href?: NonNullable<InertiaLinkProps['href']>;
+    /** One plain-language line telling the reader what this number is. */
+    description?: string;
+    /** Itemised label/amount rows under the value, e.g. which incomes make up a total. `muted` greys out a zero row. */
+    breakdown?: { label: string; value: ReactNode; muted?: boolean }[];
+    /** Extra note below everything else, e.g. money earned but not yet credited. */
+    footer?: ReactNode;
 };
 
 /**
@@ -40,6 +46,9 @@ export function StatCard({
     value,
     stats,
     href,
+    description,
+    breakdown,
+    footer,
 }: StatCardProps) {
     return (
         <Card className="gap-3 p-4">
@@ -65,7 +74,31 @@ export function StatCard({
             <div className="flex flex-col gap-1">
                 <span className="text-muted-foreground text-sm">{label}</span>
                 <span className="text-2xl font-semibold">{value}</span>
+                {description && (
+                    <p className="text-muted-foreground text-xs">
+                        {description}
+                    </p>
+                )}
             </div>
+
+            {breakdown && breakdown.length > 0 && (
+                <dl className="divide-border flex flex-col divide-y border-t text-sm">
+                    {breakdown.map((row) => (
+                        <div
+                            key={row.label}
+                            className={cn(
+                                'flex items-center justify-between gap-3 py-1.5',
+                                row.muted && 'text-muted-foreground',
+                            )}
+                        >
+                            <dt>{row.label}</dt>
+                            <dd className="font-medium tabular-nums">
+                                {row.value}
+                            </dd>
+                        </div>
+                    ))}
+                </dl>
+            )}
 
             {stats && stats.length > 0 && (
                 <div className="text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
@@ -76,6 +109,8 @@ export function StatCard({
                     ))}
                 </div>
             )}
+
+            {footer}
         </Card>
     );
 }

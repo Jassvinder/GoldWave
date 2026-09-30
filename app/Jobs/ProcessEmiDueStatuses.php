@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Actions\Store\BreakOverdueStoreEmiBookings;
 use App\Models\EmiInstallment;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -40,5 +41,8 @@ class ProcessEmiDueStatuses implements ShouldQueue
         EmiInstallment::where('status', 'due')
             ->whereDate('due_date', '<', $today)
             ->update(['status' => 'overdue']);
+
+        // T-185b (DOMAIN_LOGIC.md §16.13 point 3) — a Repurchase on EMI with 3 overdue EMIs breaks at once.
+        app(BreakOverdueStoreEmiBookings::class)();
     }
 }

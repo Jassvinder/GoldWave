@@ -22,6 +22,8 @@
 
 **`gw.cmd` shortcut (28-09-2026, user-requested):** on this dev machine Windows Smart App Control blocks `pnpm.exe` (pnpm 12 ships a native, unsigned exe), so `pnpm run …` fails with "An Application Control policy has blocked this file". `gw.cmd` in the project root runs the same tools directly and needs no pnpm. From the project root in PowerShell, run `.\gw build` (= `pnpm run build`), `.\gw dev`, `.\gw types` (= `types:check`), `.\gw check [files]` (= `check:fix`; pass file paths to avoid reformatting the whole project), `.\gw front` (types then build), `.\gw test [filter]`, `.\gw php` (Pint on changed files + Larastan), or `.\gw all` (types, Pint, Larastan, tests, build). Run `.\gw` alone to see this list.
 
+**Running period jobs on demand (T-177, 29-09-2026, user-requested):** the scheduler fires Pair/Reward only on the month's last day at 23:30, and draw grouping and the draw only on the 15th. To test them without waiting, run `php artisan jobs:month-end`, which runs the Pair/Reward evaluation and then Draw Group generation, and prints the milestones paid and the groups formed. Run `php artisan jobs:draw` for the Monthly Draw. These dispatch the same Jobs the scheduler uses. Both are idempotent: a milestone is never paid twice and a member is never grouped twice. **Each `jobs:draw` run draws the next cycle month** of every active group, even within the same calendar month. A month without its own prize uses the Silver/Gold default from Draw Settings (30-09-2026), so no group is skipped for want of a prize. Run it once per simulated month. The scheduled 15th job itself draws a group at most once per calendar month. Any single scheduled job can also be run immediately with `php artisan schedule:test` (it asks which one). Queued jobs dispatched that way need `queue:work` running. **Adding test entries (30-09-2026):** `php artisan test:entries "GWL01:left,PREV:right"` registers members through the real flow (RegisterMember + cash approval, Plan E by default, `--plan=` to change it). `PREV` means the entry added just before it in the same run. Each member is named after its own Customer ID (GWL17 = "Test Member 17"), never after a member count. A count-based temp script had shifted every name by one from GWL16 onward, once a company placeholder row was added. The command refuses to run in production. **Held Level Income (T-186, 30-09-2026):** `php artisan level-income:release-held` releases every `held` Level Income row whose beneficiary now has the level's qualified directs, and prints the amount per member. It is idempotent. The same release already runs on every confirmed payment and every rule-version publish, so this command is mainly needed after the T-186 migration or for a manual check.
+
 **Background processes for local manual testing (T-158, 28-09-2026):** `.\gw queue` (`queue:work`) and `.\gw schedule` (`schedule:work`) each keep running in their own terminal. With no queue worker, every queued job waits in the `jobs` table forever. That includes report exports, which stay "pending", queued notifications and broadcasts. This is how two Super Admin report requests got stuck on 28-09-2026. Production needs the same two processes (`Docs/DEPLOYMENT.md`).
 
 Do not fabricate commands. This table is verified against the actual scaffolded project (Laravel 13 + React starter kit + Pest + Pint + Larastan). Update it if any tooling changes.
@@ -72,14 +74,14 @@ Total distributed: ₹750 (15% of ₹5,000). **Edge case:** if the chain is shor
 
 **Beneficiary-chain regression to test (resolved 13-09-2026, `DOMAIN_LOGIC.md` §7's Pair/Reward Beneficiary Chain Rule):** given a Binary Position chain P1(direct placement parent)→P2→P3 above a newly-eligible member N, where N sits on P1's Right leg, P1 is itself on P2's Left leg, and P2 is on P3's Right leg — when N's joining becomes eligible, exactly 3 `pair_entries` rows are created: P1 gets one **Right** entry (N is directly on P1's right), P2 gets one **Left** entry (P1's whole subtree, including N, sits on P2's left), and P3 gets one **Right** entry (P2's whole subtree sits on P3's right) — a team-size count all the way up, not just crediting P1.
 
-### 3. Income Booster — qualify once, pay 6 months regardless of later drop-off (RESOLVED 12-09-2026: duration 3→6 months, concurrency confirmed)
+### 3. Income Booster — qualify once, pay for the level's full duration regardless of later drop-off (RESOLVED 12-09-2026: duration 3→6 months, concurrency confirmed; Level 1 → 12 months 29-09-2026, T-180)
 
-**Given** Booster Level 1 requires 10 directs + 500 binary team size (split 250 Left / 250 Right, `DOMAIN_LOGIC.md` §9) for ₹5,000/month × 6 months, and a member reaches 12 directs and 520 team size (260L/260R) in month 1 (Level 2's 20-directs/1,500-team threshold is not met, so Level 1 is the only level qualifying so far).
+**Given** Booster Level 1 requires 10 directs + 500 binary team size (split 250 Left / 250 Right, `DOMAIN_LOGIC.md` §9) for ₹5,000/month × 12 months (T-180; was 6), and a member reaches 12 directs and 520 team size (260L/260R) in month 1 (Level 2's 20-directs/1,500-team threshold is not met, so Level 1 is the only level qualifying so far).
 **When** the qualification is evaluated.
-**Then** one `booster_qualifications` row (level_no=1) is created, and exactly 6 `booster_payout_schedules` rows are created (month_no 1–6, ₹5,000 each, total ₹30,000).
+**Then** one `booster_qualifications` row (level_no=1) is created, and exactly 12 `booster_payout_schedules` rows are created (month_no 1–12, ₹5,000 each, total ₹60,000).
 **When** the member's direct count later drops back to 4 in month 2 (before month 2's payout runs).
 **Then** month 2's ₹5,000 is still paid — qualification is a one-time gate, not a maintained condition (`DOMAIN_LOGIC.md` §9).
-**When**, instead, the same member newly crosses the Level 2 threshold (20 directs, 1,500 team split 750L/750R) in month 2 while the Level 1 schedule (months 1–6) is still running.
+**When**, instead, the same member newly crosses the Level 2 threshold (20 directs, 1,500 team split 750L/750R) in month 2 while the Level 1 schedule (months 1–12) is still running.
 **Then** a **second, independent** `booster_qualifications` row (level_no=2) is created, with its own 6 `booster_payout_schedules` rows (month_no 2–7, ₹20,000 each, total ₹1,20,000) running **concurrently** alongside the still-active Level-1 schedule — neither schedule is cancelled or merged (`DOMAIN_LOGIC.md` §9.1 concurrency rule, resolved via direct user confirmation 12-09-2026). **Regression to test:** in the same month where both schedules are active, the member's wallet ledger must show two separate booster credit entries (₹5,000 from Level 1 + ₹20,000 from Level 2 = ₹25,000 that month), not one merged/overwritten entry.
 **Given** instead a member has 12 directs and a 490 Left / 10 Right binary team (500 total, the correct combined total for Level 1).
 **Then** the member does **not** qualify for Level 1 — the split is enforced independently, not just the combined total (`DOMAIN_LOGIC.md` §21 T-011 pre-coding pass, user-confirmed). No `booster_qualifications` row is created until both legs independently reach at least 250.
@@ -468,6 +470,134 @@ Total distributed: ₹750 (15% of ₹5,000). **Edge case:** if the chain is shor
 **Given** X is assigned to a leader and member B joins with sponsor X on X's Right (Plan E).
 **Then** X gets B's pair entry on its Right leg. B's Level 1 row is `skipped` / `benefits_limited`, and X's wallet stays empty. X is never paid Level Income, Purchase/Repurchase (not even its own self 2%), Store Profit or Draw (including the Draw upline benefit), and X never enters a Draw group. A joined before X existed, so X has no pair entry from A. X's Booster team counts the whole live subtree, including A. The Earnings Verifier reports **0 errors**: it ignores an ancestor that was created after the joining.
 **Access:** an Admin gets 403 on the page and on the insert. A side other than `left`/`right` is refused.
+
+### 35. Pair/Reward — each milestone needs 2 more qualified directs (NEW 29-09-2026 — user decision, DOMAIN_LOGIC.md §7.3, T-178)
+
+**Given** the default milestones (M1 5L/5R, total 2 directs; M2 50L/50R, total 4 directs; ₹50 per silver entry) and beneficiary P with **55 unused Left and 55 unused Right** silver entries.
+**When** P has 3 qualified directs (all Plan E, registration paid) and the month-end evaluation runs.
+**Then** only **M1** is paid: 5L + 5R consumed, ₹500. M2's entries are there (50L/50R left), but 3 < 4 directs, so 50L/50R carry forward unconsumed.
+**When** a 4th Plan E direct joins (registration paid) and the evaluation runs again.
+**Then** **M2** is paid: 50L + 50R consumed, ₹5,000. Wallet total ₹5,500.
+**Given** instead P starts with 4 qualified directs and the same 55L/55R. **Then** a single run pays **both** M1 and M2 (₹5,500), as before.
+**Given** P has 2 Plan E directs plus one Plan A direct with 5 of the 6 required EMIs paid, and 55L/55R. **Then** only M1 is paid (the Plan A direct is not counted yet). Once its 6th EMI is paid, P has 3 qualified directs, which is still < 4, so M2 is still not paid. A direct that is not `active` (e.g. `cancelled`) never counts.
+**Regression to test:** Booster's own Min. Directs (`EvaluateBoosterQualification`) is unchanged. `earnings:verify` warns when a paid milestone's member currently has fewer qualified directs than that milestone's total.
+
+### 36. Level Income — each level needs 2 more qualified directs; short of them the income is held (NEW 29-09-2026, T-179; hold-and-release CHANGED 30-09-2026, T-186 — user decisions, DOMAIN_LOGIC.md §6)
+
+**Given** the default `level_income_min_directs` (L1 = 2, L2 = 4, L3 = 6 …) and the default Silver rates (L1 5%, L2 2%, L3 1%). There is a sponsor chain S3 → S2 → S1 → P: S1 sponsors P, S2 sponsors S1, and S3 sponsors S2. Counting their Plan E directs with registration paid (the chain link itself included): **S1 has 2**, **S2 has 3** and **S3 has 6**.
+**When** P's ₹20,000 Plan E registration payment is confirmed.
+**Then** L1 → S1 is **paid ₹1,000** (5%; 2 ≥ 2). L2 → S2 is **`held` ₹400** (`insufficient_directs`, 3 < 4; 2% of ₹20,000, no wallet entry yet). L3 → S3 is **paid ₹200** (1%; 6 ≥ 6). Levels 4–12 are `chain_too_short`.
+**When** S2 then gets a 4th qualified direct. **Then** (CHANGED 30-09-2026, T-186 — was "lapsed, never paid later") the held row becomes `paid` ₹400 with `released_at` set, S2's wallet gets one confirmed ₹400 credit, and a second release run pays nothing more.
+**Given** S1's second direct is a Plan A member with 5 of 6 EMIs paid. **Then** S1 has 1 qualified direct, so L1 on P's payment is `held` `insufficient_directs`. A direct that is not `active` never counts either.
+**T-186 release rules to test:**
+- Each level is released on its own count. A beneficiary at 2 directs holding only an L2 row (needs 4) gets nothing.
+- A beneficiary who is not `active` keeps the row held, and it is released once they are active again.
+- Through the real flow, a second direct's cash approval releases the sponsor's held L1 at once: S1's wallet = ₹1,000 released + ₹1,000 L1 on the new payment.
+- Publishing a rule version that lowers L2 to 1 direct releases every held L2 row. In the test that is ₹400 + ₹400 for S2.
+**Regression to test:** Purchase/Repurchase and Store Profit rows ignore the directs rule. A rule version without `level_income_min_directs` pays exactly as before. `earnings:verify` accepts a `held` row (amount = rate × payment) while the beneficiary still has fewer directs than the active version needs. It **warns** "should have been released" when the count is met but the row is still held. A released row is checked like any paid row and has exactly one wallet credit.
+
+### 37. Pay All Remaining EMIs at once (NEW 30-09-2026 — user decision, DOMAIN_LOGIC.md §5 point 9, T-184)
+
+**Given (Future Rate)** a Plan A member (₹1,000 × 20, Silver) has paid EMIs 1–4. EMI 5 is `overdue` and 6–20 are `upcoming`, which makes 16 unpaid EMIs. Their sponsor chain is S1 → S2 → S3 (directs gate off), and the Silver rates are L1 5%, L2 2%, L3 1%.
+**When** they choose "Pay All Remaining EMIs" by cash and Super Admin approves.
+**Then** one `payments` row is created: `type = emi_installment`, amount **₹16,000**, `covers_installments = 16`. EMIs 5–20 all point to it and all become `paid`, with amounts unchanged at ₹1,000. Level Income is paid on ₹16,000: **S1 ₹800, S2 ₹320, S3 ₹160**, one set of 12 rows. The paid count goes from 4 to 20, which is ≥ 6, so the Pair entries are created now, once. Plan-jewellery delivery is no longer refused.
+**Given (Current Rate)** a Plan D member (₹10,000 × 10, Gold) booked at the Current Rate with 2 EMIs paid, using the T-167 clean fixture of scenario 21: remaining ₹40,000 over 8, principal ₹5,000, EMIs ₹5,400, 5,350, 5,300, 5,250, 5,200, 5,150, 5,100, 5,050. They then paid EMI 3 (₹5,400) and EMI 4 (₹5,350) one by one.
+**When** they pay all remaining EMIs.
+**Then** the amount is **₹30,000** (40,000 − 5,000 × 2). This is the principal of the 6 unpaid EMIs with no maintenance; with maintenance it would have been ₹31,050. After confirmation EMIs 5–10 are `paid` at **₹5,000 each** (sum ₹30,000). Level Income uses the Gold rates on ₹30,000, for example L1 at 2% = **₹600**.
+**Rounding check (Current Rate, Plan A fixture of scenario 21):** remaining ₹31,000 over 16, principal ₹1,937.50. After 1 EMI paid since booking, the full amount is 31,000 − 1,937.50 = **₹29,062.50**, which is 15 rows × ₹1,937.50.
+**Guards to test:**
+- no unpaid EMI means the option is refused and not offered;
+- an unpaid EMI with a `pending` payment (cash awaiting approval) makes the full payment refused;
+- while a full payment is pending, a single-EMI payment is refused;
+- a pending Current Rate booking request is cancelled with the system message when a full payment is initiated;
+- if a cash full payment is rejected, no installment changes (still unpaid, amounts unchanged), and paying again works;
+- a one-time plan member (E/F) has no option;
+- a member cannot pay another member's schedule;
+- approving the same full payment twice changes nothing more.
+
+### 38. An overdue EMI holds the member's earnings until the record is clear (NEW 30-09-2026 — user decision, DOMAIN_LOGIC.md §12, T-182)
+
+**Given** member M is on Plan A and has paid EMIs 1–4. **EMI 5 is `overdue`**, and M's wallet balance is ₹0. P is sponsored by M (M is P's Level 1; directs gate off; Silver L1 5%).
+**When** P's ₹20,000 Plan E registration is confirmed.
+**Then** the Level 1 row to M is `paid` ₹1,000 as usual. Its wallet credit is **`pending` (held)**, and M's `wallet_balance` stays **₹0**. M's wallet page shows ₹1,000 held with "Pay your overdue EMI to release it".
+**When** M pays EMI 5 (₹1,000, cash approved).
+**Then** the held ₹1,000 becomes `confirmed` and M's balance is **₹1,000**. EMI 5's own Level Income goes to M's upline as usual.
+**Given** instead that EMIs 5 **and** 6 are overdue. **Then** paying EMI 5 alone keeps the ₹1,000 held (still ₹0), and paying EMI 6 releases it. "Pay All Remaining EMIs" (scenario 37) also releases it.
+**Pair/Reward:** M has 5L/5R unused entries and 2 qualified directs, and EMI 5 is overdue at month-end. **Then** no reward is paid and the 10 entries stay unused. After M pays, the next month-end pays **₹500**.
+**Booster:** M holds a Level 1 schedule, and month 2 (₹5,000) falls due while EMI 5 is overdue. **Then** the daily processor leaves it `pending`. After M pays EMI 5, the next run pays it.
+**Unaffected (regression):** a Plan E member (no EMI schedule) is credited at once; a member whose EMIs are merely `due` (not overdue) is credited at once. `earnings:verify` accepts a held credit while the member is overdue, warns when a held credit remains with no overdue EMI, and the wallet balance check counts only confirmed credits.
+
+### 39. Store upline income unlocks at 10 qualified directs, for life (NEW 30-09-2026 — user decision, DOMAIN_LOGIC.md §15/§16.4, T-183)
+
+**Given** `store_income_min_directs = 10` and the Silver defaults: Purchase/Repurchase self 5%, L1 2%, L2 1%; Store Profit owner 2%, Sponsor L1 0.5%, L2 0.25%. Buyer B's sponsor chain is U1 → U2. U1 has **9** qualified directs (B included) and U2 has **10**. Every direct is Plan E with its registration paid.
+**When** B buys Silver jewellery with a metal value of ₹10,000 (member Purchase).
+**Then** B's self income is **₹500** (unchanged). L1 → U1 is **skipped `store_income_locked`, ₹0**. L2 → U2 is **paid ₹100**, and U2's `store_income_unlocked_at` is now set. L3+ are `chain_too_short`.
+**When** U1's 10th direct registers (Plan E, payment confirmed).
+**Then** U1 is unlocked at that moment, before any store sale.
+**When** one of U1's directs is later cancelled (9 qualified again) and B buys another ₹10,000.
+**Then** L1 → U1 is **paid ₹200**: the unlock is for life.
+**Store Profit:** store owner O's sponsor chain is S1 → S2. S1 has 3 qualified directs (O included) and S2 has 10. A ₹10,000 Silver sale at O's store gives O **₹200** (unchanged), **no row** for S1 (locked, lapsed), and S2 **₹25** (0.25%, Sponsor Level 2).
+**Regression:**
+- a rule version without the key (or with 0) pays every level as before and records no unlock;
+- a walk-in sale's Store Owner income is unchanged;
+- `earnings:verify` errors when a locked member was paid, or an unlocked member's level was skipped or missing, judged by `store_income_unlocked_at` against the sale time.
+
+### 40. Repurchase on EMI — booking, approval and payments (NEW 30-09-2026 — user decisions, DOMAIN_LOGIC.md §16.13, T-185a)
+
+**Given** silver ₹350/g with 0% making, a store piece "Silver Anklet" (100 g, quantity 2), and a member M (sponsor S1 → S2; directs gate off; Silver Level rates L1 5%, L2 2%).
+**When** the Store Admin requests a Repurchase on EMI for M with **10 EMIs**, and Super Admin approves.
+**Then:**
+- the total value is 100 × 350 = **₹35,000**;
+- principal ₹3,500 × 10, with maintenance 1% of what is still remaining: ₹350, 315, 280, 245, 210, 175, 140, 105, 70, 35;
+- **EMIs are ₹3,850, 3,815, 3,780, 3,745, 3,710, 3,675, 3,640, 3,605, 3,570, 3,535** (total ₹36,925);
+- a `store_repurchase` schedule is created, with EMI #1 `due` today and the rest monthly;
+- the piece's stock goes 2 → **1**.
+
+**When** M pays EMI #1 (₹3,850, cash approved). **Then** Level Income is **S1 ₹192.50, S2 ₹77**. There are no Purchase/Repurchase rows, no Store Profit rows, and no Pair entries. M's plan schedule is untouched.
+**When** M then pays all remaining EMIs. **Then** the amount is **₹31,500** (35,000 − 3,500), and the booking becomes `completed`.
+**With 20 EMIs** instead: principal ₹1,750; EMI 1 = 1,750 + 350 = **₹2,100**; EMI 20 = 1,750 + 17.50 = **₹1,767.50**.
+**Guards to test:**
+- a second store EMI request for M while one is pending or active is refused;
+- a Purchase, a walk-in customer, a piece of another store, an out-of-stock piece, or an EMI count other than 10/20 is refused;
+- a Store Admin cannot approve (Super Admin and the company Admin can, like other booking requests, T-173);
+- a cancel needs a message and leaves stock unchanged;
+- an overdue store EMI holds M's earnings (scenario 38).
+
+### 41. Repurchase on EMI — automatic break at 3 overdue EMIs (NEW 30-09-2026 — user decisions, DOMAIN_LOGIC.md §16.13, T-185b)
+
+**Given** the 10-EMI booking above. M paid EMI #1 (₹3,850) and EMI #2 (₹3,815); EMI #2 was paid on a day when silver was **₹400/g**. EMIs #3, #4 and #5 then become overdue.
+**When** the daily EMI job marks the 3rd one overdue.
+**Then:**
+- the booking is `broken`, EMIs #3–#10 are `cancelled`, and the piece's stock is back up by 1;
+- the principal paid is 3,500 × 2 = **₹7,000** (the ₹665 of maintenance is excluded);
+- the silver owed is 7,000 ÷ 400 = **17.500 g**;
+- M no longer has an overdue EMI, so any earnings held because of it are released;
+- the Level Income already paid on EMIs #1–#2 is unchanged.
+
+**If** nothing was paid, the booking breaks with nothing owed.
+
+### 42. Repurchase on EMI — handing over the piece, or the silver after a break (NEW 30-09-2026 — user decisions, DOMAIN_LOGIC.md §16.13 point 4, T-185c)
+
+**Fully paid piece.** **Given** the 10-EMI booking of scenario 40 (100 g silver at a locked ₹350/g, 0% making, so the metal value is ₹35,000), with every EMI paid (`completed`), and a GST setting of **3%**.
+**When** the Store Admin hands the piece over.
+**Then:**
+- a store sale is recorded: type `repurchase`, metal value ₹35,000, making ₹0, subtotal ₹35,000, **GST ₹1,050, total ₹36,050**, `prepaid_amount` **₹35,000**, so **₹1,050 is collected at delivery**;
+- the piece's stock does not change (it was already held at approval);
+- a restock owed of 100 g / ₹35,000 is created, and the booking is `delivered`;
+- there are no Purchase/Repurchase or Store Profit rows.
+
+**Break silver.** **Given** the broken booking of scenario 41: **17.500 g** owed. Today silver is **₹400/g with 10% making**, GST is 3%, and the store has a 20 g and a 15 g silver piece.
+**Then** the 15 g piece is refused because it is lighter than 17.5 g.
+**When** the 20 g piece is handed over. **Then:**
+- metal value 20 × 400 = ₹8,000; making ₹800; subtotal ₹8,800; GST ₹264; **total ₹9,064**;
+- `prepaid_amount` = 17.5 × 400 = **₹7,000**, so **₹2,064 is collected**;
+- the 20 g piece's stock goes down by 1;
+- a restock owed of 17.5 g / ₹7,000 is created, and the booking is `delivered`.
+
+**Regression:**
+- a booking in another status, or of another store, cannot be handed over;
+- the member can request a new Repurchase on EMI afterwards (the old one is closed);
+- `earnings:verify` errors if a handover sale has any income row.
 
 ## Concurrency Verification (T-020, 15-09-2026)
 

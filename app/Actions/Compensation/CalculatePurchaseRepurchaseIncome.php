@@ -8,6 +8,7 @@ use App\Models\RuleVersion;
 use App\Models\StoreSale;
 use App\Services\RuleVersionService;
 use App\Services\SponsorChainResolver;
+use App\Services\StoreIncomeUnlock;
 use App\Services\WalletLedgerService;
 use Illuminate\Support\Facades\DB;
 
@@ -32,10 +33,16 @@ class CalculatePurchaseRepurchaseIncome
         private readonly SponsorChainResolver $sponsorChain,
         private readonly RuleVersionService $rules,
         private readonly WalletLedgerService $wallet,
+        private readonly StoreIncomeUnlock $storeIncome,
     ) {}
 
     public function __invoke(StoreSale $storeSale): void
     {
+        // T-185c — handing over a Repurchase on EMI earns nobody anything (§16.13).
+        if ($storeSale->isStoreEmiDelivery()) {
+            return;
+        }
+
         if (IncomeLedgerCalculation::where('source_store_sale_id', $storeSale->id)
             ->where('type', 'purchase_repurchase')
             ->exists()) {
@@ -85,6 +92,13 @@ class CalculatePurchaseRepurchaseIncome
                 // T-174 — nor does an entry inserted under the root (Pair/Reward and Booster only).
                 if ($beneficiary->isExcludedFromGeneralIncome()) {
                     $this->recordSkipped($storeSale, $ruleVersion, $level, $rate, $beneficiary, $beneficiary->generalIncomeSkipReason());
+
+                    continue;
+                }
+
+                // T-183 — upline store income only after 10 qualified directs (then for life); before that it lapses.
+                if (! $this->storeIncome->isUnlocked($beneficiary)) {
+                    $this->recordSkipped($storeSale, $ruleVersion, $level, $rate, $beneficiary, 'store_income_locked');
 
                     continue;
                 }
@@ -143,7 +157,7 @@ class CalculatePurchaseRepurchaseIncome
             'eligibility_status' => 'paid',
         ]);
 
-        $this->wallet->credit($beneficiary, 'purchase_repurchase_income', $amount, $calculation, $description);
+        $this->wallet->creditEarning($beneficiary, 'purchase_repurchase_income', $amount, $calculation, $description);
     }
 
     private function recordSkipped(StoreSale $storeSale, RuleVersion $ruleVersion, ?int $level, float $rate, ?Member $beneficiary, string $reason): void

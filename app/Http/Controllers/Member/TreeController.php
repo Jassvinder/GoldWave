@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Member;
 
 use App\Http\Controllers\Controller;
 use App\Models\Member;
+use App\Services\MemberNetworkSummary;
 use App\Support\NetworkNodeCard;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,7 +28,7 @@ class TreeController extends Controller
 {
     private const DEPTH = 3;
 
-    public function show(Request $request, ?Member $member = null): Response
+    public function show(Request $request, MemberNetworkSummary $network, ?Member $member = null): Response
     {
         $loggedInMember = $request->user()->member;
 
@@ -42,6 +43,7 @@ class TreeController extends Controller
                 'customer_id' => $loggedInMember->customer_id,
             ] : null,
             'root' => $this->buildNode($root, self::DEPTH),
+            'team' => $network->teamCounts($root),
         ]);
     }
 

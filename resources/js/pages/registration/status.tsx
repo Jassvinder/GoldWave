@@ -19,7 +19,7 @@ type Props = {
     };
     payment: {
         amount: string;
-        mode: 'online' | 'cash';
+        mode: 'online' | 'cash' | 'upi' | 'wallet';
         status: string;
         cash_status: string | null;
     } | null;
@@ -91,7 +91,11 @@ export default function RegistrationStatus({
                                     Payment
                                 </span>
                                 <span className="text-sm">
-                                    ₹{payment.amount} · {payment.mode} ·{' '}
+                                    ₹{payment.amount} ·{' '}
+                                    {payment.mode === 'upi'
+                                        ? 'GPay/UPI'
+                                        : payment.mode}{' '}
+                                    ·{' '}
                                     {payment.cash_status ?? payment.status}
                                 </span>
                             </div>
@@ -119,11 +123,16 @@ export default function RegistrationStatus({
                         )}
 
                         {member.status === 'payment_pending' &&
-                            payment?.mode === 'cash' && (
+                            (payment?.mode === 'cash' ||
+                                payment?.mode === 'upi') && (
                                 <p className="text-muted-foreground text-sm">
-                                    Your cash payment is awaiting confirmation
-                                    by GoldWave staff. You will be able to log
-                                    in once your membership is activated.
+                                    Your{' '}
+                                    {payment.mode === 'upi'
+                                        ? 'GPay/UPI'
+                                        : 'cash'}{' '}
+                                    payment is awaiting confirmation by
+                                    GoldWave staff. You will be able to log in
+                                    once your membership is activated.
                                 </p>
                             )}
 

@@ -39,7 +39,7 @@ type Props = {
     qualifications: Qualification[];
 };
 
-/** INSTRUCTIONS.md M12 — direct/team counts, qualification per level, 6-month benefit schedule (DOMAIN_LOGIC.md §9). */
+/** INSTRUCTIONS.md M12 — direct/team counts, qualification per level, per-level benefit schedule (L1 12 months, L2/L3 6) (DOMAIN_LOGIC.md §9). */
 export default function Booster({
     direct_count,
     team_size,

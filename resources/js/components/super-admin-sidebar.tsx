@@ -9,9 +9,11 @@ import {
     LayoutGrid,
     LayoutTemplate,
     Percent,
+    QrCode,
     Scale,
     Settings2,
     ShieldCheck,
+    ShoppingBag,
     Store as StoreIcon,
     Trophy,
     Truck,
@@ -39,6 +41,8 @@ import { index as membersIndex } from '@/routes/super-admin/members';
 import { index as notificationsIndex } from '@/routes/super-admin/notifications';
 import { index as metalRatesIndex } from '@/routes/super-admin/metal-rates';
 import { index as payoutRequestsIndex } from '@/routes/super-admin/payout-requests';
+import { index as cashPaymentsIndex } from '@/routes/super-admin/cash-payments';
+import { index as paymentSettingsIndex } from '@/routes/super-admin/payment-settings';
 import { index as payoutTdsIndex } from '@/routes/super-admin/payout-tds-settings';
 import { index as profileChangeRequestsIndex } from '@/routes/super-admin/profile-change-requests';
 import { index as companyDeliveriesIndex } from '@/routes/super-admin/company-deliveries';
@@ -46,6 +50,7 @@ import { index as companyWalletIndex } from '@/routes/super-admin/company-wallet
 import { index as rateBookingRequestsIndex } from '@/routes/super-admin/rate-booking-requests';
 import { index as reportsIndex } from '@/routes/super-admin/reports';
 import { index as restockShipmentsIndex } from '@/routes/super-admin/restock-shipments';
+import { index as storeEmiBookingsIndex } from '@/routes/super-admin/store-emi-bookings';
 import { index as ruleVersionsIndex } from '@/routes/super-admin/rule-versions';
 import { index as storeManagementIndex } from '@/routes/super-admin/store-management';
 import { index as storeWalletsIndex } from '@/routes/super-admin/store-wallets';
@@ -104,11 +109,21 @@ const drawItems: NavItem[] = [
 ];
 
 const requestItems: NavItem[] = [
+    {
+        title: 'Payment Approvals',
+        href: cashPaymentsIndex(),
+        icon: Banknote,
+    },
     { title: 'Payout Requests', href: payoutRequestsIndex(), icon: Wallet },
     {
         title: 'Rate Booking Requests',
         href: rateBookingRequestsIndex(),
         icon: Coins,
+    },
+    {
+        title: 'Repurchase EMI Requests',
+        href: storeEmiBookingsIndex(),
+        icon: ShoppingBag,
     },
     {
         title: 'Profile Change Requests',
@@ -120,6 +135,12 @@ const requestItems: NavItem[] = [
 const settingsItems: NavItem[] = [
     { title: 'Gold & Silver Rates', href: metalRatesIndex(), icon: Coins },
     { title: 'Payout & TDS Settings', href: payoutTdsIndex(), icon: Banknote },
+    {
+        title: 'Payment Settings (UPI)',
+        href: paymentSettingsIndex(),
+        icon: QrCode,
+        superAdminOnly: true,
+    },
     {
         title: 'Landing Page Hero',
         href: landingHeroIndex(),
@@ -178,7 +199,8 @@ const sections: NavGroup[] = [
  * items marked `superAdminOnly` are left out for them (the routes refuse them too).
  */
 export function SuperAdminSidebar() {
-    const role = (usePage().props.auth as { user?: { role?: string } }).user?.role;
+    const role = (usePage().props.auth as { user?: { role?: string } }).user
+        ?.role;
     const visible = sections
         .map((section) => ({
             ...section,

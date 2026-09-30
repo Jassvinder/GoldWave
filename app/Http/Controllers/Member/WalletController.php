@@ -76,6 +76,8 @@ class WalletController extends Controller
         return Inertia::render('member/wallet', [
             'wallet_balance' => (string) $member->wallet_balance,
             'wallet_hold_amount' => (string) $member->wallet_hold_amount,
+            // T-182 — earnings held while an EMI is overdue (not part of the balance yet).
+            'held_earnings' => $member->heldEarnings(),
             'entries' => $entries,
             'filters' => ['search' => $search],
             'sort' => $sortKey !== null ? ['key' => $sortKey, 'direction' => $direction] : null,

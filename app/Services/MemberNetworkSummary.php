@@ -41,6 +41,24 @@ class MemberNetworkSummary
     }
 
     /**
+     * T-194 — the member-facing team numbers shown on the Dashboard, Directs View and Tree View, so all three agree:
+     * direct members (Sponsor/Direct) and the whole Binary downline per leg.
+     *
+     * @return array{direct: int, left: int, right: int, total: int}
+     */
+    public function teamCounts(Member $member): array
+    {
+        $summary = $this->forMember($member);
+
+        return [
+            'direct' => $member->directs()->count(),
+            'left' => $summary['left']['total'],
+            'right' => $summary['right']['total'],
+            'total' => $summary['team_total'],
+        ];
+    }
+
+    /**
      * @param  array<int, int>  $memberIds
      * @return array<int, Summary> keyed by member id; every requested id is present (zeros for a leaf).
      */

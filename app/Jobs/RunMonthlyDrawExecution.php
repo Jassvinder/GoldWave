@@ -24,8 +24,11 @@ class RunMonthlyDrawExecution implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /** @param  bool  $advanceOneMonth  set only by the manual `jobs:draw` command: draw each group's next month even if it was already drawn this calendar month */
+    public function __construct(public bool $advanceOneMonth = false) {}
+
     public function handle(ExecuteMonthlyDraw $execute): void
     {
-        $execute();
+        $execute(oncePerCalendarMonth: ! $this->advanceOneMonth);
     }
 }

@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Controllers\Registration\RegistrationController;
 use App\Http\Requests\Registration\AssistedRegisterMemberRequest;
 use App\Models\MembershipPlan;
+use App\Services\Payments\PaymentModes;
 use App\Services\WalletLedgerService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -36,6 +37,7 @@ class AssistedRegistrationController extends Controller
         abort_if($member === null, 404);
 
         return Inertia::render('member/assisted-registration', [
+            'payment_options' => PaymentModes::forPage(withWallet: true),
             'plans' => MembershipPlan::where('is_active', true)->orderBy('id')->get([
                 'id', 'code', 'name', 'amount', 'installment_count', 'product_category', 'fixed_weight_grams',
             ]),
@@ -70,6 +72,7 @@ class AssistedRegistrationController extends Controller
         }
 
         $payment = $newMember->payments->firstWhere('type', 'registration');
+        PaymentModes::attachUpiProof($payment, $request);
 
         if ($paymentMode === 'online') {
             try {

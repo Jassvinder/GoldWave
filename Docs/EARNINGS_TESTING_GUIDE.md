@@ -64,7 +64,7 @@ Every wallet credit row also carries a plain-English description (e.g. "Level 3 
 | Store Profit Distribution          | A store sale is confirmed                                  | **Immediately**                                                                       |
 | Pair entries (Left/Right business) | A member's qualifying joining/EMI payment is confirmed     | **Immediately**                                                                       |
 | Pair/Reward payout                 | Milestone thresholds are met                               | **Month-end, 23:30 Asia/Kolkata** (the "Pair/Reward Monthly Evaluator" scheduled job) |
-| Income Booster qualification       | A registration payment is confirmed                        | **Immediately** (creates the 6-month payout schedule)                                 |
+| Income Booster qualification       | A registration payment is confirmed                        | **Immediately** (creates the payout schedule: 12 months for Level 1, 6 for Levels 2–3)|
 | Income Booster monthly payout      | Each scheduled month's date arrives                        | **Daily, 00:45 Asia/Kolkata** ("Booster Payout Processor")                            |
 | Monthly Draw grouping              | The 15th of the month                                      | **00:00 Asia/Kolkata**                                                                |
 | Monthly Draw execution             | The 15th of the month                                      | **12:00 Asia/Kolkata**, after grouping                                                |
@@ -85,7 +85,7 @@ Registering 4-5 members by hand and checking the numbers on paper is more reliab
 
 1. **Reset to a clean, small database:** `php artisan migrate:fresh --seed` (do **not** run the demo network seeder this time).
 2. **Note the seeded rates** you'll need for arithmetic: Super Admin → **Rule Versions** page shows Level Income %, Pair Value per entry, Store Profit %, Purchase/Repurchase %. `TEST.md` scenario 1 has the exact default numbers already worked out (e.g. a ₹5,000 payment → L1 ₹250, L2–3 ₹100 each, L4–8 ₹50 each, L9–12 ₹25 each, total ₹800).
-3. **Register a short chain by hand** at `/join`: a member A sponsored by the seeded root (`GWL01` — check Member Management for the exact root Customer ID), then B sponsored by A, then C sponsored by B. Use **Cash** payment mode so you control exactly when it activates.
+3. **Register a short chain by hand** at `/join`: a member A sponsored by the seeded company root (Customer ID `GWL-ROOT`, set in `CompanyRootMemberSeeder`; the first real registration gets `GWL01`), then B sponsored by A, then C sponsored by B. Use **Cash** payment mode so you control exactly when it activates.
 4. **Approve each cash payment** as Super Admin (Cash Payments queue). Approving is what actually triggers Level Income — confirm this on the clock, not just on submission.
 5. **Check Compensation Audit** (Super Admin) immediately after each approval: filter by the paying member's Customer ID, confirm one row per level 1–12, the right beneficiary, the right rate, and `chain_too_short` skips once the chain runs out (a 3-member chain has real beneficiaries only at levels 1–2).
 6. **Check the beneficiary's Wallet ledger** shows the matching credit, and that **Wallet balance** increased by exactly that amount.

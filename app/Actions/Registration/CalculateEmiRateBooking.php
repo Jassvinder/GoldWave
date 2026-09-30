@@ -110,7 +110,19 @@ class CalculateEmiRateBooking
             ]);
         }
 
-        $latestRate = MetalRate::where('metal', $plan->product_category)
+        return $this->currentRateFor((string) $plan->product_category, (float) $plan->fixed_weight_grams, $pendingInstallments, $paidAmount);
+    }
+
+    /**
+     * The Current Rate booking for any metal/weight — a plan (above) or a store Repurchase on EMI (T-185,
+     * DOMAIN_LOGIC.md §16.13): today's rate + making, less what is already paid, spread over the pending EMIs with the
+     * declining maintenance.
+     *
+     * @return RateBooking
+     */
+    public function currentRateFor(string $metal, float $weightGrams, int $pendingInstallments, float $paidAmount = 0.0): array
+    {
+        $latestRate = MetalRate::where('metal', $metal)
             ->whereDate('effective_from', '<=', now()->toDateString())
             ->orderByDesc('effective_from')
             ->first();
@@ -125,7 +137,7 @@ class CalculateEmiRateBooking
 
         // T-165 (28-09-2026) — the booking's total value is metal value + making charges (the making % recorded
         // with the rate), the same way a bill is priced; hallmark and GST are not part of the booking.
-        $metalValue = round((float) $latestRate->rate_per_gram * (float) $plan->fixed_weight_grams, 2);
+        $metalValue = round((float) $latestRate->rate_per_gram * $weightGrams, 2);
         $makingPercent = (float) $latestRate->making_charge_percent;
         $makingCharges = round($metalValue * $makingPercent / 100, 2);
         $totalValue = round($metalValue + $makingCharges, 2);
@@ -144,7 +156,7 @@ class CalculateEmiRateBooking
             'installment_amount' => $installmentAmounts[0],
             'metal_rate_id' => $latestRate->id,
             'rate_per_gram' => (float) $latestRate->rate_per_gram,
-            'fixed_weight_grams' => (float) $plan->fixed_weight_grams,
+            'fixed_weight_grams' => $weightGrams,
             // The first month's maintenance (1% of the full remaining value).
             'maintenance_cost' => round($remainingValue * $maintenancePercent / 100, 2),
             'rule_version_id' => $this->ruleVersionService->activeVersion()?->id,

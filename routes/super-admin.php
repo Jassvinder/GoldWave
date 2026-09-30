@@ -16,6 +16,7 @@ use App\Http\Controllers\SuperAdmin\LandingHeroController;
 use App\Http\Controllers\SuperAdmin\MaintenanceController;
 use App\Http\Controllers\SuperAdmin\MemberManagementController;
 use App\Http\Controllers\SuperAdmin\MetalRateController;
+use App\Http\Controllers\SuperAdmin\PaymentSettingsController;
 use App\Http\Controllers\SuperAdmin\PayoutRequestController;
 use App\Http\Controllers\SuperAdmin\PayoutTdsSettingsController;
 use App\Http\Controllers\SuperAdmin\ProfileChangeRequestController;
@@ -23,6 +24,7 @@ use App\Http\Controllers\SuperAdmin\RateBookingRequestController;
 use App\Http\Controllers\SuperAdmin\ReportsController;
 use App\Http\Controllers\SuperAdmin\RestockShipmentsController;
 use App\Http\Controllers\SuperAdmin\RuleVersionController;
+use App\Http\Controllers\SuperAdmin\StoreEmiBookingController;
 use App\Http\Controllers\SuperAdmin\StoreManagementController;
 use App\Http\Controllers\SuperAdmin\StoreWalletManagementController;
 use Illuminate\Support\Facades\Route;
@@ -53,6 +55,10 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
             Route::post('rule-versions', [RuleVersionController::class, 'store'])->name('rule-versions.store');
         });
 
+        // T-196 — company GPay/UPI details (UPI ID + QR) shown on every payment step.
+        Route::get('payment-settings', [PaymentSettingsController::class, 'index'])->name('payment-settings.index');
+        Route::post('payment-settings', [PaymentSettingsController::class, 'update'])->name('payment-settings.update');
+
         // S04 — Daily Dummy Entry Settings.
         Route::get('dummy-entry-settings', [DummyEntrySettingsController::class, 'index'])->name('dummy-entry-settings.index');
         Route::post('dummy-entry-settings', [DummyEntrySettingsController::class, 'update'])->name('dummy-entry-settings.update');
@@ -77,6 +83,7 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
     Route::post('draw-settings', [DrawSettingsController::class, 'update'])->name('draw-settings.update');
     Route::get('draw-management', [DrawManagementController::class, 'index'])->name('draw-management.index');
     Route::post('draw-management/{execution}/reconcile', [DrawManagementController::class, 'reconcile'])->name('draw-management.reconcile');
+    Route::post('draw-management/groups/{group}/month-prize', [DrawManagementController::class, 'setMonthPrize'])->name('draw-management.month-prize');
 
     // S07 — Gold & Silver Rate Settings.
     Route::get('metal-rates', [MetalRateController::class, 'index'])->name('metal-rates.index');
@@ -131,6 +138,11 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
     Route::get('rate-booking-requests', [RateBookingRequestController::class, 'index'])->name('rate-booking-requests.index');
     Route::post('rate-booking-requests/{bookingRequest}/approve', [RateBookingRequestController::class, 'approve'])->name('rate-booking-requests.approve');
     Route::post('rate-booking-requests/{bookingRequest}/cancel', [RateBookingRequestController::class, 'cancel'])->name('rate-booking-requests.cancel');
+
+    // Repurchase on EMI requests (T-185a).
+    Route::get('store-emi-bookings', [StoreEmiBookingController::class, 'index'])->name('store-emi-bookings.index');
+    Route::post('store-emi-bookings/{booking}/approve', [StoreEmiBookingController::class, 'approve'])->name('store-emi-bookings.approve');
+    Route::post('store-emi-bookings/{booking}/cancel', [StoreEmiBookingController::class, 'cancel'])->name('store-emi-bookings.cancel');
 
     // Admin Compensation Management.
     Route::get('compensation/config', [CompensationManagementController::class, 'config'])->name('compensation.config');

@@ -55,7 +55,7 @@ class SubmitPayoutRequest
 
             if ($amount > $available) {
                 throw ValidationException::withMessages([
-                    'amount' => 'Insufficient available balance for this payout request.',
+                    'amount' => 'You can request at most ₹'.number_format($available, 2, '.', '').' — your available balance.',
                 ]);
             }
 

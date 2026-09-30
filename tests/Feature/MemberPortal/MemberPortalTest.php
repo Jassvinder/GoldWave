@@ -6,6 +6,9 @@ use App\Models\EmiSchedule;
 use App\Models\Member;
 use App\Models\MembershipPlan;
 use App\Models\User;
+use App\Notifications\BankDetailsVerified;
+use App\Services\WalletLedgerService;
+use App\Support\Portal;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -33,8 +36,25 @@ beforeEach(function () {
     Storage::fake('public');
 });
 
-test('a guest is redirected to login for any member portal route', function () {
-    $this->get('/member/wallet')->assertRedirect('/login');
+test('a guest is redirected to the Member login for any member portal route (T-198)', function () {
+    $this->get('/member/wallet')->assertRedirect('/member/login');
+});
+
+test('after a member session ends, shared pages send them to the Member login; staff pages keep the staff login (T-198)', function () {
+    // /dashboard is shared by every portal — the remembered door decides.
+    $this->withCookie(Portal::COOKIE, Portal::MEMBER)->get('/dashboard')->assertRedirect('/member/login');
+    $this->withCookie(Portal::COOKIE, Portal::STAFF)->get('/dashboard')->assertRedirect('/login');
+    $this->get('/super-admin/payout-requests')->assertRedirect('/login');
+});
+
+test('a member who logs out lands on the Member login; Super Admin still goes home (T-198)', function () {
+    $member = portalMember('LOGOUT-1');
+
+    $this->actingAs($member->user)->withCookie(Portal::COOKIE, Portal::MEMBER)
+        ->post('/logout')->assertRedirect('/member/login');
+
+    $this->actingAs(User::factory()->create(['role' => 'super_admin']))->withCookie(Portal::COOKIE, Portal::STAFF)
+        ->post('/logout')->assertRedirect('/');
 });
 
 test('a member sees their dashboard with real data, not the generic placeholder', function () {
@@ -45,7 +65,57 @@ test('a member sees their dashboard with real data, not the generic placeholder'
     $response->assertOk();
     $response->assertInertia(fn ($page) => $page
         ->component('member/dashboard')
-        ->where('member.customer_id', 'DASH-1'));
+        ->where('member.customer_id', 'DASH-1')
+        // T-194 — team card numbers (a leaf member has no team).
+        ->where('team', ['direct' => 0, 'left' => 0, 'right' => 0, 'total' => 0]));
+
+    // Directs View and Tree View carry the same team numbers.
+    $this->actingAs($member->user)->get('/member/directs')
+        ->assertInertia(fn ($page) => $page->where('team.total', 0)->where('team.direct', 0));
+    $this->actingAs($member->user)->get('/member/tree')
+        ->assertInertia(fn ($page) => $page->where('team.total', 0));
+});
+
+test('the dashboard income total itemises every income type and reconciles with the wallet', function () {
+    $member = portalMember('DASH-2');
+    $wallet = app(WalletLedgerService::class);
+
+    $wallet->credit($member, 'level_income', 9000, null, 'Level income');
+    $wallet->credit($member, 'pair_reward', 5500, null, 'Pair/Reward milestone');
+    $wallet->debit($member, 'assisted_registration', 1500, null, 'Registered a member');
+
+    $this->actingAs($member->user)->get('/dashboard')
+        ->assertInertia(fn ($page) => $page
+            ->where('income.total', '14500.00')
+            ->where('income.level_income', '9000.00')
+            ->where('income.pair_reward', '5500.00')
+            ->where('wallet.used_for_registrations', '1500.00')
+            ->where('wallet.balance', '13000.00'));
+});
+
+test('the Income Booster card lists what each qualified level has paid so far (01-10-2026)', function () {
+    $member = portalMember('DASH-BOOST');
+    $ruleVersionId = App\Models\RuleVersion::where('is_active', true)->value('id');
+
+    foreach ([1 => [5000, 5000, 5000], 2 => [20000, 20000]] as $level => $months) {
+        $qualification = App\Models\BoosterQualification::create(['member_id' => $member->id, 'level_no' => $level, 'qualified_at' => now(), 'rule_version_id' => $ruleVersionId]);
+
+        foreach ($months as $i => $amount) {
+            App\Models\BoosterPayoutSchedule::create([
+                'booster_qualification_id' => $qualification->id,
+                'month_no' => $i + 1,
+                'scheduled_date' => now()->addMonths($i)->toDateString(),
+                'amount' => $amount,
+                // Level 1 has paid 2 of 3 months, level 2 one of 2.
+                'status' => $i < ($level === 1 ? 2 : 1) ? 'paid' : 'pending',
+            ]);
+        }
+    }
+
+    $this->actingAs($member->user)->get('/dashboard')
+        ->assertInertia(fn ($page) => $page
+            ->where('booster_levels.0', ['level_no' => 1, 'received' => '10000.00', 'months_paid' => 2, 'months_total' => 3])
+            ->where('booster_levels.1', ['level_no' => 2, 'received' => '20000.00', 'months_paid' => 1, 'months_total' => 2]));
 });
 
 test('a super admin sees the real S01 System Dashboard, not the member one', function () {
@@ -178,14 +248,33 @@ test('a payout request is blocked without verified bank details, and succeeds on
         ->post('/member/payout', ['amount' => 1000])
         ->assertSessionHasErrors('bank_detail');
 
-    $bankDetail->update(['verified_at' => now()]);
+    // T-195 — Super Admin sees the member waiting for bank verification on Payout Requests…
+    $admin = User::factory()->create(['role' => 'super_admin']);
+    $this->actingAs($admin)->get('/super-admin/payout-requests')
+        ->assertInertia(fn ($page) => $page->where('awaiting_bank_verification.0.customer_id', 'PAY-1'));
 
-    $this->actingAs($member->user)
+    // …verifies them on Member Detail, and the member is notified.
+    $this->actingAs($admin)->post("/super-admin/members/{$member->id}/verify-bank-detail")->assertRedirect();
+    expect($bankDetail->fresh()->verified_at)->not->toBeNull()
+        ->and($member->user->notifications()->where('type', BankDetailsVerified::class)->exists())->toBeTrue();
+
+    // Below the minimum and above the available balance are both refused.
+    $this->actingAs($member->fresh()->user)->post('/member/payout', ['amount' => 499])->assertSessionHasErrors('amount');
+    $this->actingAs($member->fresh()->user)->post('/member/payout', ['amount' => 5000.01])->assertSessionHasErrors('amount');
+
+    $this->actingAs($member->fresh()->user)
         ->post('/member/payout', ['amount' => 1000])
         ->assertRedirect('/member/payout');
 
     expect($member->payoutRequests()->count())->toBe(1);
     expect((float) $member->fresh()->wallet_hold_amount)->toBe(1000.0);
+
+    // The request reaches Super Admin's queue, and the member no longer waits on verification.
+    $this->actingAs($admin)->get('/super-admin/payout-requests')
+        ->assertInertia(fn ($page) => $page
+            ->where('pending.0.member.customer_id', 'PAY-1')
+            ->where('pending.0.requested_amount', '1000.00')
+            ->where('awaiting_bank_verification', []));
 });
 
 test('a member can cancel their own pending payout request, releasing the wallet hold (T-147)', function () {

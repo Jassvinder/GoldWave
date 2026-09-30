@@ -27,6 +27,8 @@ Use names of secret variables, never their values.
 
 ## Online payments — Razorpay (T-137, 22-09-2026)
 
+> **Switched off since 30-09-2026 (T-196, user decision — the fee is ~2.36% per payment).** Members pay by Cash or GPay/UPI, approved in Payment Approvals; the company UPI ID and QR are set in Super Admin → Payment Settings. To offer Razorpay again, set `PAYMENT_ONLINE_ENABLED=true` (plus the keys below) and clear the config cache — no code change is needed.
+
 Environment variables (set in the server's `.env`; never commit them):
 
 | Variable                  | Meaning                                                                                                                                        |

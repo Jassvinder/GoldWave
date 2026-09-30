@@ -5,7 +5,9 @@ namespace App\Providers;
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Models\User;
+use App\Support\Portal;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
@@ -13,6 +15,7 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
+use Laravel\Fortify\Contracts\LogoutResponse;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
 
@@ -23,7 +26,20 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // T-198 — a member who logs out lands on the Member login; staff keep going to the home page.
+        $this->app->singleton(LogoutResponse::class, fn () => new class implements LogoutResponse
+        {
+            public function toResponse($request)
+            {
+                if ($request->wantsJson()) {
+                    return new JsonResponse('', 204);
+                }
+
+                return Portal::lastUsed($request) === Portal::MEMBER
+                    ? redirect()->route('member.login')
+                    : redirect(Fortify::redirects('logout', '/'));
+            }
+        });
     }
 
     /**
@@ -60,6 +76,9 @@ class FortifyServiceProvider extends ServiceProvider
             }
 
             if (Hash::check($request->password, $user->password)) {
+                // T-198 — remembered so a later expired session goes back to this (staff) login.
+                Portal::stamp(Portal::STAFF);
+
                 return $user;
             }
 

@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Registration;
 
+use App\Services\Payments\PaymentModes;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * DOMAIN_LOGIC.md §2.1/§3.1: mobile and email are both mandatory (§2.1 point
@@ -30,7 +32,8 @@ class RegisterMemberRequest extends FormRequest
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'mobile' => ['required', 'digits:10', 'unique:users,mobile'],
             'membership_plan_id' => ['required', 'integer', 'exists:membership_plans,id'],
-            'payment_mode' => ['required', 'in:online,cash'],
+            'payment_mode' => ['required', Rule::in(PaymentModes::offered())],
+            ...PaymentModes::upiProofRules('payment_mode'),
         ];
     }
 }

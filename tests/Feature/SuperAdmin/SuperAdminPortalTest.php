@@ -462,28 +462,56 @@ test('a super admin can assign a leader to a dummy entry (S05), and the leader\'
 
 test('a super admin can update draw settings and reconcile an executed draw (S06)', function () {
     $this->actingAs(spSuperAdmin())
-        ->post('/super-admin/draw-settings', ['draw_group_size' => 5])
+        ->post('/super-admin/draw-settings', [
+            'draw_group_size' => 5,
+            'draw_prize_silver_name' => 'Silver Anklet',
+            'draw_prize_silver_value' => 18000,
+            'draw_prize_gold_name' => 'Gold Chain',
+            'draw_prize_gold_value' => 26000,
+            'draw_winners_per_month' => 1,
+        ])
         ->assertRedirect('/super-admin/draw-settings');
 
-    expect((int) app(RuleVersionService::class)->value('draw_group_size'))->toBe(5);
+    expect((int) app(RuleVersionService::class)->value('draw_group_size'))->toBe(5)
+        ->and(app(RuleVersionService::class)->value('draw_prize_silver_name'))->toBe('Silver Anklet')
+        ->and((float) app(RuleVersionService::class)->value('draw_prize_gold_value'))->toBe(26000.0);
 
     for ($i = 1; $i <= 5; $i++) {
         spMember(sprintf('SPDRAW%03d', $i));
     }
-    $group = app(GenerateDrawGroups::class)()[0];
-    DrawGroupMonthConfig::create([
-        'draw_group_id' => $group->id,
-        'cycle_month_no' => 1,
-        'prize_name' => 'Silver prize',
-        'prize_value' => 5000,
-        'metal_type' => 'silver',
-    ]);
+    app(GenerateDrawGroups::class)();
+    // No prize set for the group — the draw still runs, with the Silver default just saved above.
     $execution = app(ExecuteMonthlyDraw::class)()[0];
 
     $this->actingAs(spSuperAdmin())
         ->get('/super-admin/draw-management')
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('super-admin/draw-management'));
+        ->assertInertia(fn ($page) => $page->component('super-admin/draw-management')
+            // 30-09-2026 — each group card shows its Customer ID range and how many are still in the draw.
+            ->where('groups.0.first_customer_id', 'SPDRAW001')
+            ->where('groups.0.last_customer_id', 'SPDRAW005')
+            ->where('groups.0.winners', 1)
+            ->where('groups.0.eligible_remaining', 4)
+            ->where('groups.0.draws_done', 1)
+            ->where('groups.0.executions.0.prize_name', 'Silver Anklet')
+            ->where('groups.0.executions.0.prize_value', '18000.00')
+            ->where('groups.0.next_draw.cycle_month_no', 2)
+            ->where('groups.0.next_draw.prize_name', 'Silver Anklet')
+            ->where('pool.group_size', 5)
+            ->where('pool.grouped', 5));
+
+    // A group's own prize for a month not drawn yet; a month already drawn is refused.
+    $group = $execution->drawGroup;
+    $this->actingAs(spSuperAdmin())
+        ->post("/super-admin/draw-management/groups/{$group->id}/month-prize", ['cycle_month_no' => 2, 'prize_name' => 'Silver Bangle', 'prize_value' => 22000, 'winners_count' => 2])
+        ->assertRedirect('/super-admin/draw-management');
+    expect(DrawGroupMonthConfig::where('draw_group_id', $group->id)->where('cycle_month_no', 2)->sole())
+        ->prize_name->toBe('Silver Bangle')
+        ->winners_count->toBe(2)
+        ->metal_type->toBe('silver');
+    $this->actingAs(spSuperAdmin())
+        ->post("/super-admin/draw-management/groups/{$group->id}/month-prize", ['cycle_month_no' => 1, 'prize_name' => 'X', 'prize_value' => 1, 'winners_count' => 1])
+        ->assertSessionHasErrors('cycle_month_no');
 
     $this->actingAs(spSuperAdmin())
         ->post("/super-admin/draw-management/{$execution->id}/reconcile", ['correction_note' => 'Verified in person.'])

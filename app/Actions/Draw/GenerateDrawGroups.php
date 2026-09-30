@@ -62,7 +62,7 @@ class GenerateDrawGroups
     }
 
     /** @return array<int, int> */
-    private function eligibleUngroupedMemberIds(): array
+    public function eligibleUngroupedMemberIds(): array
     {
         $emiThresholds = $this->rules->value('draw_eligibility_emis', []);
 

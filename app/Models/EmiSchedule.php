@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property-read Member|null $member
@@ -13,11 +14,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read MetalRate|null $metalRate
  * @property-read RuleVersion|null $ruleVersion
  * @property-read Collection<int, EmiInstallment> $installments
+ * @property-read StoreEmiBooking|null $storeEmiBooking
  */
 class EmiSchedule extends Model
 {
     protected $fillable = [
         'member_id',
+        // T-185 — `membership` (the plan's own schedule) or `store_repurchase` (a Repurchase on EMI, DOMAIN_LOGIC.md §16.13).
+        'kind',
         'membership_plan_id',
         'total_installments',
         'rate_booking_method',
@@ -80,5 +84,16 @@ class EmiSchedule extends Model
     public function installments(): HasMany
     {
         return $this->hasMany(EmiInstallment::class);
+    }
+
+    /** @return HasOne<StoreEmiBooking, $this> */
+    public function storeEmiBooking(): HasOne
+    {
+        return $this->hasOne(StoreEmiBooking::class);
+    }
+
+    public function isStoreRepurchase(): bool
+    {
+        return $this->kind === 'store_repurchase';
     }
 }

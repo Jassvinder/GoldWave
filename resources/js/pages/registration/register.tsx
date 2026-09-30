@@ -1,6 +1,11 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
+import {
+    PaymentModePicker,
+    type PaymentMode,
+    type PaymentOptions,
+} from '@/components/payment-mode-picker';
 import { PublicLogoLink } from '@/components/public-logo-link';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,6 +38,7 @@ type Props = {
         sponsor_name: string | null;
     } | null;
     referral_invalid: boolean;
+    payment_options: PaymentOptions;
 };
 
 type SponsorState =
@@ -41,7 +47,12 @@ type SponsorState =
     | { status: 'valid'; name: string | null; customerId: string }
     | { status: 'invalid'; message: string };
 
-export default function Register({ plans, referral, referral_invalid }: Props) {
+export default function Register({
+    plans,
+    referral,
+    referral_invalid,
+    payment_options,
+}: Props) {
     const [sponsor, setSponsor] = useState<SponsorState>(
         referral
             ? {
@@ -60,7 +71,9 @@ export default function Register({ plans, referral, referral_invalid }: Props) {
         email: '',
         mobile: '',
         membership_plan_id: '' as number | '',
-        payment_mode: 'online' as 'online' | 'cash',
+        payment_mode: 'cash' as PaymentMode,
+        upi_reference: '',
+        upi_screenshot: null as File | null,
     });
 
     async function checkSponsorCode(code: string) {
@@ -337,38 +350,26 @@ export default function Register({ plans, referral, referral_invalid }: Props) {
                             {/* Payment mode */}
                             <div className="grid gap-2">
                                 <Label>Payment Mode</Label>
-                                <div className="flex gap-2">
-                                    {(
-                                        [
-                                            {
-                                                value: 'online',
-                                                label: 'Online',
-                                            },
-                                            { value: 'cash', label: 'Cash' },
-                                        ] as const
-                                    ).map((option) => (
-                                        <button
-                                            key={option.value}
-                                            type="button"
-                                            onClick={() =>
-                                                form.setData(
-                                                    'payment_mode',
-                                                    option.value,
-                                                )
-                                            }
-                                            className={`flex-1 rounded-md border px-3 py-2 text-sm ${
-                                                form.data.payment_mode ===
-                                                option.value
-                                                    ? 'border-primary bg-primary text-primary-foreground'
-                                                    : 'border-input bg-transparent'
-                                            }`}
-                                        >
-                                            {option.label}
-                                        </button>
-                                    ))}
-                                </div>
-                                <InputError
-                                    message={form.errors.payment_mode}
+                                <PaymentModePicker
+                                    options={payment_options}
+                                    mode={form.data.payment_mode}
+                                    onModeChange={(mode) =>
+                                        form.setData('payment_mode', mode)
+                                    }
+                                    upiReference={form.data.upi_reference}
+                                    onUpiReferenceChange={(value) =>
+                                        form.setData('upi_reference', value)
+                                    }
+                                    onUpiScreenshotChange={(file) =>
+                                        form.setData('upi_screenshot', file)
+                                    }
+                                    errors={{
+                                        mode: form.errors.payment_mode,
+                                        upi_reference:
+                                            form.errors.upi_reference,
+                                        upi_screenshot:
+                                            form.errors.upi_screenshot,
+                                    }}
                                 />
                             </div>
 

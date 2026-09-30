@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Member;
 
 use App\Http\Controllers\Controller;
 use App\Services\PairPoolBreakdown;
+use App\Services\PairQualifiedDirects;
 use App\Services\RuleVersionService;
 use App\Support\Dates;
 use Illuminate\Http\Request;
@@ -16,6 +17,7 @@ class PairRewardController extends Controller
     public function __construct(
         private readonly RuleVersionService $rules,
         private readonly PairPoolBreakdown $pairPool,
+        private readonly PairQualifiedDirects $qualifiedDirects,
     ) {}
 
     public function index(Request $request): Response
@@ -59,6 +61,8 @@ class PairRewardController extends Controller
                 'unused_right' => $pool['right']['unused'],
                 'consumed_left' => $pool['left']['consumed'],
                 'consumed_right' => $pool['right']['consumed'],
+                // T-178 — counted against each milestone's total Min Directs (DOMAIN_LOGIC.md §7.3).
+                'qualified_directs' => $this->qualifiedDirects->count($member),
             ],
             'pool' => [
                 'left' => $pool['left'],

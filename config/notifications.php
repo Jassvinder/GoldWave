@@ -21,12 +21,17 @@ return [
         'bank_details_submitted' => ['database'],
         // T-166 — the user asked for every channel: the Super Admin must act on it right away.
         'current_rate_booking_requested' => ['database', 'mail', 'sms'],
+        // T-185a — like a Current Rate request, the metal is bought on approval.
+        'store_emi_booking_requested' => ['database', 'mail', 'sms'],
 
         // Member notifications — things a member wants to know or must act on.
         'cash_payment_decided' => ['database', 'mail', 'sms'],
+        'bank_details_verified' => ['database', 'mail', 'sms'],
         'assisted_registration_confirmed' => ['database', 'mail', 'sms'],
         'profile_change_request_reviewed' => ['database', 'mail', 'sms'],
         'emi_due_reminder' => ['database', 'mail', 'sms'],
         'current_rate_booking_decided' => ['database', 'mail', 'sms'],
+        'store_emi_booking_decided' => ['database', 'mail', 'sms'],
+        'store_emi_booking_broken' => ['database', 'mail', 'sms'],
     ],
 ];

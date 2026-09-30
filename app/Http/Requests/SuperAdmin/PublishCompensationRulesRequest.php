@@ -26,6 +26,8 @@ class PublishCompensationRulesRequest extends FormRequest
             'level_income_rates.*' => ['numeric', 'min:0'],
             'level_income_rates_gold' => ['nullable', 'array'],
             'level_income_rates_gold.*' => ['numeric', 'min:0'],
+            'level_income_min_directs' => ['nullable', 'array'],
+            'level_income_min_directs.*' => ['integer', 'min:0'],
             'pair_value_per_entry' => ['nullable', 'numeric', 'min:0'],
             'pair_value_per_entry_gold' => ['nullable', 'numeric', 'min:0'],
             'pair_milestones' => ['nullable', 'array'],
@@ -54,6 +56,8 @@ class PublishCompensationRulesRequest extends FormRequest
             'item_buyback_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'item_buyback_percent_gold' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'store_gst_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'store_income_min_directs' => ['nullable', 'integer', 'min:0'],
+            'store_emi_break_overdue_count' => ['nullable', 'integer', 'min:1', 'max:24'],
         ];
     }
 }

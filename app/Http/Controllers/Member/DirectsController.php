@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Member;
 
 use App\Http\Controllers\Controller;
 use App\Models\Member;
+use App\Services\MemberNetworkSummary;
 use App\Support\NetworkNodeCard;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,7 +19,7 @@ use Inertia\Response;
  */
 class DirectsController extends Controller
 {
-    public function show(Request $request, ?Member $member = null): Response
+    public function show(Request $request, MemberNetworkSummary $network, ?Member $member = null): Response
     {
         $loggedInMember = $request->user()->member;
 
@@ -33,6 +34,7 @@ class DirectsController extends Controller
                 'customer_id' => $loggedInMember->customer_id,
             ] : null,
             'selectedMember' => NetworkNodeCard::from($selected),
+            'team' => $network->teamCounts($selected),
             'directs' => $selected->directs()->with(['user', 'sponsor.user'])->get()->map(fn (Member $direct) => NetworkNodeCard::from($direct)),
         ]);
     }

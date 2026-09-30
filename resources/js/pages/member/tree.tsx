@@ -1,3 +1,7 @@
+import {
+    TeamSummaryStrip,
+    type TeamCounts,
+} from '@/components/team-summary-strip';
 import { Head, router, usePage } from '@inertiajs/react';
 import { MemberNodeCard } from '@/components/member-node-card';
 import type { NodeMember } from '@/components/member-node-card';
@@ -12,6 +16,7 @@ type TreeNode = NodeMember & {
 type Props = {
     loggedInMember: { name: string | null; customer_id: string | null } | null;
     root: TreeNode;
+    team: TeamCounts;
 };
 
 /**
@@ -23,7 +28,7 @@ type Props = {
  * can be expanded" from the spec. Zoom/pan is a simple CSS transform on the
  * whole diagram — no charting library needed for a 3-level (≤15 node) tree.
  */
-export default function Tree({ loggedInMember, root }: Props) {
+export default function Tree({ loggedInMember, root, team }: Props) {
     const errors = usePage().props.errors as Record<string, string>;
 
     function handleSearch(customerId: string) {
@@ -39,6 +44,7 @@ export default function Tree({ loggedInMember, root }: Props) {
                 onSearch={handleSearch}
                 searchError={errors.customer_id}
                 rootHref={loggedInMember ? showTree.url() : null}
+                summary={<TeamSummaryStrip team={team} />}
             >
                 <TreeBranch node={root} />
             </NetworkDiagramShell>

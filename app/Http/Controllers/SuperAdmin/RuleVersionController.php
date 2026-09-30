@@ -25,6 +25,7 @@ class RuleVersionController extends Controller
     private const COMPENSATION_KEYS = [
         'level_income_rates',
         'level_income_rates_gold',
+        'level_income_min_directs',
         'pair_value_per_entry',
         'pair_value_per_entry_gold',
         'pair_milestones',
@@ -37,6 +38,8 @@ class RuleVersionController extends Controller
         'item_buyback_percent',
         'item_buyback_percent_gold',
         'store_gst_percent',
+        'store_income_min_directs',
+        'store_emi_break_overdue_count',
     ];
 
     public function index(Request $request, RuleVersionService $rules): Response
@@ -76,6 +79,13 @@ class RuleVersionController extends Controller
         foreach (self::COMPENSATION_KEYS as $key) {
             $current[$key] = $rules->value($key);
         }
+
+        // T-179 — a version published before this key existed has no directs condition: show 0 for every level.
+        $current['level_income_min_directs'] ??= array_fill_keys(array_map('strval', range(1, 12)), 0);
+        // T-183 — likewise, no store-income directs condition before this key existed.
+        $current['store_income_min_directs'] ??= 0;
+        // T-185b — the break default applies until a version carries its own value.
+        $current['store_emi_break_overdue_count'] ??= 3;
 
         return Inertia::render('super-admin/rule-versions', [
             'versions' => $versions,

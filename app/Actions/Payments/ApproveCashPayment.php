@@ -8,6 +8,7 @@ use App\Models\Payment;
 use App\Models\User;
 use App\Notifications\CashPaymentDecided;
 use App\Services\Notifier;
+use App\Services\Payments\PaymentModes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -29,8 +30,8 @@ class ApproveCashPayment
         $wasAlreadyPaid = DB::transaction(function () use ($payment, $operator) {
             $locked = Payment::whereKey($payment->id)->lockForUpdate()->firstOrFail();
 
-            if ($locked->mode !== 'cash') {
-                throw ValidationException::withMessages(['payment' => 'This payment is not a cash payment.']);
+            if (! PaymentModes::needsApproval($locked->mode)) {
+                throw ValidationException::withMessages(['payment' => 'This payment does not need a manual approval.']);
             }
 
             if ($locked->status === 'paid') {

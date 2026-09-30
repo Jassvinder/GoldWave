@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AssistedRegistrationController;
 use App\Http\Controllers\Admin\InventoryController;
 use App\Http\Controllers\Admin\SalesController;
+use App\Http\Controllers\Admin\StoreEmiBookingController;
 use App\Http\Controllers\Admin\StoreProfileController;
 use App\Http\Controllers\Admin\StoreReportsController;
 use App\Http\Controllers\Admin\StoreTransactionsController;
@@ -32,6 +33,12 @@ Route::middleware(['auth', 'role:store_admin', 'store-owner'])->prefix('admin')-
     Route::post('sales/collect-payment/{payment}', [SalesController::class, 'collectPayment'])->name('sales.collect-payment');
     Route::get('sales/{sale}/invoice', [SalesController::class, 'invoice'])->name('sales.invoice');
     Route::post('sales/{sale}/bill', [SalesController::class, 'generateBill'])->name('sales.bill');
+
+    // T-185a — Repurchase on EMI requests.
+    Route::get('store-emi', [StoreEmiBookingController::class, 'index'])->name('store-emi.index');
+    Route::post('store-emi', [StoreEmiBookingController::class, 'store'])->name('store-emi.store');
+    Route::post('store-emi/{booking}/deliver-piece', [StoreEmiBookingController::class, 'deliverPiece'])->name('store-emi.deliver-piece');
+    Route::post('store-emi/{booking}/deliver-silver', [StoreEmiBookingController::class, 'deliverSilver'])->name('store-emi.deliver-silver');
 
     Route::get('inventory', [InventoryController::class, 'index'])->name('inventory.index');
     Route::post('inventory/restock/{shipment}/received', [InventoryController::class, 'markRestockReceived'])->name('inventory.restock.received');

@@ -6,6 +6,7 @@ use App\Models\IncomeLedgerCalculation;
 use App\Models\Member;
 use App\Models\Payment;
 use App\Models\RuleVersion;
+use App\Services\PairQualifiedDirects;
 use App\Services\RuleVersionService;
 use App\Services\SponsorChainResolver;
 use App\Services\WalletLedgerService;
@@ -17,7 +18,9 @@ use Illuminate\Support\Facades\DB;
  * beneficiary's wallet. A level with no eligible beneficiary (chain shorter
  * than 12, or a resolved beneficiary who isn't currently 'active') gets a
  * `skipped` row instead of being silently omitted (§6.1 point 9,
- * Docs/TEST.md scenario 1's edge case).
+ * Docs/TEST.md scenario 1's edge case). A beneficiary short of a level's
+ * qualified directs gets a `held` row instead (T-186), paid later by
+ * `ReleaseHeldLevelIncome`.
  *
  * "Upline inactive" (§6.1 point 9) is resolved here as `members.status !==
  * 'active'` — reusing the same Active/not-Active definition DOMAIN_LOGIC.md
@@ -37,6 +40,7 @@ class CalculateLevelIncome
         private readonly SponsorChainResolver $sponsorChain,
         private readonly RuleVersionService $rules,
         private readonly WalletLedgerService $wallet,
+        private readonly PairQualifiedDirects $qualifiedDirects,
     ) {}
 
     public function __invoke(Payment $payment): void
@@ -54,11 +58,13 @@ class CalculateLevelIncome
         }
 
         $payer = $payment->member()->firstOrFail();
-        $metal = $payer->membershipPlan->product_category;
+        // T-185 — a store Repurchase on EMI pays Level Income at the rates of the piece's metal, not the plan's.
+        $metal = $payment->storeEmiBooking()->metal ?? $payer->membershipPlan->product_category;
         $rates = $this->rules->metalValue('level_income_rates', $metal, []);
         $chain = $this->sponsorChain->ancestors($payer, self::MAX_LEVELS);
+        $minDirects = (array) $this->rules->value('level_income_min_directs', []);
 
-        DB::transaction(function () use ($payment, $payer, $ruleVersion, $rates, $chain) {
+        DB::transaction(function () use ($payment, $payer, $ruleVersion, $rates, $chain, $minDirects) {
             for ($level = 1; $level <= self::MAX_LEVELS; $level++) {
                 $beneficiary = $chain[$level - 1] ?? null;
                 $rate = (float) ($rates[(string) $level] ?? 0);
@@ -86,6 +92,27 @@ class CalculateLevelIncome
 
                 $amount = round(((float) $payment->amount) * $rate / 100, 2);
 
+                // T-179 — each level needs its total of qualified directs (default 2 × level no.). T-186 — short of
+                // them the income is `held` with its amount (no wallet entry) and `ReleaseHeldLevelIncome` pays it
+                // once the directs are met (DOMAIN_LOGIC.md §6, Docs/TEST.md scenario 36).
+                $requiredDirects = (int) ($minDirects[(string) $level] ?? 0);
+
+                if ($requiredDirects > 0 && $this->qualifiedDirects->count($beneficiary) < $requiredDirects) {
+                    IncomeLedgerCalculation::create([
+                        'type' => 'level_income',
+                        'source_payment_id' => $payment->id,
+                        'beneficiary_member_id' => $beneficiary->id,
+                        'level_no' => $level,
+                        'rate_percent' => $rate,
+                        'amount' => $amount,
+                        'rule_version_id' => $ruleVersion->id,
+                        'eligibility_status' => 'held',
+                        'skip_reason' => 'insufficient_directs',
+                    ]);
+
+                    continue;
+                }
+
                 $calculation = IncomeLedgerCalculation::create([
                     'type' => 'level_income',
                     'source_payment_id' => $payment->id,
@@ -97,7 +124,7 @@ class CalculateLevelIncome
                     'eligibility_status' => 'paid',
                 ]);
 
-                $this->wallet->credit(
+                $this->wallet->creditEarning(
                     $beneficiary,
                     'level_income',
                     $amount,

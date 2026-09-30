@@ -27,6 +27,7 @@ class IncomeLedgerCalculation extends Model
         'rule_version_id',
         'eligibility_status',
         'skip_reason',
+        'released_at',
     ];
 
     protected function casts(): array
@@ -34,6 +35,7 @@ class IncomeLedgerCalculation extends Model
         return [
             'rate_percent' => 'decimal:3',
             'amount' => 'decimal:2',
+            'released_at' => 'datetime',
         ];
     }
 

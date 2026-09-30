@@ -82,6 +82,11 @@ function evMessages(string $check, array $only = []): string
 
 beforeEach(function () {
     $this->seed();
+    // evChain's members each have a single direct, so the T-179 Level Income directs gate is switched off here; the
+    // T-179 tests below switch it on themselves.
+    DB::table('rule_values')->where('key', 'level_income_min_directs')->update(['value' => json_encode([])]);
+    // Likewise the T-183 store-income unlock (StoreIncomeUnlockTest covers its verifier checks).
+    DB::table('rule_values')->where('key', 'store_income_min_directs')->update(['value' => json_encode(0)]);
 });
 
 test('an untouched database verifies clean across every check', function () {
@@ -185,8 +190,45 @@ test('a Pair reward that does not match its milestone, its consumed entries or i
 
     expect(evMessages('pair'))->toContain('Reward should be');
 
+    // T-178 — A has only 1 qualified direct (B), below milestone 1's total of 2: a warning, not an error.
+    $pair = evReport(['pair'])['pair'];
+    expect($pair['warnings'])->toBeGreaterThan(0);
+    expect(implode(' | ', array_column($pair['findings'], 'message')))->toContain('Milestone needs 2 qualified directs, but the member has 1 now');
+
     DB::table('pair_reward_transactions')->where('id', $tx)->delete();
     expect(evMessages('pair'))->toContain('has no reward transaction');
+});
+
+test('T-186: a held Level Income row verifies clean, is released when the member gets enough directs, and a stuck held row is a warning', function () {
+    DB::table('rule_values')->where('key', 'level_income_min_directs')->update(['value' => json_encode(['1' => 2])]);
+    [$a, $b] = evChain(); // A's only direct is B, so B's Level 1 (→ A) is held; C's Level 1 (→ B) likewise.
+
+    $heldRow = DB::table('income_ledger_calculations')->where('beneficiary_member_id', $a->id)->where('level_no', 1)->first();
+    expect($heldRow->eligibility_status)->toBe('held');
+    expect($heldRow->skip_reason)->toBe('insufficient_directs');
+    $level = evReport(['level'])['level'];
+    expect($level['errors'])->toBe(0);
+    expect($level['warnings'])->toBe(0);
+
+    evJoin($a->customer_id, 'Second direct of A', 'right'); // A now has 2 qualified directs: the held row is released.
+    expect(DB::table('income_ledger_calculations')->where('id', $heldRow->id)->value('eligibility_status'))->toBe('paid');
+    $report = evReport(['level', 'ledger', 'wallet']);
+    expect($report['level']['errors'] + $report['ledger']['errors'] + $report['wallet']['errors'])->toBe(0);
+    expect($report['level']['warnings'])->toBe(0);
+
+    // A row left held although the count is met (its release never ran) is flagged.
+    DB::table('income_ledger_calculations')->where('id', $heldRow->id)->update(['eligibility_status' => 'held', 'skip_reason' => 'insufficient_directs', 'released_at' => null]);
+    DB::table('wallet_ledger_entries')->where('source_id', $heldRow->id)->where('category', 'level_income')->delete();
+    expect(evMessages('level'))->toContain('should have been released');
+});
+
+test('T-179: a paid Level Income row whose beneficiary now has fewer directs than required is a warning', function () {
+    [$a] = evChain();
+    DB::table('rule_values')->where('key', 'level_income_min_directs')->update(['value' => json_encode(['1' => 2])]);
+
+    $level = evReport(['level'])['level'];
+    expect($level['errors'])->toBe(0);
+    expect(implode(' | ', array_column($level['findings'], 'message')))->toContain("this level needs 2 qualified directs and {$a->customer_id} has 1 now");
 });
 
 test('Purchase/Repurchase and Store Profit distributions are re-derived and a changed amount is caught', function () {
@@ -220,7 +262,7 @@ test('a booster payout with the wrong amount or date, and a paid one without a w
     $version = DB::table('rule_versions')->where('is_active', true)->value('id');
     $q = DB::table('booster_qualifications')->insertGetId(['member_id' => $a->id, 'level_no' => 1, 'qualified_at' => '2026-09-01 10:00:00', 'rule_version_id' => $version, 'created_at' => now(), 'updated_at' => now()]);
 
-    foreach (range(1, 6) as $month) {
+    foreach (range(1, 12) as $month) { // Booster Level 1 runs 12 months (T-180).
         DB::table('booster_payout_schedules')->insert([
             'booster_qualification_id' => $q, 'month_no' => $month, 'scheduled_date' => date('Y-m-d', strtotime('2026-09-01 +'.($month - 1).' month')),
             'amount' => 5000, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now(),

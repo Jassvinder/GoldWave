@@ -36,6 +36,7 @@ class PaymentHistoryController extends Controller
             'id' => $payment->id,
             'type' => $payment->type,
             'installment_no' => $payment->emiInstallment?->installment_no,
+            'covers_installments' => $payment->covers_installments,
             'amount' => $payment->amount,
             'mode' => $payment->mode,
             'status' => $payment->status,

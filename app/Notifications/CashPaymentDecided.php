@@ -29,7 +29,7 @@ class CashPaymentDecided extends AppNotification
         $amount = '₹'.number_format((float) $this->payment->amount, 2);
         $for = $this->payment->type === 'registration'
             ? 'your registration'
-            : 'EMI #'.($this->payment->emiInstallment->installment_no ?? '?');
+            : $this->payment->emiLabel();
 
         if (! $this->approved) {
             return "Your cash payment of {$amount} for {$for} was not accepted. Please contact GoldWave to sort it out.";

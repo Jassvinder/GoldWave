@@ -60,6 +60,7 @@ type Props = {
     current: {
         level_income_rates: Record<string, number>;
         level_income_rates_gold: Record<string, number>;
+        level_income_min_directs: Record<string, number>;
         pair_value_per_entry: number;
         pair_value_per_entry_gold: number;
         pair_milestones: Milestone[];
@@ -72,6 +73,8 @@ type Props = {
         item_buyback_percent: number;
         item_buyback_percent_gold: number;
         store_gst_percent: number;
+        store_income_min_directs: number;
+        store_emi_break_overdue_count: number;
     };
 };
 
@@ -82,6 +85,7 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
     const { data, setData, post, processing } = useForm({
         notes: '',
         level_income_rates: current.level_income_rates,
+        level_income_min_directs: current.level_income_min_directs,
         pair_value_per_entry: current.pair_value_per_entry,
         pair_milestones: current.pair_milestones,
         pair_qualification_emis: current.pair_qualification_emis,
@@ -92,6 +96,8 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
             current.store_profit_distribution_rates,
         item_buyback_percent: current.item_buyback_percent,
         store_gst_percent: current.store_gst_percent,
+        store_income_min_directs: current.store_income_min_directs,
+        store_emi_break_overdue_count: current.store_emi_break_overdue_count,
     });
 
     const {
@@ -130,6 +136,13 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
     const setGoldLevelRate = (level: string, value: number) => {
         setGoldData('level_income_rates_gold', {
             ...goldData.level_income_rates_gold,
+            [level]: value,
+        });
+    };
+
+    const setLevelMinDirects = (level: string, value: number) => {
+        setData('level_income_min_directs', {
+            ...data.level_income_min_directs,
             [level]: value,
         });
     };
@@ -268,6 +281,36 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
                             </FormSection>
 
                             <FormSection
+                                icon={Users}
+                                color="blue"
+                                title="Level Income — Directs Needed (L1 – L12)"
+                                description="Total qualified directs a member needs to earn each level (Silver and Gold alike). Short of it, that level's income lapses. An EMI direct counts once its Pair qualification EMIs are paid."
+                                contentClassName="grid grid-cols-3 gap-3 sm:grid-cols-6"
+                            >
+                                {Object.entries(
+                                    data.level_income_min_directs,
+                                ).map(([level, directs]) => (
+                                    <div key={level} className="grid gap-1">
+                                        <Label className="text-xs">
+                                            L{level}
+                                        </Label>
+                                        <Input
+                                            type="number"
+                                            min={0}
+                                            step="1"
+                                            value={directs}
+                                            onChange={(e) =>
+                                                setLevelMinDirects(
+                                                    level,
+                                                    Number(e.target.value),
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                ))}
+                            </FormSection>
+
+                            <FormSection
                                 icon={Trophy}
                                 color="amber"
                                 title="Pair/Reward Milestones"
@@ -299,7 +342,7 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
                                                 </TableHead>
                                                 <TableHead>Name</TableHead>
                                                 <TableHead>
-                                                    Min Directs
+                                                    Total Directs
                                                 </TableHead>
                                                 <TableHead>Left</TableHead>
                                                 <TableHead>Right</TableHead>
@@ -665,6 +708,59 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
                                             )
                                         }
                                     />
+                                </div>
+                                <div className="grid gap-1 sm:col-span-2">
+                                    <Label className="text-xs">
+                                        Directs to unlock store upline income
+                                        (shared, not metal-split)
+                                    </Label>
+                                    <Input
+                                        type="number"
+                                        min={0}
+                                        step="1"
+                                        value={data.store_income_min_directs}
+                                        onChange={(e) =>
+                                            setData(
+                                                'store_income_min_directs',
+                                                Number(e.target.value),
+                                            )
+                                        }
+                                    />
+                                    <p className="text-muted-foreground text-xs">
+                                        Qualified directs a member needs before
+                                        earning Purchase/Repurchase L1–12 and
+                                        Store Profit sponsor levels. Once
+                                        reached it stays unlocked for life;
+                                        before that the income lapses. 0 = no
+                                        condition.
+                                    </p>
+                                </div>
+                                <div className="grid gap-1 sm:col-span-2">
+                                    <Label className="text-xs">
+                                        Repurchase on EMI — overdue EMIs that
+                                        break it
+                                    </Label>
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        max={24}
+                                        step="1"
+                                        value={
+                                            data.store_emi_break_overdue_count
+                                        }
+                                        onChange={(e) =>
+                                            setData(
+                                                'store_emi_break_overdue_count',
+                                                Number(e.target.value),
+                                            )
+                                        }
+                                    />
+                                    <p className="text-muted-foreground text-xs">
+                                        At this many overdue EMIs the booking
+                                        closes by itself: the piece returns to
+                                        stock and the member is owed silver for
+                                        the principal paid.
+                                    </p>
                                 </div>
                             </FormSection>
 

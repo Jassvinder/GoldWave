@@ -40,13 +40,14 @@ type Props = {
     };
 };
 
-const STATUS_VARIANT: Record<string, 'default' | 'secondary'> = {
+const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'outline'> = {
     paid: 'default',
     skipped: 'secondary',
+    held: 'outline',
 };
 
 const TYPE_OPTIONS = ['level_income', 'purchase_repurchase'];
-const STATUS_OPTIONS = ['paid', 'skipped'];
+const STATUS_OPTIONS = ['paid', 'held', 'skipped'];
 const ANY = '__any__';
 
 /** INSTRUCTIONS.md's Admin Compensation Management calculation audit page — source event, beneficiary, rule version, level/rate, amount, eligibility status/reason, timestamp. No reversal/reference field exists (DOMAIN_LOGIC.md §21's "Still open" — no rule describes reversing a finalized calculation). */

@@ -21,7 +21,7 @@ class CashPaymentAwaitingApproval extends AppNotification
 
     public function title(): string
     {
-        return 'Cash payment awaiting approval';
+        return $this->payment->mode === 'upi' ? 'GPay/UPI payment awaiting approval' : 'Cash payment awaiting approval';
     }
 
     public function body(): string
@@ -31,9 +31,11 @@ class CashPaymentAwaitingApproval extends AppNotification
         $amount = '₹'.number_format((float) $this->payment->amount, 2);
         $for = $this->payment->type === 'registration'
             ? 'a new registration'
-            : 'EMI #'.($this->payment->emiInstallment->installment_no ?? '?');
+            : $this->payment->emiLabel();
 
-        return "{$who} submitted a cash payment of {$amount} for {$for}.";
+        $how = $this->payment->mode === 'upi' ? 'a GPay/UPI' : 'a cash';
+
+        return "{$who} submitted {$how} payment of {$amount} for {$for}.";
     }
 
     public function url(): string

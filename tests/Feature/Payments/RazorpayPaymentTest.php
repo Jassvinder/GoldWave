@@ -110,6 +110,8 @@ function rzpWebhook(string $event = 'order.paid', array $entity = [], ?string $s
 
 beforeEach(function () {
     $this->seed();
+    // T-196 — Online (Razorpay) is off by default; these tests keep the switched-off code path working.
+    config(['services.payments.online_enabled' => true]);
     rzpConfigure();
     rzpFake();
 });

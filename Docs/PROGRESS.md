@@ -2,7 +2,72 @@
 
 Keep only information needed to continue current work. Move durable decisions to their canonical document; remove stale entries when the task closes.
 
-## DEV DATABASE RESET (29-09-2026, user request, for guided testing with the client)
+## LATEST (30-09-2026): feedback batches T-192…T-196 and T-198…T-200 done — only T-197 open (Blocked)
+
+- T-192…T-196 and T-198…T-200 are complete (see TASKS.md). Full suite 437/437, and the build is fresh.
+- **Before real use on the dev DB:**
+  - Super Admin → **Payment Settings (UPI)** must get the company UPI ID + QR image, otherwise GPay/UPI shows "not set up".
+  - GWL01's bank details still need **Verify** (Member Detail) before its payout request can be made.
+- Razorpay is off (`PAYMENT_ONLINE_ENABLED` unset = false). Set it to true to bring Online back.
+- **T-197** (live draw screen) waits for the user's flow description.
+- Build with `.\gw build`; npm/pnpm are blocked on this machine.
+
+## ACTIVE (30-09-2026): user's 3-point batch — one task at a time, report after each
+
+The order is T-181 → T-182 → T-183.
+- **T-181 (done):** EMI payments give income but never a new entry. This was already true; a test was added.
+- **T-182 (DONE 30-09-2026, see TASKS.md; next up is T-183): an overdue EMI stops the member's earnings.** Decisions, user 30-09-2026:
+  - an EMI-plan member earns everything as usual, whatever the EMI count;
+  - while **any** of their EMIs is `overdue`, every new earning of theirs is **held, not lapsed**. It is credited as soon as the overdue EMI is paid;
+  - Pair reward waits: entries stay, and the reward is paid at the next month-end after the EMI is cleared;
+  - a Booster month falling due while overdue stays pending until the EMI is cleared.
+  - Needs design: where held income lives, and release on payment.
+- **T-183 (DONE 30-09-2026, see TASKS.md; next is T-185, which needs its Q&A first): store upline income unlocks at 10 qualified directs.** On the dev DB, Super Admin must publish `store_income_min_directs` = 10 (Rule Versions) to switch it on. Decisions, user 30-09-2026:
+  - it applies only to the upline parts: Purchase/Repurchase L1–12 and Store Profit Sponsor L1–3. The buyer's own "self" income and the Store Owner share are unchanged;
+  - directs are counted as **qualified directs** (Pair definition);
+  - once a member reaches 10 it unlocks **for life**;
+  - store income before that **lapses** (skipped);
+  - Super Admin setting, default 10.
+
+- **T-184 (DONE 30-09-2026, see TASKS.md): pay all remaining EMIs at once.** Next up is T-182. Decisions, user 30-09-2026:
+  - any EMI member, whether Future or Current Rate, can pay every remaining EMI together (overdue ones included) and then take the product;
+  - the option appears on every EMI payment page;
+  - Future Rate amount = sum of the remaining EMIs;
+  - Current Rate amount = the remaining EMIs **without maintenance** (principal only);
+  - Level Income = the normal level % on that full remaining amount, as one payment;
+  - all EMIs become paid, so Pair/Draw qualification follows;
+  - payment modes are the same as a normal EMI (cash with Super Admin approval, Razorpay);
+  - a pending Current Rate booking request is **cancelled** when a full payment is made (the payment is at the current schedule, Future Rate);
+  - this replaces `DOMAIN_LOGIC.md` §5 point 8's "no advance payment" rule for this one action;
+- **T-185 (new requirement 30-09-2026): Repurchase on EMI, Current Rate only — ALL DONE 30-09-2026.** T-185a (booking + payments), T-185b (break at 3 overdue → silver) and T-185c (handover) are complete; see TASKS.md. The whole 30-09-2026 batch (T-181…T-185) is finished.
+  - **Dev DB switches still off until Super Admin publishes them on Rule Versions:** Level Income directs (T-179, 2…24) and store upline unlock (T-183, 10).
+  - `store_emi_break_overdue_count` falls back to 3 without a published value. The full design is in §16.13, and TEST.md has scenarios 40–41. Decisions, user 30-09-2026 (Q&A finished):
+  - **Scope:** only a member's **Repurchase**, never Purchase or walk-in. Only **Current Rate**: today's rate is locked, with metal value + making and the plan's 1% declining maintenance (T-167). There is no Future-Rate store EMI.
+  - **EMI count:** **10 or 20**, chosen at booking.
+  - **Booking:** the Store Admin creates a request for a member (piece from the store's stock, 10 or 20 EMIs). **Super Admin approval** locks the rate on the approval day, as T-166 does.
+  - **Handover:** the jewellery is handed over **after the last EMI**, and the piece is held for the member until then.
+  - **Limit:** **one** store EMI per member at a time; a plan EMI can run alongside it.
+  - **Payment:** the member pays from their **EMI page**, online or cash with Super Admin approval, like a plan EMI.
+  - **Rules shared with plan EMIs:** the overdue earnings hold (T-182) and "Pay All Remaining EMIs" (T-184) both apply.
+  - **Income:** each store EMI pays **only Level Income** to the upline, exactly like a plan EMI (directs gate and overdue hold included). There is **no** Purchase/Repurchase income, self income, **Store Profit** ("store ko kuchh nahi milega"), Pair, Booster or Draw.
+  - **Break:** the schedule breaks **automatically when 3 EMIs are overdue** (Super Admin setting, default 3). The member then gets **silver** worth the amount paid **minus maintenance**, at the silver rate of the **date of the last paid EMI**. The held piece goes back to stock.
+  - **Assumed, not asked:** the silver grams are fixed at that rate, and the member collects them from the same store like a plan-jewellery delivery.
+- **Proposed order (30-09-2026):** T-184 full payment → T-182 overdue hold → T-183 store 10 directs → T-185 repurchase on EMI. Reasons: T-182's "release on payment" must also cover a full payment. T-185 reuses the EMI machinery (full payment, overdue rule) and the store-income rule (T-183), so it goes last.
+
+## DEV DATABASE RESET (30-09-2026, user request, for full earnings testing)
+
+The dev DB `goldwave` was **wiped again** with `migrate:fresh --seed` (base seeders only, no demo network). The GWL01–GWL28 data described in the 29-09-2026 section below **no longer exists**. Only Super Admin, company root `GWL-ROOT`, metal rates, seeded rule version 1 and membership plans remain. Next step: build a fresh chain per `Docs/EARNINGS_TESTING_GUIDE.md`.
+
+**Test chain built the same day (user request):** 10 members GWL01–GWL10, all Plan E (Silver Direct), cash, approved via the real `RegisterMember` + `ApproveCashPayment` Actions, placement side Left. The user did not name a side; Left was used. Sponsors: GWL01 ← root, GWL02 ← 01, GWL03 ← 02, GWL04 ← root, GWL05 ← 03, then GWL06…GWL10 each ← the previous one. Binary tree: one straight Left line, root → GWL01 → … → GWL10. Result: all 120 Level Income rows are `skipped` at ₹0 (36 `insufficient_directs`, since each member has at most 1 direct and L1 needs 2 under `level_income_min_directs`; 74 `chain_too_short`; 10 for the root, `upline_dummy`). No pairs, since the Right side is empty. `earnings:verify` gives all PASS.
+- Then GWL11 was added (Plan E, sponsor GWL01, **Right** of GWL01). GWL01 now has 2 directs, so it got L1 5% = ₹1,000 (paid, wallet credit confirmed). L2 went to root: skipped, `upline_dummy`. GWL01's pair entries: 9 Left (GWL02–GWL10) + 1 Right (GWL11), all unused. Pair/Reward is paid only at month-end (`jobs:month-end`). `earnings:verify` showed 1 warning at that point: GWL02's payment L1 had lapsed for GWL01.
+- The user did not want that lapse, so **T-186** was built: short of directs, income is held and released later. After the migration and `level-income:release-held`, GWL01 got GWL02's ₹1,000, so GWL01's wallet is ₹2,000. GWL01 still has held income: L2–L8 from GWL03 and GWL05–GWL10, ₹1,600 in total (₹400 + 6 × ₹200). GWL02…GWL09 hold their upline Level Income until they get 2 directs, then 4, 6 and so on. `earnings:verify` shows all PASS, 0 warnings.
+- Then a Right chain was added, all Plan E: GWL12 (sponsor GWL01, placed Right under GWL11) → GWL13 ← 12 → GWL14 ← 13 → GWL15 ← 14, each placed Right under the previous one. Results:
+  - GWL01 got L1 ₹1,000 from GWL12 (3 directs now). Its wallet is ₹3,000, with ₹2,400 held.
+  - Everything else from the new chain is held, because each new member has 1 direct.
+  - GWL01's pair entries: 9 Left / 5 Right, unused. Pair/Reward pays only at month-end.
+  - `earnings:verify` shows all PASS, 0 warnings.
+
+## DEV DATABASE RESET (29-09-2026, user request, for guided testing with the client) — superseded 30-09-2026
 
 The dev DB `goldwave` was **wiped** with `migrate:fresh --seed`. It now holds only the base setup: Super Admin `superadmin@goldwave.test` (mobile 9000000000), company root `GWL-ROOT` named **GoldWave**, whose login user is `raj9944kumar@gmail.com` / `8814900944` / `password` and which stays non-earning (rebuilt the same day from the squashed migrations, see `Docs/DATABASE_SCHEMA.md`), the 6 plans, the rule version, and seeded rates of silver ₹350/g and gold ₹6,000/g with 0% making. There are no members, payments, stores or sales. The user will say exactly which joinings to add (when, how many, where, which plan). **Backup of the previous ~1,000-member demo data:** `storage/app/backups/goldwave_before_reset_29-09-2026.sql` (pg_dump, 56 tables, ~13 MB). Restore with `psql -U goldwave -d <empty db> -f <file>`. A `goldwave_bkp` database copy could **not** be made because the `goldwave` role has no CREATEDB permission; a postgres superuser can create one from the dump if wanted. The "Demo network seeding" section below describes the old, now-removed dataset.
 
@@ -12,6 +77,17 @@ The dev DB `goldwave` was **wiped** with `migrate:fresh --seed`. It now holds on
 - only Level Income exists so far, and `earnings:verify` shows 0 errors.
 
 Member login: Customer ID / Customer ID. Emails are `member1…16@goldwave.test`, mobiles `9100000001…16`. The user gives the next joinings.
+
+**Update 29-09-2026 (end of day):** joinings now go up to **GWL133** (`member{N}@goldwave.test`, mobile `91000000NN`). They are all Plan E/F cash registrations made through `RegisterMember` + `ApproveCashPayment`:
+- GWL17 (E) sits on GWL13's left leg and GWL18 (F) on GWL13's right;
+- GWL19–28 (5E + 5F) form GWL01's right line;
+- GWL29–78 (E) form GWL12's right line, all sponsored by GWL12;
+- GWL79–83 (E) are a direct-to-direct chain under GWL04's right;
+- GWL84 (E) is GWL04's 2nd direct, and GWL85–133 (E) are a direct-to-direct chain below GWL84.
+
+Pair/Reward was paid via `jobs:month-end` (T-177): GWL01 M1, GWL04 M1+M2 (M2 under the old flat-2 rule, kept as is), GWL12 M1. The active rule version is 3 (pair min directs 2…30, set by the user).
+- **Pending for the user:** (1) Level Income directs (T-179) are **off** on the dev DB until Super Admin enters 2…24 on Rule Versions and publishes. (2) T-178 extras (seeder defaults, labels, the member-page "you have X directs" box, the verifier warning) were built when a Rule Versions setting already existed. The user was asked whether to keep or revert them and has not answered yet.
+- `earnings:verify` showed 0 errors after T-178.
 
 ## ACTIVE (28-09-2026): 28-09-2026 feedback batch, T-163…T-171
 

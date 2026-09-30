@@ -4,6 +4,7 @@ import {
     FileText,
     History,
     LayoutGrid,
+    ShoppingBag,
     ShoppingCart,
     Store as StoreIcon,
     UserPlus,
@@ -16,6 +17,7 @@ import { index as notificationsIndex } from '@/routes/admin/notifications';
 import { show as showProfile } from '@/routes/admin/profile';
 import { index as reportsIndex } from '@/routes/admin/reports';
 import { index as salesIndex } from '@/routes/admin/sales';
+import { index as storeEmiIndex } from '@/routes/admin/store-emi';
 import { index as transactionsIndex } from '@/routes/admin/transactions';
 import type { NavGroup } from '@/types';
 
@@ -34,6 +36,11 @@ const sections: NavGroup[] = [
                 title: 'Repurchases / Sales',
                 href: salesIndex(),
                 icon: ShoppingCart,
+            },
+            {
+                title: 'Repurchase on EMI',
+                href: storeEmiIndex(),
+                icon: ShoppingBag,
             },
             { title: 'Inventory', href: inventoryIndex(), icon: Boxes },
             {

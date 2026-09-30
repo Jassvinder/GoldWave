@@ -78,7 +78,8 @@ class WalletLedgerEntry extends Model
     public function statusLabel(): string
     {
         if ($this->payoutSource() === null) {
-            return $this->status;
+            // T-182 — a pending credit is an earning held while the member has an overdue EMI.
+            return $this->entry_type === 'credit' && $this->status === 'pending' ? 'held (EMI overdue)' : $this->status;
         }
 
         return self::PAYOUT_STATUS_LABELS[$this->status];

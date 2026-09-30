@@ -44,6 +44,7 @@ type Props = {
         unused_right: number;
         consumed_left: number;
         consumed_right: number;
+        qualified_directs: number;
     };
     pool: { left: PoolSide; right: PoolSide; awaiting_by_plan: AwaitingPlan[] };
     milestones: Milestone[];
@@ -68,7 +69,7 @@ const milestoneColumns: DataTableColumn<Milestone>[] = [
     },
     { key: 'left', header: 'Left' },
     { key: 'right', header: 'Right' },
-    { key: 'min_directs', header: 'Min Directs' },
+    { key: 'min_directs', header: 'Directs Needed' },
     {
         key: 'used',
         header: 'Entries Used',
@@ -236,7 +237,25 @@ export default function PairReward({
                                 Next milestone: {next_milestone.name} (#
                                 {next_milestone.milestone_no}) —{' '}
                                 {next_milestone.left}L / {next_milestone.right}R
-                                (min {next_milestone.min_directs} directs)
+                                <div className="mt-1">
+                                    Needs {next_milestone.min_directs} qualified
+                                    directs — you have{' '}
+                                    <span
+                                        className={
+                                            progress.qualified_directs >=
+                                            next_milestone.min_directs
+                                                ? 'font-medium text-green-700 dark:text-green-400'
+                                                : 'font-medium text-amber-600 dark:text-amber-400'
+                                        }
+                                    >
+                                        {progress.qualified_directs}
+                                    </span>
+                                    <span className="text-muted-foreground text-xs">
+                                        {' '}
+                                        (an EMI direct counts once its Pair
+                                        qualification EMIs are paid)
+                                    </span>
+                                </div>
                                 <div className="text-muted-foreground mt-1 text-xs">
                                     Still needed:{' '}
                                     {Math.max(

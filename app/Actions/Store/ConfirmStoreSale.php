@@ -55,6 +55,9 @@ class ConfirmStoreSale
         ?string $metal = null,
         // T-169 — the server-side price breakdown (`PriceStoreSale`), when the sale was priced automatically.
         ?array $price = null,
+        // T-185c — a Repurchase on EMI handover, and the part of the bill its EMIs already paid.
+        ?int $storeEmiBookingId = null,
+        ?float $prepaidAmount = null,
     ): StoreSale {
         // Revised 23-09-2026 (user decision) — a repurchase is always an
         // existing member's own repeat purchase, never a walk-in's; a
@@ -88,6 +91,7 @@ class ConfirmStoreSale
         $storeSale = DB::transaction(function () use (
             $store, $member, $transactionType, $itemName, $inventoryItem, $itemWeight,
             $quantity, $rate, $saleAmount, $gstAmount, $paymentSource, $operator, $resolvedMetal, $price,
+            $storeEmiBookingId, $prepaidAmount,
         ) {
             if ($inventoryItem) {
                 $lockedItem = StoreInventoryItem::whereKey($inventoryItem->id)->lockForUpdate()->firstOrFail();
@@ -138,6 +142,8 @@ class ConfirmStoreSale
                 'store_wallet_deduction_id' => $storeWalletDeductionId,
                 'distribution_status' => 'pending',
                 'status' => 'confirmed',
+                'store_emi_booking_id' => $storeEmiBookingId,
+                'prepaid_amount' => $prepaidAmount,
             ]);
 
             // T-171 (28-09-2026) — no bill here any more: it is generated on request ("Generate bill",

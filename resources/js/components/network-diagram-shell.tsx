@@ -6,6 +6,8 @@ type Props = {
     onSearch: (customerId: string) => void;
     searchError?: string;
     rootHref?: string | null;
+    /** T-194 — team numbers shown between the toolbar and the diagram. */
+    summary?: React.ReactNode;
     children: React.ReactNode;
 };
 
@@ -21,6 +23,7 @@ export default function NetworkDiagramShell({
     onSearch,
     searchError,
     rootHref,
+    summary,
     children,
 }: Props) {
     const [scale, setScale] = useState(1);
@@ -104,6 +107,8 @@ export default function NetworkDiagramShell({
                     </button>
                 </div>
             </div>
+
+            {summary}
 
             <div
                 className="bg-muted/30 h-[70vh] cursor-grab touch-none overflow-hidden rounded-md border active:cursor-grabbing"

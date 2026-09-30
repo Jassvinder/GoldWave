@@ -14,6 +14,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { formatDate } from '@/lib/utils';
+import { index as emiIndex } from '@/routes/member/emi';
 import { index as payoutIndex } from '@/routes/member/payout';
 import { index } from '@/routes/member/wallet';
 import type { Paginated } from '@/types';
@@ -36,6 +37,8 @@ type Sort = { key: string; direction: 'asc' | 'desc' };
 type Props = {
     wallet_balance: string;
     wallet_hold_amount: string;
+    /** T-182 — earnings held while an EMI is overdue. */
+    held_earnings: string;
     entries: Paginated<Entry>;
     filters: { search?: string };
     sort: Sort | null;
@@ -99,6 +102,7 @@ const columns: DataTableColumn<Entry>[] = [
 export default function Wallet({
     wallet_balance,
     wallet_hold_amount,
+    held_earnings,
     entries,
     filters,
     sort,
@@ -161,6 +165,25 @@ export default function Wallet({
                         </Button>
                     </CardHeader>
                 </Card>
+
+                {Number(held_earnings) > 0 && (
+                    <div
+                        role="alert"
+                        className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+                    >
+                        <p className="font-semibold">
+                            ₹{held_earnings} of your earnings is held because an
+                            EMI is overdue.
+                        </p>
+                        <p>
+                            It is added to your balance as soon as your overdue
+                            EMI is paid.{' '}
+                            <Link href={emiIndex()} className="underline">
+                                Go to EMI Schedule
+                            </Link>
+                        </p>
+                    </div>
+                )}
 
                 <Card>
                     <CardHeader>

@@ -48,6 +48,9 @@ class InvoicePresenter
             'gst_amount' => $sale->gst_amount,
             'total_invoice_amount' => $sale->total_invoice_amount,
             'payment_source' => $sale->payment_source,
+            // T-185c — a Repurchase on EMI handover: what the EMIs already paid, and what is due at the counter.
+            'prepaid_amount' => $sale->prepaid_amount,
+            'amount_due' => $sale->prepaid_amount !== null ? number_format((float) $sale->total_invoice_amount - (float) $sale->prepaid_amount, 2, '.', '') : null,
         ]);
     }
 

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * DOMAIN_LOGIC.md §3.0 — append-only log row for a Current Rate booking or a Super Admin revert of one.
  *
+ * @property array<string, mixed>|null $details
  * @property-read EmiSchedule $schedule
  * @property-read User|null $performedBy
  */

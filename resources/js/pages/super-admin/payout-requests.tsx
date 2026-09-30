@@ -1,5 +1,5 @@
-import { Head, router, usePage } from '@inertiajs/react';
-import { History, Wallet } from 'lucide-react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { History, Landmark, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { FormSection } from '@/components/form-section';
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatDate } from '@/lib/utils';
+import { show as showMember } from '@/routes/super-admin/members';
 import { cancel, reject } from '@/routes/super-admin/payout-requests';
 
 type PendingPayout = {
@@ -47,7 +48,52 @@ type HistoryPayout = {
     } | null;
 };
 
-type Props = { pending: PendingPayout[]; history: HistoryPayout[] };
+type AwaitingBank = {
+    member_id: number;
+    customer_id: string | null;
+    name: string | null;
+    bank_name: string | null;
+    account_last4: string;
+    submitted_on: string | null;
+    wallet_balance: string;
+};
+
+type Props = {
+    pending: PendingPayout[];
+    history: HistoryPayout[];
+    awaiting_bank_verification: AwaitingBank[];
+};
+
+/** T-195 — members who can't request a payout until their bank details are verified on Member Detail. */
+const awaitingBankColumns: DataTableColumn<AwaitingBank>[] = [
+    {
+        key: 'customer_id',
+        header: 'Member',
+        render: (row) => (
+            <span className="flex flex-col">
+                <span className="font-medium">{row.customer_id}</span>
+                <span className="text-muted-foreground text-xs">
+                    {row.name}
+                </span>
+            </span>
+        ),
+    },
+    {
+        key: 'bank_name',
+        header: 'Bank',
+        render: (row) => `${row.bank_name ?? '—'} ···${row.account_last4}`,
+    },
+    {
+        key: 'submitted_on',
+        header: 'Submitted',
+        render: (row) => formatDate(row.submitted_on),
+    },
+    {
+        key: 'wallet_balance',
+        header: 'Wallet',
+        render: (row) => `₹${row.wallet_balance}`,
+    },
+];
 
 type HistoryFilter = 'all' | HistoryStatus;
 
@@ -205,7 +251,11 @@ const historyColumns: DataTableColumn<HistoryPayout>[] = [
  * left `pending`, with its transaction (method, reference, TDS/fee, net,
  * who processed it), filterable by outcome.
  */
-export default function PayoutRequests({ pending, history }: Props) {
+export default function PayoutRequests({
+    pending,
+    history,
+    awaiting_bank_verification,
+}: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const [filter, setFilter] = useState<HistoryFilter>('all');
 
@@ -263,6 +313,33 @@ export default function PayoutRequests({ pending, history }: Props) {
                         },
                     ]}
                 />
+
+                {awaiting_bank_verification.length > 0 && (
+                    <FormSection
+                        icon={Landmark}
+                        color="amber"
+                        title={`Bank details waiting for verification (${awaiting_bank_verification.length})`}
+                        description="These members can't request a payout until their bank details are verified. Open a member and use Verify on their bank details."
+                    >
+                        <DataTable
+                            columns={awaitingBankColumns}
+                            rows={awaiting_bank_verification}
+                            rowKey={(row) => row.member_id}
+                            emptyMessage="Nothing waiting."
+                            renderActions={(row) => (
+                                <div className="flex justify-end">
+                                    <Button size="sm" variant="outline" asChild>
+                                        <Link
+                                            href={showMember.url(row.member_id)}
+                                        >
+                                            Open member
+                                        </Link>
+                                    </Button>
+                                </div>
+                            )}
+                        />
+                    </FormSection>
+                )}
 
                 <DataTable
                     columns={pendingColumns}

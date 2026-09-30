@@ -18,8 +18,6 @@ use App\Actions\Store\CreateStore;
 use App\Actions\Store\RecordItemBuyback;
 use App\Actions\Store\ResetStorePassword;
 use App\Jobs\EvaluateMonthlyPairMilestones;
-use App\Models\DrawGroup;
-use App\Models\DrawGroupMonthConfig;
 use App\Models\EmiInstallment;
 use App\Models\Member;
 use App\Models\MembershipPlan;
@@ -286,27 +284,7 @@ class DemoSeedNetwork extends Command
         $groups = app(GenerateDrawGroups::class)();
         $this->info('Draw groups generated: '.count($groups));
 
-        // ExecuteMonthlyDraw deliberately never invents a prize (T-010) — a
-        // real Super Admin must configure DrawGroupMonthConfig first. For
-        // demo purposes only, auto-configure the next unconfigured month for
-        // every active group so seeded draws actually produce winners.
-        DrawGroup::where('status', 'active')->get()->each(function (DrawGroup $group) {
-            $nextMonth = $group->executions()->count() + 1;
-
-            if ($nextMonth > 20) {
-                return;
-            }
-
-            DrawGroupMonthConfig::firstOrCreate(
-                ['draw_group_id' => $group->id, 'cycle_month_no' => $nextMonth],
-                [
-                    'prize_name' => $nextMonth <= 15 ? 'Silver Prize' : 'Gold Prize',
-                    'prize_value' => $nextMonth <= 15 ? 5000 : 50000,
-                    'metal_type' => $nextMonth <= 15 ? 'silver' : 'gold',
-                ],
-            );
-        });
-
+        // No prize setup needed: a month without its own prize uses the Silver/Gold default (DrawPrizeResolver).
         $executions = app(ExecuteMonthlyDraw::class)();
         $this->info('Draw executions: '.count($executions));
     }

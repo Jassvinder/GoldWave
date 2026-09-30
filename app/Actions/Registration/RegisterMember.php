@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\CashPaymentAwaitingApproval;
 use App\Services\BinaryPlacementResolver;
 use App\Services\Notifier;
+use App\Services\Payments\PaymentModes;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -73,7 +74,7 @@ class RegisterMember
     {
         $payment = $member->payments->firstWhere('type', 'registration');
 
-        if ($payment !== null && $payment->mode === 'cash') {
+        if ($payment !== null && PaymentModes::needsApproval($payment->mode)) {
             Notifier::toSuperAdmins(new CashPaymentAwaitingApproval($payment));
         }
     }
@@ -154,7 +155,7 @@ class RegisterMember
                 'mode' => $paymentMode,
                 'status' => 'pending',
                 'idempotency_key' => (string) Str::uuid(),
-                'cash_status' => $paymentMode === 'cash' ? 'pending_verification' : null,
+                'cash_status' => PaymentModes::initialApprovalStatus($paymentMode),
             ]);
 
             $member->load(['payments', 'emiSchedule']);

@@ -1,3 +1,7 @@
+import {
+    TeamSummaryStrip,
+    type TeamCounts,
+} from '@/components/team-summary-strip';
 import { Head, router, usePage } from '@inertiajs/react';
 import { MemberNodeCard } from '@/components/member-node-card';
 import type { NodeMember } from '@/components/member-node-card';
@@ -11,6 +15,7 @@ type Props = {
     loggedInMember: { name: string | null; customer_id: string | null } | null;
     selectedMember: NodeMember;
     directs: NodeMember[];
+    team: TeamCounts;
 };
 
 const DIRECTS_PER_ROW = 4;
@@ -33,6 +38,7 @@ export default function Directs({
     loggedInMember,
     selectedMember,
     directs,
+    team,
 }: Props) {
     const errors = usePage().props.errors as Record<string, string>;
 
@@ -54,6 +60,7 @@ export default function Directs({
                 onSearch={handleSearch}
                 searchError={errors.customer_id}
                 rootHref={loggedInMember ? showDirects.url() : null}
+                summary={<TeamSummaryStrip team={team} />}
             >
                 <div className="flex flex-col items-center">
                     <MemberNodeCard member={selectedMember} />

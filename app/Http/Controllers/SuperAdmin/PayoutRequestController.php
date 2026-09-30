@@ -8,6 +8,7 @@ use App\Actions\Payout\ProcessPayoutRequest;
 use App\Actions\Payout\RejectPayoutRequest;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\RecordPayoutOutcomeRequest;
+use App\Models\MemberBankDetail;
 use App\Models\PayoutRequest;
 use App\Support\Dates;
 use Illuminate\Http\RedirectResponse;
@@ -55,9 +56,26 @@ class PayoutRequestController extends Controller
             ->get()
             ->map(fn (PayoutRequest $request): array => $this->mapHistory($request));
 
+        // T-195 — a member can't request a payout until their bank details are verified, so the members waiting on
+        // that are shown here too (verification itself stays on Member Detail).
+        $awaitingBankVerification = MemberBankDetail::with('member.user')
+            ->whereNull('verified_at')
+            ->orderBy('created_at')
+            ->get()
+            ->map(fn (MemberBankDetail $detail): array => [
+                'member_id' => $detail->member_id,
+                'customer_id' => $detail->member->customer_id,
+                'name' => $detail->member->user?->name,
+                'bank_name' => $detail->bank_name,
+                'account_last4' => substr((string) $detail->account_number, -4),
+                'submitted_on' => Dates::date($detail->created_at),
+                'wallet_balance' => (string) $detail->member->wallet_balance,
+            ]);
+
         return Inertia::render('super-admin/payout-requests', [
             'pending' => $pending,
             'history' => $history,
+            'awaiting_bank_verification' => $awaitingBankVerification,
         ]);
     }
 

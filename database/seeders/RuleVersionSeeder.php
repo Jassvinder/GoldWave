@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\RuleVersion;
 use App\Models\User;
+use App\Services\DrawPrizeResolver;
 use Illuminate\Database\Seeder;
 
 /**
@@ -91,6 +92,23 @@ class RuleVersionSeeder extends Seeder
             '12' => 0.5,
         ]);
 
+        // DOMAIN_LOGIC.md §6 (T-179, 29-09-2026) — qualified directs a beneficiary needs to earn each Level Income
+        // level: 2 × level no. One set for Silver and Gold alike. A version without this key has no directs condition.
+        $this->seedValue($version, 'level_income_min_directs', [
+            '1' => 2,
+            '2' => 4,
+            '3' => 6,
+            '4' => 8,
+            '5' => 10,
+            '6' => 12,
+            '7' => 14,
+            '8' => 16,
+            '9' => 18,
+            '10' => 20,
+            '11' => 22,
+            '12' => 24,
+        ]);
+
         // DOMAIN_LOGIC.md §7.3 — minimum completed EMIs before an EMI-plan
         // joining counts as "fully eligible" for Pair/Reward. One-time plans
         // (E/F, installment_count null) have no entry here — they're always
@@ -113,7 +131,7 @@ class RuleVersionSeeder extends Seeder
         $this->seedValue($version, 'pair_value_per_entry_gold', 50);
 
         // DOMAIN_LOGIC.md §7.1 — the 15 milestones' thresholds and per-milestone
-        // minimum Direct Members gate (default 2 for every milestone, §7.3).
+        // minimum Direct Members gate — a total of qualified directs, 2 × milestone no. (T-178, 29-09-2026, §7.3).
         // `name` is the display name (T-124, 20-09-2026) — Super-Admin-editable on the Rule Versions page like every other field here.
         // Reward amounts are intentionally omitted — derived from `left`/`right`
         // × pair_value_per_entry above.
@@ -127,20 +145,20 @@ class RuleVersionSeeder extends Seeder
         // member confusion risk).
         $this->seedValue($version, 'pair_milestones', [
             ['milestone_no' => 1, 'name' => 'Starter', 'min_directs' => 2, 'left' => 5, 'right' => 5],
-            ['milestone_no' => 2, 'name' => 'Builder', 'min_directs' => 2, 'left' => 50, 'right' => 50],
-            ['milestone_no' => 3, 'name' => 'Achiever', 'min_directs' => 2, 'left' => 250, 'right' => 250],
-            ['milestone_no' => 4, 'name' => 'Performer', 'min_directs' => 2, 'left' => 500, 'right' => 500],
-            ['milestone_no' => 5, 'name' => 'Leader', 'min_directs' => 2, 'left' => 1000, 'right' => 1000],
-            ['milestone_no' => 6, 'name' => 'Champion', 'min_directs' => 2, 'left' => 2000, 'right' => 2000],
-            ['milestone_no' => 7, 'name' => 'Master', 'min_directs' => 2, 'left' => 5000, 'right' => 5000],
-            ['milestone_no' => 8, 'name' => 'Premium', 'min_directs' => 2, 'left' => 10000, 'right' => 10000],
-            ['milestone_no' => 9, 'name' => 'Platinum', 'min_directs' => 2, 'left' => 20000, 'right' => 20000],
-            ['milestone_no' => 10, 'name' => 'Diamond', 'min_directs' => 2, 'left' => 40000, 'right' => 40000],
-            ['milestone_no' => 11, 'name' => 'Crown', 'min_directs' => 2, 'left' => 80000, 'right' => 80000],
-            ['milestone_no' => 12, 'name' => 'Royal', 'min_directs' => 2, 'left' => 160000, 'right' => 160000],
-            ['milestone_no' => 13, 'name' => 'Imperial', 'min_directs' => 2, 'left' => 320000, 'right' => 320000],
-            ['milestone_no' => 14, 'name' => 'Supreme', 'min_directs' => 2, 'left' => 640000, 'right' => 640000],
-            ['milestone_no' => 15, 'name' => 'Maharaja', 'min_directs' => 2, 'left' => 1280000, 'right' => 1280000],
+            ['milestone_no' => 2, 'name' => 'Builder', 'min_directs' => 4, 'left' => 50, 'right' => 50],
+            ['milestone_no' => 3, 'name' => 'Achiever', 'min_directs' => 6, 'left' => 250, 'right' => 250],
+            ['milestone_no' => 4, 'name' => 'Performer', 'min_directs' => 8, 'left' => 500, 'right' => 500],
+            ['milestone_no' => 5, 'name' => 'Leader', 'min_directs' => 10, 'left' => 1000, 'right' => 1000],
+            ['milestone_no' => 6, 'name' => 'Champion', 'min_directs' => 12, 'left' => 2000, 'right' => 2000],
+            ['milestone_no' => 7, 'name' => 'Master', 'min_directs' => 14, 'left' => 5000, 'right' => 5000],
+            ['milestone_no' => 8, 'name' => 'Premium', 'min_directs' => 16, 'left' => 10000, 'right' => 10000],
+            ['milestone_no' => 9, 'name' => 'Platinum', 'min_directs' => 18, 'left' => 20000, 'right' => 20000],
+            ['milestone_no' => 10, 'name' => 'Diamond', 'min_directs' => 20, 'left' => 40000, 'right' => 40000],
+            ['milestone_no' => 11, 'name' => 'Crown', 'min_directs' => 22, 'left' => 80000, 'right' => 80000],
+            ['milestone_no' => 12, 'name' => 'Royal', 'min_directs' => 24, 'left' => 160000, 'right' => 160000],
+            ['milestone_no' => 13, 'name' => 'Imperial', 'min_directs' => 26, 'left' => 320000, 'right' => 320000],
+            ['milestone_no' => 14, 'name' => 'Supreme', 'min_directs' => 28, 'left' => 640000, 'right' => 640000],
+            ['milestone_no' => 15, 'name' => 'Maharaja', 'min_directs' => 30, 'left' => 1280000, 'right' => 1280000],
         ]);
 
         // DOMAIN_LOGIC.md §11.1/§11.2 — Payout minimum request amount, TDS
@@ -157,12 +175,16 @@ class RuleVersionSeeder extends Seeder
         // pair_qualification_emis even where the numbers happen to match.
         $this->seedValue($version, 'draw_group_size', 200);
         $this->seedValue($version, 'draw_eligibility_emis', ['A' => 6, 'B' => 2, 'C' => 2, 'D' => 1]);
+        // §8.3 default prizes (user decision 30-09-2026): months 1–15 Silver, 16–20 Gold, unless a group-month sets its own.
+        foreach (DrawPrizeResolver::DEFAULTS as $key => $value) {
+            $this->seedValue($version, $key, $value);
+        }
 
         // DOMAIN_LOGIC.md §9 — Income Booster levels. Left/Right split
         // thresholds are enforced independently, not just their sum
         // (DOMAIN_LOGIC.md §21 T-011 pre-coding pass, user-confirmed).
         $this->seedValue($version, 'booster_levels', [
-            ['level_no' => 1, 'min_directs' => 10, 'team_split_left' => 250, 'team_split_right' => 250, 'monthly_benefit' => 5000, 'duration_months' => 6],
+            ['level_no' => 1, 'min_directs' => 10, 'team_split_left' => 250, 'team_split_right' => 250, 'monthly_benefit' => 5000, 'duration_months' => 12],
             ['level_no' => 2, 'min_directs' => 20, 'team_split_left' => 750, 'team_split_right' => 750, 'monthly_benefit' => 20000, 'duration_months' => 6],
             ['level_no' => 3, 'min_directs' => 30, 'team_split_left' => 1500, 'team_split_right' => 1500, 'monthly_benefit' => 60000, 'duration_months' => 6],
         ]);
@@ -250,6 +272,14 @@ class RuleVersionSeeder extends Seeder
         // (inert) until Super Admin confirms the real value, matching this
         // project's "default 0 until confirmed" pattern (§21 "Still open").
         $this->seedValue($version, 'store_gst_percent', 0);
+
+        // DOMAIN_LOGIC.md §15 (T-183, 30-09-2026) — qualified directs a member needs before earning the upline parts of
+        // store income (Purchase/Repurchase L1–12, Store Profit Sponsor L1–3); once reached, unlocked for life.
+        $this->seedValue($version, 'store_income_min_directs', 10);
+
+        // DOMAIN_LOGIC.md §16.13 point 3 (T-185b, 30-09-2026) — a Repurchase on EMI breaks automatically at this many
+        // overdue EMIs; the member is then owed silver for the principal paid.
+        $this->seedValue($version, 'store_emi_break_overdue_count', 3);
 
         // T-115 (19-09-2026) — public landing page's Super-Admin-editable
         // hero copy, matching T-104's original static text as the seeded

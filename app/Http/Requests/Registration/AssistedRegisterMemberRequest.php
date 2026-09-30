@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Registration;
 
+use App\Services\Payments\PaymentModes;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * DOMAIN_LOGIC.md §12.2(b) — T-153, Assisted Registration. Identical to the
@@ -33,7 +35,8 @@ class AssistedRegisterMemberRequest extends FormRequest
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'mobile' => ['required', 'digits:10', 'unique:users,mobile'],
             'membership_plan_id' => ['required', 'integer', 'exists:membership_plans,id'],
-            'payment_mode' => ['required', 'in:online,cash,wallet'],
+            'payment_mode' => ['required', Rule::in(PaymentModes::offered(withWallet: true))],
+            ...PaymentModes::upiProofRules('payment_mode'),
         ];
     }
 }

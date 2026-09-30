@@ -196,13 +196,26 @@ All benefits are **jewellery items, not solid/bullion metal**. Plans E and F are
 
 0. **Auto-debit is NOT implemented (decision 22-09-2026, user) — kept here as a possible future capability.** Every EMI after the registration installment is paid by the member (or recorded as cash) on the EMI Schedule page; nothing is charged automatically. If ever built it would use Razorpay's recurring-payment (eMandate/Subscriptions) product and would need: explicit member consent and a way to cancel, a failure/retry/grace rule (today there is none — an unpaid installment simply turns `due` then `overdue`), a decision on how it interacts with "only the next installment can be paid" (item 8 below) and with Book at Current Rate (the amount changes), and refund/dispute rules (§21 open item).
 1. Create the full installment schedule when an EMI membership is activated, using the EMI amount of the schedule's rate-booking state (§3.0 — always Future Rate at creation; a later switch to Current Rate rewrites only the still-unpaid installments).
-2. Each successful monthly payment becomes an **eligible payment event** (never a new joining).
+2. Each successful monthly payment becomes an **eligible payment event** (never a new joining). **Re-confirmed 30-09-2026 (user, T-181):** every EMI payment distributes income (Level Income on each installment), but it is never counted as a new entry. Pair entries are created once, when the plan's qualification EMIs are reached; Booster is evaluated only on registration; a member joins a Draw group once.
 3. A payment event may generate Level Income per §6, using the configured percentage and the Sponsor/Direct chain.
 4. **For Pair/Reward qualification**, use the applicable plan-specific completed-EMI requirement (see §7.3 for the finalized per-plan counts — A=6, B=2, C=2, D=1).
 5. **Rate Management Rule:** Super Admin manages Gold and Silver rates together on one Rate Settings page. The page stores rate/reference history with effective dates. For Current Rate Booking, the exact rate used for the selected metal/weight and the resulting EMI amount must be recorded with the membership/EMI schedule so historical calculations stay reproducible even if rates change later. The applicable product entitlement follows the finalized Membership Plan configuration (§3 — RESOLVED).
 6. Store product inventory is a separate module from membership benefit allocation — do not conflate the two.
 7. **Installment due-date cadence (RESOLVED 13-09-2026 — user confirmation; no source spec existed for this):** installment 1's due date is the membership's activation date itself; each subsequent installment's due date is the same day-of-month as the activation date, one calendar month later (an "activation-date anniversary" schedule) — e.g. activation on 17-02-2026 produces due dates 17-02-2026, 17-03-2026, 17-04-2026, … regardless of which installments are paid early or late (the schedule does not drift based on actual payment dates). **Overdue rule:** there is no grace period — a `due` installment becomes `overdue` starting the very next calendar day after its due date if still unpaid.
-8. **Installment payment ordering (RESOLVED 13-09-2026 — user confirmation; no source spec existed for this):** a member may only initiate payment for their schedule's single earliest-unpaid installment — no skip-ahead/advance payment of a later `upcoming` installment while an earlier one is still unpaid.
+8. **Installment payment ordering (RESOLVED 13-09-2026 — user confirmation; no source spec existed for this):** a member may only initiate payment for their schedule's single earliest-unpaid installment — no skip-ahead/advance payment of a later `upcoming` installment while an earlier one is still unpaid. The only exception is the full payment in point 9.
+9. **Pay all remaining EMIs at once (NEW 30-09-2026, user decision, T-184).** An EMI member, on Future or Current Rate, may pay **every** unpaid installment in one payment, overdue ones included. This then opens plan-jewellery delivery exactly as the last EMI does.
+    - **Amount on Future Rate** = the sum of the unpaid installments' amounts.
+    - **Amount on Current Rate** = the remaining principal only, **without maintenance**: `remaining value at booking − principal × EMIs paid since booking`. Here the principal is `round(remaining value at booking ÷ pending EMIs at booking, 2)`, and the remaining value and pending count come from the `booked` event. This equals the sum of the unpaid installments' principals, including the last one's rounding remainder. When the payment is confirmed, each unpaid installment's `amount` is rewritten to its principal, so the paid rows add up to exactly what was paid.
+    - **It is one payment:** `payments.type = emi_installment`, `covers_installments` = the number of EMIs it covers, and every unpaid installment's `payment_id` points to it. Confirming it marks all of them paid.
+    - **Income:** Level Income is the normal level % on the full amount, as one payment event (§6). This includes the T-179 directs gate and every other skip rule. Every EMI is then paid, so Pair entries (§7.3, if not created yet) and Draw eligibility (§8.7) follow from the paid count as usual. It is still not a new joining.
+    - **Modes:** the same as a single EMI. Cash waits for Super Admin approval; online goes through Razorpay.
+    - **Guards:**
+      - there must be at least one unpaid installment;
+      - it is refused while any unpaid installment already has a `pending` payment (a cash payment awaiting approval, or an unfinished online payment), because the member finishes or waits for that one first;
+      - a single-EMI payment is likewise refused while a full payment is pending.
+    - **A pending Current Rate booking request is cancelled** (system cancel, message "Cancelled because all remaining EMIs were paid in full.") when the full payment is **initiated**. The payment then settles the schedule as it stands.
+    - **If a cash full payment is rejected,** no installment changes, and the member can pay again, singly or in full.
+    - **Naming in the UI:** "Pay All Remaining EMIs". In lists it appears as "Full payment — N EMIs".
 
 ---
 
@@ -222,6 +235,18 @@ All benefits are **jewellery items, not solid/bullion metal**. Plans E and F are
 
 **Level Income Chain Rule:** Levels 1–12 always follow the Sponsor/Direct chain. Level 1 = the member's direct Sponsor, Level 2 = that Sponsor's Sponsor, and so on up to Level 12. Binary Position/placement and its upline chain are never used for Level Income.
 
+**Directs needed per level (NEW 29-09-2026, user decision, T-179):** a beneficiary earns a level's income only if, at the moment the payment is confirmed, they have at least that level's number of **qualified Direct Members**. The default is 2 × the level number: L1 = 2, L2 = 4, L3 = 6 … L12 = 24, so every level needs 2 more directs than the one before. A member with only 1 qualified direct is paid no Level Income until a 2nd direct qualifies; until then it is held (T-186, below).
+- **Qualified direct** means the same as Pair/Reward (§7.3): the direct is `active`; a one-time plan (E/F) counts once its registration is paid; an EMI plan counts only once its completed EMIs reach that plan's `pair_qualification_emis` (A = 6, B = 2, C = 2, D = 1).
+- **Missing directs means the income is held, not lapsed (CHANGED 30-09-2026, user decision, T-186; supersedes the T-179 lapse rule).** The level gets a `held` row (reason `insufficient_directs`) with its real amount, calculated at payment time from that payment's rate and rule version. Nothing goes to the wallet yet. It does not pass up to the next upline and does not go to the Company Wallet.
+  - **Release:** as soon as the beneficiary has the level's number of qualified directs under the **active** rule version, every held row for that level is paid to them (`eligibility_status` → `paid`, `released_at` set) with the amount fixed at payment time. There is **no time limit**. Each level is checked on its own: 2 directs release every held L1 row, while held L2 rows wait for 4.
+  - **When it is checked:** whenever a payment is confirmed, for the payer's sponsor (a confirmed payment is what makes a direct qualified); after every rule-version publish, for everyone with held income; and on demand with `php artisan level-income:release-held`.
+  - **Beneficiary must be `active` at release.** Otherwise the row stays held until they are active again. The credit goes through the normal earning path, so an overdue EMI (§12, T-182) still holds it in the wallet.
+  - **Existing rows:** the T-186 migration turned every earlier `insufficient_directs` ₹0 skipped row into `held` with its real amount. Running `level-income:release-held` then paid those whose directs were already met.
+  - Only `insufficient_directs` is held. Other skip reasons (`chain_too_short`, `upline_inactive`, root/dummy) still lapse as before.
+- **Scope:** this applies to Level Income from joining and EMI payments only. Purchase/Repurchase income and Store Profit Distribution (§15/§16) are unchanged.
+- **Configuration:** the values are Super-Admin-configurable on Rule Versions as `level_income_min_directs` (one value per level, the same for Silver and Gold). A rule version without this key has no directs condition, so every payment calculated before T-179 stays as it was.
+- **Past income:** nothing already paid is recalculated.
+
 ### 6.1 Processing steps
 
 1. Receive verified payment event.
@@ -232,7 +257,7 @@ All benefits are **jewellery items, not solid/bullion metal**. Plans E and F are
 6. Calculate income = eligible amount × level rate.
 7. Create one income ledger transaction per qualifying Sponsor/Direct beneficiary, linked to the source payment/joining transaction.
 8. Update member wallet/ledger balances.
-9. If a level has no eligible beneficiary (chain too short, upline inactive, etc.), record a skipped/non-payable reason for auditability — do not silently drop it.
+9. If a level has no eligible beneficiary (chain too short, upline inactive, etc.), record a skipped/non-payable reason for auditability — do not silently drop it. Fewer qualified directs than the level needs (`insufficient_directs`, T-179) is recorded as `held` instead and paid later (T-186, above).
 
 ### 6.2 Example (illustration of source percentages, not an additional rule)
 
@@ -248,25 +273,25 @@ For a confirmed ₹5,000 payment: Level 1 → direct Sponsor at 5%; Level 2 → 
 
 ### 7.1 Milestones
 
-Every milestone's "Min. Direct Members" default is **2** (Super-Admin-configurable — see §7.3).
+"Min. Direct Members" is the **total** number of qualified Direct Members a milestone needs. The default is 2 × the milestone number (M1 = 2, M2 = 4 … M15 = 30), so every milestone needs 2 more than the one before. It is Super-Admin-configurable (see §7.3 for the rule and what counts as a qualified direct).
 
 | Milestone | Min. Direct Members (default) | Left      | Right     | Reward                                                                                                   |
 | --------- | ----------------------------- | --------- | --------- | -------------------------------------------------------------------------------------------------------- |
 | 1         | 2                             | 5         | 5         | ₹500                                                                                                     |
-| 2         | 2                             | 50        | 50        | ₹5,000                                                                                                   |
-| 3         | 2                             | 250       | 250       | ₹25,000                                                                                                  |
-| 4         | 2                             | 500       | 500       | ₹50,000                                                                                                  |
-| 5         | 2                             | 1,000     | 1,000     | ₹1,00,000                                                                                                |
-| 6         | 2                             | 2,000     | 2,000     | ₹2,00,000                                                                                                |
-| 7         | 2                             | 5,000     | 5,000     | ₹5,00,000                                                                                                |
-| 8         | 2                             | 10,000    | 10,000    | ₹10,00,000                                                                                               |
-| 9         | 2                             | 20,000    | 20,000    | ₹20,00,000                                                                                               |
-| 10        | 2                             | 40,000    | 40,000    | ₹40,00,000                                                                                               |
-| 11        | 2                             | 80,000    | 80,000    | ₹80,00,000                                                                                               |
-| 12        | 2                             | 160,000   | 160,000   | ₹160,00,000                                                                                              |
-| 13        | 2                             | 320,000   | 320,000   | ₹320,00,000                                                                                              |
-| 14        | 2                             | 640,000   | 640,000   | ₹640,00,000                                                                                              |
-| 15        | 2                             | 1,280,000 | 1,280,000 | ₹128,00,000 (RESOLVED — see §7.3 conflict note; keep this value unless the client separately changes it) |
+| 2         | 4                             | 50        | 50        | ₹5,000                                                                                                   |
+| 3         | 6                             | 250       | 250       | ₹25,000                                                                                                  |
+| 4         | 8                             | 500       | 500       | ₹50,000                                                                                                  |
+| 5         | 10                            | 1,000     | 1,000     | ₹1,00,000                                                                                                |
+| 6         | 12                            | 2,000     | 2,000     | ₹2,00,000                                                                                                |
+| 7         | 14                            | 5,000     | 5,000     | ₹5,00,000                                                                                                |
+| 8         | 16                            | 10,000    | 10,000    | ₹10,00,000                                                                                               |
+| 9         | 18                            | 20,000    | 20,000    | ₹20,00,000                                                                                               |
+| 10        | 20                            | 40,000    | 40,000    | ₹40,00,000                                                                                               |
+| 11        | 22                            | 80,000    | 80,000    | ₹80,00,000                                                                                               |
+| 12        | 24                            | 160,000   | 160,000   | ₹160,00,000                                                                                              |
+| 13        | 26                            | 320,000   | 320,000   | ₹320,00,000                                                                                              |
+| 14        | 28                            | 640,000   | 640,000   | ₹640,00,000                                                                                              |
+| 15        | 30                            | 1,280,000 | 1,280,000 | ₹128,00,000 (RESOLVED — see §7.3 conflict note; keep this value unless the client separately changes it) |
 
 ### 7.2 Incremental counting
 
@@ -279,7 +304,7 @@ Every milestone's "Min. Direct Members" default is **2** (Super-Admin-configurab
 
 ### 7.3 Qualification & monthly calculation
 
-- **Minimum Direct Members:** **(RESOLVED 12-09-2026 — user confirmation)** every one of the 15 milestones requires a minimum of **2** Direct Members by default — a flat value, not a per-milestone progression. This default must be **Super-Admin-configurable** (Settings module) and dynamic — the client/Super Admin can change it in future — never hard-coded.
+- **Minimum Direct Members — (CHANGED 29-09-2026, user decision, T-178; supersedes the flat "2 for every milestone" rule of 12-09-2026):** each milestone needs **2 more** Direct Members than the previous one. A milestone's `min_directs` value is the **total** number of qualified directs needed: default M1 = 2, M2 = 4, M3 = 6 … M15 = 30 (2 × milestone number). The same directs keep counting, so a member with 4 qualified directs meets M1 and M2. There is no per-milestone "use" of a direct the way pair entries are consumed. **One run can still cross several milestones** (§7.2 point 6), provided both the entries and the direct total are met for each one. For example, 55L/55R unused entries with 4 qualified directs pays M1 and M2 in the same month-end run, while 55L/55R with only 3 qualified directs pays M1 only and carries the entries forward. **A qualified direct** is a Direct Member (sponsored by the beneficiary) who is `active` and has a full Pair-eligible joining under this same section's Pair Qualification EMI Rule: a one-time plan (E/F) once its registration payment is paid, and an EMI plan only once its completed-EMI count reaches that plan's `pair_qualification_emis` (A = 6, B = 2, C = 2, D = 1). An EMI direct below that count does not count yet. The values stay **Super-Admin-configurable** on Rule Versions (each milestone's total), never hard-coded. Income Booster's own Min. Directs (§9) is a separate rule and is unchanged.
 - **Pair Qualification EMI Rule:** the ₹1,000 plan (A) requires a minimum of **6** completed EMIs; the ₹3,000 (B) and ₹5,000 (C) plans require a minimum of **2** completed EMIs. **Plan D (₹10,000/10 months) — RESOLVED 12-09-2026, user confirmation:** default of **1** completed EMI, Super-Admin-configurable/dynamic (same pattern as the other plans — a real default is seeded, and Super Admin can change it later; not left unconfigured). Only after the applicable EMI requirement is met does the EMI membership count as a full eligible joining for Pair/Reward purposes.
 - Pair income is calculated **at the end of every month**, over all valid/verified eligible pairs completed by month-end, at ₹50 per pair.
 - **Carry forward:** unpaired eligible Left/Right business at month-end carries forward and combines with newly eligible business next month.
@@ -314,6 +339,11 @@ The Settings module must expose, at minimum: milestone-wise minimum Direct Membe
 - Super Admin configures Prize Item/Name and Prize Value **separately per group and per Draw Month** within its 20-month cycle.
 - Current business rule: the **first 15 months** of every group's cycle use **Silver** items/prizes; the **final 5 months** use **Gold** items/prizes.
 - Historical completed draw months retain the exact Prize Item/Name and Prize Value used at the time of that draw (immutable snapshot).
+- **Default prizes — a draw never waits for a prize (30-09-2026, user decision; supersedes the §21 T-010 "skip the group" decision).** Super Admin sets two default prizes in Draw Settings: **Silver** for months 1–15 (default "Silver Jewellery", ₹20,000) and **Gold** for months 16–20 (default "Gold Jewellery", ₹25,000). The rule keys are `draw_prize_silver_name/_value` and `draw_prize_gold_name/_value`. A group-month's own `draw_group_month_configs` row, if present, wins. Otherwise the default for that month's metal applies. When the draw runs, the prize used is frozen into that month's `draw_group_month_configs` row (`DrawPrizeResolver::snapshot()`), so a later change to the defaults never changes a past draw. The user expects these values to rarely change.
+- **More than one winner per month (30-09-2026, user decision).** Draw Settings has **Winners per month** (default 1, `draw_winners_per_month`). A group-month's own prize can set its own count. Each winner is a separate `draw_executions` row (`winner_no` 1…n, unique per group + month + winner_no). Each winner receives the month's prize and gets their own upline-benefit check. Winners are picked one after another from the members still left, so the same member never wins twice. A group whose pool runs out before month 20 is marked completed.
+- **Group-specific prize (30-09-2026).** On Draw Management, Super Admin can set a group's own Prize Item, Value and Winners for any month not yet drawn. The metal follows the month (1–15 Silver, 16–20 Gold). A month that has already been drawn is refused.
+- **"Mark as Verified" (UI name for `reconciled`, §21 T-017).** After a draw, Super Admin checks the result and hands over the prize, then marks it verified, optionally with a permanent note. The winner is never changed.
+- **One draw per group per calendar month.** Before this change, the missing next-month prize was what stopped a repeat run. Now the scheduled 15th draw skips any group that already has a draw in the current calendar month. Only the manual `php artisan jobs:draw` test command advances one cycle month per run (T-177).
 
 ### 8.4 Draw execution (12:00 PM on the 15th)
 
@@ -330,6 +360,8 @@ The Settings module must expose, at minimum: milestone-wise minimum Direct Membe
 ### 8.5 Upline draw benefit
 
 If the winner's Sponsor/Direct (the member who personally sponsored/joined them) has **at least 10 Direct Members**, that one direct Sponsor receives the same item/benefit. No additional upline levels receive the draw benefit. If there is no qualifying upline, the winner still receives their own prize and the upline benefit is simply skipped.
+
+**No limit per sponsor (30-09-2026, user decision, T-192).** A sponsor with 10+ Direct Members receives the benefit **every time** one of their directs wins: across months, across groups, and for more than one winner in the same month. There is no cap on how many times.
 
 ### 8.6 Draw safety
 
@@ -356,11 +388,11 @@ Only confirmed/eligible EMI payments count toward this threshold. **This Draw-el
 
 ## 9. Income Booster
 
-**(RESOLVED 12-09-2026 — client-provided spec v2.0)** Duration changed from 3 to **6 consecutive months** per level, and the table now specifies the binary team's Left/Right split explicitly. Team size is a **pure binary-team count** ("binary team, no direct needed") — it is evaluated from the member's Binary Position downline, independent of the Direct-Members count in the "Min. Directs" column.
+**(RESOLVED 12-09-2026 — client-provided spec v2.0)** Duration changed from 3 to **6 consecutive months** per level (**Level 1 changed to 12 months on 29-09-2026, user decision, T-180**; Levels 2–3 stay 6; the duration is each level's Super-Admin-configurable `duration_months`), and the table now specifies the binary team's Left/Right split explicitly. Team size is a **pure binary-team count** ("binary team, no direct needed") — it is evaluated from the member's Binary Position downline, independent of the Direct-Members count in the "Min. Directs" column.
 
 | Level | Min. Directs | Team size (binary, no direct needed) | Team split (Left–Right) | Monthly benefit | Duration | Total     |
 | ----- | ------------ | ------------------------------------ | ----------------------- | --------------- | -------- | --------- |
-| 1     | 10           | 500                                  | 250–250                 | ₹5,000          | 6 months | ₹30,000   |
+| 1     | 10           | 500                                  | 250–250                 | ₹5,000          | 12 months | ₹60,000   |
 | 2     | 20           | 1,500                                | 750–750                 | ₹20,000         | 6 months | ₹1,20,000 |
 | 3     | 30           | 3,000                                | 1,500–1,500             | ₹60,000         | 6 months | ₹3,60,000 |
 
@@ -373,18 +405,31 @@ _(The source docx shows the Level 3 total as "₹36,0,000", which is a comma-pla
 1. Recalculate direct count after eligible member additions.
 2. Recalculate total team size after eligible placement additions, split by Left/Right binary team.
 3. Evaluate **every** booster level the member newly qualifies for (not only the highest — see concurrency resolution below), checking both the Min. Directs and the Team size (with its Left/Right split) thresholds for that level.
-4. Create a 6-month booster schedule **per newly-qualified level**.
+4. Create a booster schedule **per newly-qualified level**, one month per month of that level's duration (Level 1 = 12, Levels 2–3 = 6).
 5. At each scheduled payout, verify continuing eligibility only if the business rule requires it (see qualification rule below).
 6. Create the benefit ledger entry and payout eligibility record.
 7. Prevent duplicate monthly benefit records.
 
-**Qualification rule:** qualification is required only **once per level**. Once a member qualifies for a booster level, they receive that level's applicable benefit for **6 consecutive months** regardless of whether they continue to meet that level's qualifying thresholds during those 6 months.
+**Qualification rule:** qualification is required only **once per level**. Once a member qualifies for a booster level, they receive that level's applicable benefit for **its full duration in consecutive months** (Level 1 = 12, Levels 2–3 = 6) regardless of whether they continue to meet that level's qualifying thresholds during that time.
 
 **Concurrency rule — (RESOLVED — user confirmation, 12-09-2026):** a member CAN hold multiple concurrent booster schedules across all three levels at once, if/when they separately qualify for each. Example: a member qualifies for Level 1 in month 1 (schedule runs months 1–6); if they newly cross the Level 2 threshold in month 2, a second, independent Level-2 schedule (months 2–7) starts alongside the still-running Level-1 schedule — the two are not merged and neither is cancelled. The same applies if Level 3 is reached while Level 1 and/or Level 2 schedules are still paying out. Each level's 6-month schedule and duplicate-payout guard (step 7 above) is tracked independently per level. _(Note: the client's spec v2.0 document itself still contains the older "evaluate the highest qualifying booster level" wording, unchanged from v1 — this concurrency rule stands on the user's direct verbal confirmation given in this session, which takes precedence over that leftover ambiguous wording; it has not been separately re-confirmed in writing by the client since the v2.0 docx.)_
 
 ---
 
 ## 10. Payment In
+
+### 10.0 Payment modes (T-196, 30-09-2026, user decision)
+
+Razorpay takes about 2.36% of every payment, so **Online (Razorpay) is switched off** by `PAYMENT_ONLINE_ENABLED` (default off). All of §10.1 and its code stay in place, and setting the flag to `true` offers it again. The modes offered (one source: `App\Services\Payments\PaymentModes`):
+
+| Mode | Where it is offered | How it is confirmed |
+| --- | --- | --- |
+| **Cash** | Everywhere (registration, assisted registration, EMI / Pay All) | Super Admin **or Admin** approves (§10.2) |
+| **GPay / UPI** (`upi`) | Everywhere | The member pays the company UPI (the UPI ID and QR image are set by Super Admin in **Payment Settings**), then enters the **Transaction/UTR Ref ID and uploads a payment screenshot — both required**. A Ref ID can be used only once (unique). Super Admin or Admin approves it in the same queue as cash (**Payment Approvals**), after matching it with the bank statement. |
+| **Wallet** | Only when a Store Admin (Store Wallet) or a logged-in member (own wallet) registers someone | Immediate, no approval (§12.2) |
+| Online (Razorpay) | Only when `PAYMENT_ONLINE_ENABLED=true` | §10.1 |
+
+Cash and GPay/UPI share the manual-approval status `payments.cash_status` (pending_verification → approved / rejected) and the approve/reject Actions, so income, activation and EMI handling after approval are identical.
 
 ### 10.1 Online payment logic
 
@@ -439,6 +484,20 @@ Wallet is the financial truth layer connecting income, benefits, and payouts.
 
 - **Credits:** Level Income, Reward/Pair Income, Income Booster, Draw/Upline Draw Benefit (where monetary), Store Profit Distribution.
 - **Debits:** Member payout (amount paid to the member by Super Admin).
+
+**Overdue EMI holds a member's earnings (NEW 30-09-2026, user decision, T-182).** An EMI-plan member earns everything as usual, however many EMIs they have paid. The one condition is that their EMI record is clear. While **any** of their installments is `overdue` (the day after its due date, §5 point 7), every new earning of theirs is **held, not lapsed**.
+- **Level Income, Purchase/Repurchase income (self, upline and walk-in Store Owner), and Store Profit Distribution:**
+  - the income row is calculated and stored exactly as usual (`paid`);
+  - its wallet credit is written with status **`pending`** (a *held earning*), which is not part of `wallet_balance` and cannot be withdrawn;
+  - the moment the member has no overdue installment left, because the overdue EMI(s) are paid singly or through "Pay All Remaining EMIs" (§5 point 9), **every held credit becomes `confirmed`** and is added to the balance.
+  - With two overdue EMIs, paying one keeps everything held; paying the second releases it.
+- **Pair/Reward:** the month-end evaluation skips a member who has an overdue EMI. Their entries stay unused and carry forward, and the reward is paid at the first month-end after the EMI record is clear.
+- **Income Booster:** a monthly payout that falls due while an EMI is overdue stays `pending`. The daily Booster Payout Processor pays it on the first run after the record is clear, in addition to any later month.
+- **Unaffected:**
+  - a member with no EMI schedule (one-time plans E/F);
+  - a member's own EMI payments, which still give their upline income (§5 point 2);
+  - the T-179 directs gate and every other skip rule, which are applied first: only income that would have been paid is ever held.
+- A pending **debit** remains a payout hold (§11.1). A held earning is always a pending **credit**, so the two never mix.
 
 ### 12.1 Ledger transaction fields
 
@@ -515,6 +574,23 @@ When an MLM leader is ready to join, Super Admin selects an available dummy comp
 ## 15. Repurchase / Purchase Upline Income
 
 Generated when a member purchases a product through a Store and the Store records the confirmed transaction. The transaction must capture member/customer, item name, item weight, rate, amount, and applicable tax/invoice information.
+
+**Store upline income unlocks at 10 qualified directs, for life (NEW 30-09-2026, user decision, T-183).** A member earns the **upline** parts of store income only once they have unlocked store income. The upline parts are Purchase/Repurchase Levels 1–12 (this section) and Store Profit Distribution Sponsor Levels 1–3 (§16.4).
+- **Unlock:** the member has at least `store_income_min_directs` (default **10**) **qualified directs**, using the same definition as §7.3. The moment that is first true, `members.store_income_unlocked_at` is recorded and stays forever. Losing directs later (a cancelled direct, or Super Admin raising the setting) never locks it again.
+- **When it is checked:**
+  - on every confirmed payment, for the payer's sponsor, because a new or newly qualified direct is exactly what can take the count to 10;
+  - again when a store sale's income is calculated, for each upline beneficiary, which covers a lowered setting.
+- **Before unlock the income lapses:**
+  - a Purchase/Repurchase level gets a `skipped` row with reason `store_income_locked` and ₹0;
+  - a Store Profit sponsor level gets no row, the same way an excluded sponsor gets none;
+  - nothing is paid later, and nothing passes up or goes to the company.
+- **Unchanged:**
+  - the buyer's own "self" income;
+  - the Store Owner's share (§16.4);
+  - the walk-in sale's Store Owner income (T-170);
+  - every other earning.
+- **Order of rules:** all other skip rules apply first, including the T-182 overdue hold. Income that is paid can still be held (§12).
+- **Setting:** a rule version without `store_income_min_directs`, or with 0, has no condition, and no unlock is recorded under it.
 
 **T-170 (28-09-2026, user decision) — walk-in sales.** When the buyer is **not** a member, there is no chain to pay, so the **whole** percentage this section would have shared (self + every level of that metal's rates; with the 29-09-2026 defaults 15% for Silver and 7.5% for Gold) is paid to the **Store Owner's member wallet** as one `income_ledger_calculations` row (`level_no` null). It is calculated on the sale's metal value (§16.2 T-169 note). The wallet line reads "Walk-in store sale income — <store> sale #N", which keeps the history showing that the income came from the store. Store Profit Distribution (§16.4) is unchanged and still fires as well. A store whose owner is not a network member gets neither. Store-caused income stays in the owner's **member** wallet; there is no separate store income wallet and no store payout (user decision, §21 "28-09-2026 feedback batch"). `EarningsVerifier` checks these rows too; walk-in sales from before T-170 simply have none. This supersedes the "walk-in → §15 does not apply" wording in §16.4 scenario 1 and §16.11.
 
@@ -600,6 +676,8 @@ Super Admin must be able to view a complete activity/audit log per store, coveri
 
 ### 16.4 Store Profit Distribution
 
+**T-183 (30-09-2026):** the Sponsor/Direct levels below are paid only to a member who has unlocked store income (10 qualified directs, for life, §15). Before that, the level lapses and gets no row. The Store Owner's own share is unchanged.
+
 | Beneficiary            | Rate  |
 | ---------------------- | ----- |
 | Store Owner            | 2%    |
@@ -661,6 +739,54 @@ Clarifying §16.2/§16.4/§16.7 against how the client actually described these 
 **RESOLVED 23-09-2026 — user confirmation (relayed from the client):** a store-attributed joining purchase fires **both** distributions together — Store Profit Distribution (§16.4) **and** Purchase/Repurchase Upline Income (§15, 2% self + the member's own Sponsor chain), on top of whatever registration-time Level Income the joining itself already triggers. `CalculatePurchaseRepurchaseIncome`'s existing gate (fires whenever `store_sales.member_id` is set, regardless of `transaction_type`) already produces exactly this — no code change was needed; this was a documentation-only confirmation that the "extra" income on a plan-jewellery handover is intended, not a bug.
 
 ---
+
+### 16.13 Repurchase on EMI — Current Rate only (NEW 30-09-2026, user decisions, T-185)
+
+A member may buy a store piece as a **Repurchase on EMI**. Only a member's Repurchase qualifies: never a Purchase or a walk-in sale.
+
+**1. Booking (T-185a)**
+- The **Store Admin** creates a request for a member: their Customer ID, one piece from **this store's** stock (quantity ≥ 1), and **10 or 20 EMIs**.
+- The request shows an estimate at today's rate. **Super Admin (or the company Admin, T-173) approves or cancels it.** A cancel needs a message.
+- **Approval** locks the **approval day's** rate, as T-166 does. It creates the store EMI schedule and **holds the piece**: its stock goes down by 1 at approval, and back up if the booking breaks (point 3).
+- Two limits: a member has at most **one open** store EMI at a time, and a plan EMI may run alongside it. Open means pending, running, fully paid but not yet handed over, or broken with silver still to hand over; a broken booking with nothing owed is closed.
+- A Store Admin can only request for their own store.
+
+**2. Price and schedule**
+- Only **Current Rate** is offered. The total value is `piece weight × approval-day rate + making % of that rate row`, the same as §3.0 / T-165. There is no GST or hallmark in the EMIs; those belong on the delivery bill (point 4).
+- The total value is spread over N = 10 or 20 EMIs with the plan's **1% declining maintenance** (T-167): principal = value ÷ N, and maintenance on the value still remaining each month.
+- EMI #1 is due on the approval day; the others follow on the same day of each later month (§5 point 7, no grace period).
+- The schedule is an ordinary `emi_schedules` row with `kind = store_repurchase` (the plan's own schedule is `kind = membership`), `rate_booking_method = current_rate`, and the locked rate/weight/maintenance snapshot, plus a `booked` event. So every EMI rule applies unchanged:
+  - the member pays each EMI from their **EMI page** (online, or cash with Super Admin approval), in order;
+  - "Pay All Remaining EMIs" (§5 point 9) pays the remaining principal without maintenance;
+  - an overdue store EMI **holds all the member's earnings** (§12, T-182);
+  - EMI reminders and the due/overdue job cover it.
+- **Income:** each store EMI payment gives the upline **Level Income only**, exactly like a plan EMI (§6: 12 levels, the item's metal rates, directs gate, skip rules, overdue hold). There is **no** Purchase/Repurchase income (self or upline), **no Store Profit Distribution**, and no Pair, Booster or Draw effect. A store EMI is never a joining or a qualification EMI.
+
+**3. Break (T-185b)**
+- When a store schedule has **3 overdue EMIs** (`store_emi_break_overdue_count`, default 3, Super Admin setting), the daily EMI job breaks it at once:
+  - the booking becomes `broken`;
+  - its unpaid EMIs are closed (`cancelled`, never payable, never overdue again, so they no longer hold earnings);
+  - the held piece returns to stock.
+- The member is owed **silver** worth the **principal paid**, which is the amount paid **minus maintenance**. The grams are fixed as `principal paid ÷ the silver rate in force on the date the last EMI was paid`, rounded to 3 decimals.
+- If no EMI was paid, nothing is owed.
+- Level Income already paid on the EMIs stays as it is.
+
+**4. Delivery (T-185c; answers from the user 30-09-2026)**
+- **Both kinds of handover** are done by the Store Admin at the **booking's store**. Each is recorded as an ordinary confirmed store sale (type `repurchase`) with `store_emi_booking_id` and `prepaid_amount` set, and it **never** generates Purchase/Repurchase income or Store Profit.
+  - The bill works as usual: "Generate bill" with optional hallmarking (T-171), which adds the hallmark charge and recomputes GST.
+  - The bill shows "Less: paid through Repurchase EMIs" and "Paid at delivery" (= total − prepaid).
+  - The booking then becomes `delivered`.
+- **Fully paid piece (`completed`):** the held piece is handed over. Its stock already went down at approval, so it does not go down again.
+  - It is billed at the **locked** rate with the booking's own metal value and making.
+  - `prepaid_amount` = metal value + making (what the EMIs paid).
+  - The member pays **GST, and any hallmark, at delivery**.
+- **Silver after a break (`broken`, grams > 0):** the Store Admin picks a silver piece from this store's stock whose weight is **at least** the grams owed; a lighter piece is refused. It is priced like a purchase at **today's** rate and making % (T-169), plus GST.
+  - The owed grams are prepaid **at today's rate**: `prepaid_amount` = grams owed × today's rate. The grams are what is guaranteed, not the rupee value.
+  - The member pays **the extra grams, the making on the whole piece, and GST** now.
+  - The piece's stock goes down by 1.
+- **Restock (the T-152 rule):** the store never received the EMI money, so each handover creates an owed `store_restock_shipments` row for the prepaid metal:
+  - a completed piece: the piece's weight, at the booked metal value;
+  - break-silver: the owed grams, at the prepaid value.
 
 ## 17. Admin / Store Owner — Store Operations Boundary
 
@@ -940,7 +1066,7 @@ The items below were open and are now resolved. The user provided these answers 
 | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | Store Profit Distribution (§16.4) vs. Purchase/Repurchase Upline Income (§15) — do both apply to the same transaction?         | Store-attributed sales come in exactly 3 scenarios: (1) walk-in/non-member sale — Store Profit Distribution only; (2) member jewellery purchase — **both** Purchase/Repurchase Upline Income and Store Profit Distribution fire on the same transaction; (3) new joining with jewellery delivered at a store — Store Profit Distribution applies to that store sale too.                                  | §16.4      |
 | Store Owner beneficiary identity — is a Store Owner also a network Member with a wallet?                                       | Yes — a Store Owner is also a full GoldWave network Member (own Customer ID, sponsor/placement, wallet); their 2% Store Profit Distribution share is credited to that Member wallet.                                                                                                                                                                                                                      | §2         |
-| Pair/Reward milestone-wise minimum Direct Members — no concrete numbers were given.                                            | Flat default of **2** Direct Members for every one of the 15 milestones (not a progression), Super-Admin-configurable/dynamic.                                                                                                                                                                                                                                                                            | §7.3       |
+| Pair/Reward milestone-wise minimum Direct Members — no concrete numbers were given.                                            | Flat default of **2** Direct Members for every one of the 15 milestones (not a progression), Super-Admin-configurable/dynamic. **Superseded 29-09-2026 (T-178):** now a total of 2 × milestone number of qualified directs, see §7.3.                                                                                                                                                                      | §7.3       |
 | Plan D (₹10,000/10 months) Pair/Reward completed-EMI count — spec v2.0 gave no default, deferred to Super Admin configuration. | Default of **1** completed EMI, Super-Admin-configurable/dynamic (same pattern as Plans A/B/C — a real default is seeded, not left empty).                                                                                                                                                                                                                                                                | §7.3       |
 | Income Booster — can a member hold concurrent 3-month schedules across levels?                                                 | Yes — a member can hold concurrent schedules across all three levels simultaneously if they separately qualify for each; each level's schedule and qualification is tracked independently. _(The schedule length was 3 months when this question was asked; client spec v2.0, compared 12-09-2026, separately changed the duration to 6 months — the concurrency answer itself is unaffected, see §9.1.)_ | §9.1       |
 | Sponsor inactive at registration time — is registration under an inactive sponsor allowed?                                     | **No.** If the sponsor's own account is not currently Active — for any reason (own pending payment, Super Admin suspension, anything else) — their invite/sponsor code is treated as invalid and registration under it is blocked, same as an invalid code. Re-checked at the moment of registration every time; a sponsor who becomes Active again can sponsor new members from then on.                 | §2.1       |
@@ -1004,7 +1130,7 @@ Do not re-open these without a new client-confirmed change — treat the resolut
 | Whether a member who was already placed into one draw group (win or not, cycle complete or not) can later be placed into a _different_ group by a future grouping run — not explicitly forbidden by the text, but also never described as happening.                                                                                                                  | **Read as a one-lifetime-shot design**, consistent with how a real chit-fund/draw batch works (join one batch, it runs to completion, that's your one shot) and with §8.2's "maintains that group's _complete_ eligible-member snapshot" wording (a fixed roster, never added to). Once a member appears in any `draw_group_members` row, they are permanently excluded from all future grouping batches.                                                                                                                                                  | `Actions/Draw/GenerateDrawGroups`                             |
 | §14.2 point 5 / §14.3 — is an unassigned dummy entry Draw-eligible?                                                                                                                                                                                                                                                                                                   | Not a new rule, already resolved by §14 itself: unassigned dummies explicitly "do not participate in compensation" (excluded); an assigned dummy is "treated as a normal binary-position member for all calculations... subject to the normal eligibility rules" (included, subject to the same §8.7 EMI-completion check as anyone else).                                                                                                                                                                                                                 | §8, §14                                                       |
 | §8.4's "retrieve eligible member table IDs" at execution time — does this re-check each member's live `active` status, or just use the group's frozen roster minus already-removed winners?                                                                                                                                                                           | **Read literally from §8.2's own wording:** the group's eligible-member snapshot is frozen at formation ("maintains that group's complete eligible-member snapshot for the full 20 months") — execution draws from `draw_group_members` rows not yet `is_winner_removed`, with no live re-check of a remaining member's current `active` status. Unlike Level Income's beneficiary chain (§6.1), no "currently inactive is skipped" rule is written anywhere in §8, so none is invented here.                                                              | §8.4                                                          |
-| `draw_group_month_configs.prize_name`/`prize_value` are NOT NULL, but §8.3 only defines _when_ the 15-Silver/5-Gold pattern applies, not an actual default prize name/value Super Admin never configured — a genuine amount cannot be invented.                                                                                                                       | **Architecture decision:** `ExecuteMonthlyDraw` requires that month's `draw_group_month_configs` row to already exist (Super Admin configures Prize Name/Value ahead of time — a Settings-module concern, not built by T-010); if missing for a given group/month, that group is skipped for this run (no `draw_executions` row created, no invented prize) rather than guessing a value. `GenerateDrawGroups` does not pre-seed month configs.                                                                                                            | `draw_group_month_configs`, `Actions/Draw/ExecuteMonthlyDraw` |
+| `draw_group_month_configs.prize_name`/`prize_value` are NOT NULL, but §8.3 only defines _when_ the 15-Silver/5-Gold pattern applies, not an actual default prize name/value Super Admin never configured — a genuine amount cannot be invented.                                                                                                                       | **Superseded 30-09-2026 (§8.3 default prizes — a missing prize now falls back to the Silver/Gold default and the draw always runs).** Original architecture decision: `ExecuteMonthlyDraw` requires that month's `draw_group_month_configs` row to already exist (Super Admin configures Prize Name/Value ahead of time — a Settings-module concern, not built by T-010); if missing for a given group/month, that group is skipped for this run (no `draw_executions` row created, no invented prize) rather than guessing a value. `GenerateDrawGroups` does not pre-seed month configs.                                                                                                            | `draw_group_month_configs`, `Actions/Draw/ExecuteMonthlyDraw` |
 | `draw_executions.status` has 3 values (`scheduled/executed/reconciled`) but `winner_member_id` is NOT NULL, so a row can't exist in a genuinely pre-winner "scheduled" state.                                                                                                                                                                                         | **Architecture decision (same reserved-status precedent as T-009):** a row is created directly as `executed` at the moment the RNG selects a winner (this migration's design already requires that). `scheduled` and `reconciled` stay reserved for a future admin-scheduling/correction workflow — §8.6's "any admin correction creates a reversal/correction audit record" describes exactly such a workflow, but building it is not part of T-010's grouping/execution/upline-benefit scope.                                                            | `Actions/Draw/ExecuteMonthlyDraw`                             |
 | §8.4 point 6's "real-time update mechanism" and point 5's slot-machine animation are UI/infra concerns, and `ARCHITECTURE.md` already lists the actual Draw Page as Member-portal scope owned by T-015 (`Member/... Draw ... not yet built — T-015`), with the broadcast driver itself explicitly "not yet chosen... revisit once deployment environment is decided." | **Scope boundary, consistent with T-006–T-009's precedent of backend-only tasks:** T-010 builds the `DrawResultPublished` broadcast Event (implements `ShouldBroadcast`, fired on every execution) so the real-time behavior is code-complete and wired the moment a real broadcast driver is installed — but does not install Reverb/Pusher, and does not build the Draw Page or slot-machine animation component (T-015/T-017's job). `BROADCAST_CONNECTION=log` (the existing scaffold default) means the event safely logs rather than erroring today. | `ARCHITECTURE.md`, `Events/DrawResultPublished`               |
 

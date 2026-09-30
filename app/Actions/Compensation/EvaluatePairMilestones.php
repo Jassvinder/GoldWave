@@ -6,6 +6,7 @@ use App\Models\Member;
 use App\Models\PairEntry;
 use App\Models\PairRewardTransaction;
 use App\Models\RuleVersion;
+use App\Services\PairQualifiedDirects;
 use App\Services\RuleVersionService;
 use App\Services\WalletLedgerService;
 use Illuminate\Support\Carbon;
@@ -23,6 +24,9 @@ use Illuminate\Support\Facades\DB;
  * carry-forward language, and it never wastes entries a member would
  * otherwise be entitled to).
  *
+ * T-178 (29-09-2026) — the gate is a milestone's total of *qualified* directs
+ * (`PairQualifiedDirects`, default 2 × milestone no.), Docs/TEST.md scenario 35.
+ *
  * Idempotent: `pair_reward_transactions`'s `(member_id, milestone_no)` unique
  * constraint, plus only ever considering milestones above the beneficiary's
  * highest already-achieved one.
@@ -32,6 +36,7 @@ class EvaluatePairMilestones
     public function __construct(
         private readonly RuleVersionService $rules,
         private readonly WalletLedgerService $wallet,
+        private readonly PairQualifiedDirects $qualifiedDirects,
     ) {}
 
     public function __invoke(Member $beneficiary, Carbon $forMonth): void
@@ -39,6 +44,11 @@ class EvaluatePairMilestones
         $ruleVersion = $this->rules->activeVersion();
 
         if (! $ruleVersion) {
+            return;
+        }
+
+        // T-182 — an overdue EMI: entries stay unused and the reward waits for the first month-end after it is paid.
+        if ($beneficiary->hasOverdueEmi()) {
             return;
         }
 
@@ -55,6 +65,7 @@ class EvaluatePairMilestones
         $milestones = collect((array) $this->rules->value('pair_milestones', []))->sortBy('milestone_no')->values();
 
         $lastAchieved = (int) (PairRewardTransaction::where('member_id', $beneficiary->id)->max('milestone_no') ?? 0);
+        $qualifiedDirects = null; // Counted once, only when a milestone's entries are actually met.
 
         foreach ($milestones->where('milestone_no', '>', $lastAchieved) as $milestone) {
             $unusedLeft = PairEntry::where('member_id', $beneficiary->id)->where('side', 'left')->where('status', 'unused')->count();
@@ -64,9 +75,10 @@ class EvaluatePairMilestones
                 break;
             }
 
-            $activeDirects = $beneficiary->directs()->where('status', 'active')->count();
+            // T-178 — `min_directs` is the milestone's total (default 2 × milestone no.), counted in qualified directs.
+            $qualifiedDirects ??= $this->qualifiedDirects->count($beneficiary);
 
-            if ($activeDirects < $milestone['min_directs']) {
+            if ($qualifiedDirects < $milestone['min_directs']) {
                 break;
             }
 

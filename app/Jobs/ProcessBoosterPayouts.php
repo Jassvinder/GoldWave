@@ -45,6 +45,11 @@ class ProcessBoosterPayouts implements ShouldQueue
                     $qualification = $locked->boosterQualification()->firstOrFail();
                     $member = $qualification->member()->firstOrFail();
 
+                    // T-182 — while an EMI is overdue the month stays pending; the first run after it is paid pays it.
+                    if ($member->hasOverdueEmi()) {
+                        return;
+                    }
+
                     $entry = $wallet->credit(
                         $member,
                         'booster',

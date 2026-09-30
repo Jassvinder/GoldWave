@@ -88,6 +88,8 @@ function makeGoldRate(float $ratePerGram): MetalRate
 
 beforeEach(function () {
     $this->seed();
+    // These tests are about store rates and flows, not the T-183 10-directs unlock (StoreIncomeUnlockTest covers it).
+    RuleValue::where('key', 'store_income_min_directs')->update(['value' => 0]);
 });
 
 test('CreateStore opens a wallet and credits the initial advance amount', function () {

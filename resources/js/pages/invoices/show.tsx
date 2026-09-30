@@ -33,6 +33,9 @@ type Invoice = {
     gst_amount: string;
     total_invoice_amount: string;
     payment_source: string | null;
+    /** T-185c — a Repurchase on EMI handover: already paid through the EMIs, and due at the counter. */
+    prepaid_amount?: string | null;
+    amount_due?: string | null;
 };
 
 type Props = { invoice: Invoice; back_url: string };
@@ -75,6 +78,12 @@ function whatsappText(invoice: Invoice): string {
         `Amount: ₹${invoice.sale_amount}`,
         `GST: ₹${invoice.gst_amount}`,
         `Total: ₹${invoice.total_invoice_amount}`,
+        ...(invoice.prepaid_amount
+            ? [
+                  `Paid through Repurchase EMIs: ₹${invoice.prepaid_amount}`,
+                  `Paid at delivery: ₹${invoice.amount_due}`,
+              ]
+            : []),
         'Thank you for shopping with GoldWave.',
     ].join('\n');
 }
@@ -328,6 +337,20 @@ export default function InvoiceShow({ invoice, back_url }: Props) {
                                 <span>Total</span>
                                 <span>₹{invoice.total_invoice_amount}</span>
                             </div>
+                            {invoice.prepaid_amount && (
+                                <>
+                                    <div className="flex justify-between">
+                                        <span>
+                                            Less: paid through Repurchase EMIs
+                                        </span>
+                                        <span>− ₹{invoice.prepaid_amount}</span>
+                                    </div>
+                                    <div className="flex justify-between font-semibold">
+                                        <span>Paid at delivery</span>
+                                        <span>₹{invoice.amount_due}</span>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         <p className="text-muted-foreground mt-8 text-center text-xs">

@@ -7,6 +7,7 @@ use App\Models\StoreProfitDistribution;
 use App\Models\StoreSale;
 use App\Services\RuleVersionService;
 use App\Services\SponsorChainResolver;
+use App\Services\StoreIncomeUnlock;
 use App\Services\WalletLedgerService;
 use Illuminate\Support\Facades\DB;
 
@@ -32,10 +33,16 @@ class CalculateStoreProfitDistribution
         private readonly SponsorChainResolver $sponsorChain,
         private readonly RuleVersionService $rules,
         private readonly WalletLedgerService $wallet,
+        private readonly StoreIncomeUnlock $storeIncome,
     ) {}
 
     public function __invoke(StoreSale $storeSale): void
     {
+        // T-185c — handing over a Repurchase on EMI gives the store nothing (§16.13: "store ko kuchh nahi milega").
+        if ($storeSale->isStoreEmiDelivery()) {
+            return;
+        }
+
         if (StoreProfitDistribution::where('store_sale_id', $storeSale->id)->exists()) {
             return;
         }
@@ -75,6 +82,11 @@ class CalculateStoreProfitDistribution
                     continue;
                 }
 
+                // T-183 — a sponsor level is paid only after 10 qualified directs (then for life); before that it lapses.
+                if (! $this->storeIncome->isUnlocked($beneficiary)) {
+                    continue;
+                }
+
                 $this->payBeneficiary(
                     $storeSale, "sponsor_level_{$level}", $beneficiary,
                     (float) ($rates["sponsor_level_{$level}"] ?? 0), $baseAmount, $ruleVersion->id,
@@ -104,7 +116,7 @@ class CalculateStoreProfitDistribution
             'rule_version_id' => $ruleVersionId,
         ]);
 
-        $this->wallet->credit(
+        $this->wallet->creditEarning(
             $beneficiary,
             'store_distribution',
             $amount,

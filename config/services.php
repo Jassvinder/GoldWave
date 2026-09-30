@@ -35,6 +35,9 @@ return [
     */
     'payments' => [
         'gateway' => env('PAYMENT_GATEWAY'),
+        // T-196 (30-09-2026, user decision) — Razorpay's fee is too high, so the "Online" option is switched off.
+        // Everything behind it stays; set PAYMENT_ONLINE_ENABLED=true to offer it again.
+        'online_enabled' => (bool) env('PAYMENT_ONLINE_ENABLED', false),
     ],
 
     'razorpay' => [

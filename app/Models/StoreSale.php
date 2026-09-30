@@ -43,6 +43,9 @@ class StoreSale extends Model
         'store_wallet_deduction_id',
         'distribution_status',
         'status',
+        // T-185c — a Repurchase on EMI handover: its booking, and how much of the bill the EMIs already paid.
+        'store_emi_booking_id',
+        'prepaid_amount',
     ];
 
     protected function casts(): array
@@ -58,6 +61,7 @@ class StoreSale extends Model
             'sale_amount' => 'decimal:2',
             'gst_amount' => 'decimal:2',
             'total_invoice_amount' => 'decimal:2',
+            'prepaid_amount' => 'decimal:2',
         ];
     }
 
@@ -66,6 +70,12 @@ class StoreSale extends Model
      * calculated on the metal value only (not making, hallmark or GST). A sale recorded before automatic
      * pricing has no `metal_value`, so its typed `sale_amount` stays its base.
      */
+    /** T-185c — a Repurchase on EMI handover never generates income (DOMAIN_LOGIC.md §16.13 point 4). */
+    public function isStoreEmiDelivery(): bool
+    {
+        return $this->store_emi_booking_id !== null;
+    }
+
     public function incomeBase(): float
     {
         return (float) ($this->metal_value ?? $this->sale_amount);

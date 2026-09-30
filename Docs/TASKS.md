@@ -28,11 +28,14 @@ _(none — the clear items of the 28-09-2026 feedback batch, T-157…T-162, are 
 
 ## Pending
 
-_No pending task._
+_No pending task._ (Both 30-09-2026 batches, T-192…T-196 and T-198…T-200, are done; T-197 waits for the user's flow — see Blocked.)
 
 ## Blocked
 
-_No blocked task._ (The 28-09-2026 feedback batch is complete. T-164, the member serial number, was dropped by the user because the Customer ID's number serves that purpose.)
+- [ ] **T-197 — Monthly Draw live waiting screen, slot-machine animation and highlighted winner number** · Status: Blocked · Depends on: user's full flow description (30-09-2026: "is task ko abhi open rakho, pura flow baad me btaunga")
+  - Known today: there is no real-time channel (`BROADCAST_CONNECTION=log`), and the slot-machine animation described in `DOMAIN_LOGIC.md` §8.4 is not built. Choose polling or Reverb once the flow is given.
+
+(T-164, the member serial number, was dropped by the user because the Customer ID's number serves that purpose.)
 
 ## Completed
 
@@ -139,6 +142,184 @@ _No blocked task._ (The 28-09-2026 feedback batch is complete. T-164, the member
 - [x] **T-160 — Store invoice: view, Print, Share via WhatsApp** · Completed: 28-09-2026 · Verified: full suite 363/363; new test covers a store opening its own sale's invoice (store, customer = walk-in, item, total 30,900 incl. GST) and another store getting 404. New route `admin.sales.invoice` and standalone page `invoices/show` (no portal layout, `app.tsx`). The Recent Sales invoice number links to it. Print uses the browser dialog (also Save as PDF); Share opens `wa.me` with a text summary. Not included: store GSTIN (not stored) and a print/share activity-log entry. No manual browser check.
 - [x] **T-161 — Store Sales: Store Wallet removed as a sale payment source** · Completed: 28-09-2026 · Verified: full suite 363/363. New test: `store_wallet` is rejected, and neither stock nor wallet changes. The existing inventory-sale test now pays Cash and asserts the Store Wallet is untouched. Form offers Cash / Other only; `RecordStoreSaleRequest` allows `cash,other`. DB enum and `ConfirmStoreSale`'s wallet branch are unchanged, because historic rows still use them (DOMAIN_LOGIC §16.2 note). The member cash-collection-via-Store-Wallet feature (§12.2) is untouched. No manual browser check.
 - [x] **T-163 — Company Wallet manual top-up; balance never below zero** · Completed: 28-09-2026 · Verified: new test covering a top-up (balance +5,000, `manual_topup` credit with the note), a 0 amount rejected, a debit larger than the balance refused with nothing changed, and a debit within the balance allowed; Pint / Larastan 0 / `tsc` / `vp check` (1 file) clean; fresh `vp build`. Changes: `CompanyWalletService::topUp()` and a guarded `debit()`, route `super-admin.company-wallet.top-up`, a Top Up card and a Source column on the page. No manual browser check.
+- [x] **T-200 — Member Monthly Draw page explains its numbers and shows the group** · Completed: 30-09-2026 · Verified: the new `DrawTest` T-199/T-200 case asserts `group_no`, first/last Customer ID, size, `winners_count`, `draws_held` and `next_draw`. Full suite 437/437; `vp check` and the build are clean. Changes: a header "Monthly Draw · Group #n · range · Draw x of 20 held · next prize" (chooser only for 2+ groups), and "195 of 200 members are still in the draw — 5 have already won and left the draw". No manual browser check.
+- [x] **T-199 — Draw upline benefit visible everywhere** · Completed: 30-09-2026 · Verified: the same test covers the sponsor's `upline_benefits` (sponsor not in the group), the Dashboard `draw.upline_benefits` / `latest_upline`, the winner's row `upline_benefit_customer_id` and the winner's `draw.won`. Larastan 0 (added the `@property string $prize_value` PHPDoc, true to the `decimal:2` cast). Changes: amber "Upline benefit" row on Super Admin Draw Management; "Upline benefits you received" card and a Sponsor line under winners on the member Draw page; Draws won / Upline benefits rows and a Latest note on the Dashboard Monthly Draw card. No manual browser check.
+- [x] **T-198 — Member lands on the Member login after an expired session or logout** · Completed: 30-09-2026 · Verified: 3 tests in `MemberPortalTest` (member route → `/member/login`; `/dashboard` goes to `/member/login` or `/login` depending on the remembered door; member logout → `/member/login`, Super Admin logout → `/`); 144/144 in the auth/portal suites.
+  - Cause: Laravel's default guest redirect was `/login` for every portal.
+  - Fix: `Portal` now also remembers the last login door in the cookie `goldwave_last_portal` (Fortify staff login stamps `staff`). `redirectGuestsTo(Portal::loginUrlFor())`, and a custom Fortify `LogoutResponse`. Member login already used `redirect()->intended()`, so the member returns to the page they were on.
+- [x] **T-196 — Payments: Cash, GPay/UPI (Ref ID + screenshot) and Wallet; Razorpay kept but switched off** · Completed: 30-09-2026 · Verified: full suite **434/434**, including the new `UpiPaymentTest` 5/5 (Online hidden and refused while off; Ref ID + screenshot both required; UPI registration waits for approval with its proof, an **Admin** approves it and the member activates; a duplicate Ref ID is refused; only Super Admin saves the UPI settings, which then reach `/join`). The Razorpay, registration and EMI online-flow tests switch the flag on and still pass. Larastan 0, Pint, `.\gw types`, `vp check` (changed TSX) and `.\gw build` are clean. No manual browser check.
+  - Built: migration `add_upi_payment_mode`; `App\Services\Payments\PaymentModes` (offered modes, approval rule, UPI proof rules/attach, `forPage()`); config flag `services.payments.online_enabled` (`PAYMENT_ONLINE_ENABLED`, default false).
+  - Cash and UPI share `cash_status` and `ApproveCashPayment`/`RejectCashPayment`.
+  - Pages: Payment Approvals (Ref ID + screenshot), Super-Admin-only Payment Settings (UPI ID + QR), and a shared `PaymentModePicker` on `/join`, both assisted registrations and the EMI page (new `EmiPayDialog`).
+  - Docs: `DOMAIN_LOGIC.md` §10.0, `INSTRUCTIONS.md`, `DATABASE_SCHEMA.md`, `DEPLOYMENT.md`, `.env.example`, AGENTS.md project card.
+  - Not tested with a real file upload in a browser.
+- [x] **T-195 — Payout request flow works end to end** · Completed: 30-09-2026 · Verified: the extended `MemberPortalTest` payout test (35 assertions) passes. It covers: unverified → listed under "Bank details waiting for verification" → Super Admin verifies → member gets a `BankDetailsVerified` notification → ₹499 and above-balance are refused → ₹1,000 accepted → the request shows in the Super Admin pending queue.
+  - Cause of the report: GWL01's bank details were never verified; the flow itself worked.
+  - Built: amber explanation on the member page; amount field with the ₹min–₹available range, min/max and a Full balance button; a clearer server message for above-balance amounts; the "waiting for verification" list with Open member on Payout Requests; the new member notification (`bank_details_verified`, database + mail + SMS).
+  - Not done: a pending-verification count on the Super Admin **dashboard** — the Payout Requests page shows it.
+- [x] **T-194 — Total Team card and team numbers on Directs/Tree View** · Completed: 30-09-2026 · Verified: `MemberPortalTest` asserts the same `team` keys on Dashboard, Directs and Tree; 65/65 in the member/network suites; `tsc` clean. `MemberNetworkSummary::teamCounts()` feeds all three. A new shared `TeamSummaryStrip` (StatStrip) sits in `NetworkDiagramShell`'s new `summary` slot, and the Dashboard has a Total Team card (Left/Right rows, links to Tree View).
+- [x] **T-193 — Level Income On hold shows its total** · Completed: 30-09-2026 · Verified: `tsc` and the build are clean (UI only). The On hold card header shows an amber **Total on hold ₹X · n entries** box.
+- [x] **T-192 — Draw upline benefit has no per-sponsor limit** · Completed: 30-09-2026 · Verified: a new `DrawTest` case — one sponsor with 12 directs in one group gets the benefit on all 5 wins (3 winners in month 1 + months 2–3). `DrawTest` 10/10. No code change was needed (there was never a limit). The rule is stated in `DOMAIN_LOGIC.md` §8.5.
+- [x] **T-191 — Test entries named after their own Customer ID: `php artisan test:entries` (user-requested, chat)** · Completed: 30-09-2026 · Verified: new `AddTestEntriesCommandTest` 2/2 (adds a placeholder members row between runs, then checks every name matches its ID). Larastan 0, Pint clean.
+  - Cause: the temp entry script named members `Test Member {Member::count()+1}`. The company placeholder row created between GWL15 and GWL16 shifted every later name by one (GWL16 = "Test Member 17").
+  - Fix: new command `app/Console/Commands/AddTestEntries.php`. It uses the real RegisterMember + ApproveCashPayment flow, names each member after approval from the Customer ID it received, and refuses to run in production.
+  - Dev DB: 604 existing test members, GWL16–GWL619, were renamed to match their IDs.
+  - Documented in `Docs/TEST.md`.
+- [x] **T-190 — Draw: several winners per month, a group-specific prize form, "Mark as Verified", and a two-table member Draw page (user-requested, chat)** · Completed: 30-09-2026 · Verified: full suite **426/426**. Larastan 0, Pint, `.\gw types` and `.\gw build` are clean. No manual browser check.
+  - New migration `allow_multiple_draw_winners_per_month` (`winners_count`, `winner_no`, unique key changed).
+  - `ExecuteMonthlyDraw` picks N winners one after another without repeats. The next month is now `max(cycle_month_no) + 1`.
+  - New rule `draw_winners_per_month` in Draw Settings.
+  - New route `super-admin.draw-management.month-prize` + `SetDrawMonthPrizeRequest`; a month already drawn is refused.
+  - Reconcile is relabelled "Mark as Verified" and has a help line.
+  - The member Draw page shows Still in the Draw | Winners (with name and prize).
+  - New tests: 3-winner month, month-prize save/refuse, settings save with winners.
+  - Docs: `DOMAIN_LOGIC.md` §8.3, `INSTRUCTIONS.md` M13, `DATABASE_SCHEMA.md`.
+- [x] **T-189 — Monthly Draw never waits for a prize: Silver/Gold default prizes in Draw Settings, plus a once-per-calendar-month guard (user decision, chat)** · Completed: 30-09-2026 · Verified: full suite 424/425. The one failure is the known `NotificationsTest` same-timestamp ordering flake, which is unrelated. Larastan 0, Pint, `.\gw types` and `.\gw build` are clean. No manual browser check. Cause: `jobs:draw` drew nothing on the dev DB because no group had a `draw_group_month_configs` row, and there was no UI to create one (the §21 T-010 "skip the group" decision). User decision: months 1–15 = Silver Jewellery ₹20,000 and 16–20 = Gold Jewellery ₹25,000, Super-Admin-editable, rarely changed.
+  - New `App\Services\DrawPrizeResolver`: a group-month's own prize, else the default; the prize is snapshotted when drawn. `ExecuteMonthlyDraw` uses it.
+  - `ExecuteMonthlyDraw` also skips a group already drawn this calendar month. The prize gate had been the only thing stopping a repeat run, so this guard replaces it. `RunMonthlyDrawExecution(advanceOneMonth: true)` is used only by `jobs:draw`, which keeps its T-177 one-month-per-run behaviour.
+  - Draw Settings gained a Monthly Prizes form (validated, published as a rule version). `RuleVersionSeeder` and the `RuleVersionDiff` labels have the 4 new keys.
+  - Draw Management shows each group's next-draw prize and each result's prize. The member Winner History has a Prize column. The `jobs:draw` output prints the prize.
+  - Tests: the old "skipped when no prize" test was replaced by default-prize and snapshot tests, a Gold-from-month-16 test, a scheduled-job once-per-month test, and a Draw Settings prize save. The idempotency test now travels a month. The upline tests pick their own group's draw.
+  - Not built: a per-group prize override form.
+  - Docs: `DOMAIN_LOGIC.md` §8.3 (the §21 row is marked superseded), `INSTRUCTIONS.md` M13, `TEST.md`.
+- [x] **T-188 — Draw Management shows each group's Customer ID range and where every eligible member stands (user-requested, chat)** · Completed: 30-09-2026 · Verified: 82/82 tests passed across the SuperAdminPortal, MemberPortal and Draw suites. The S06 test now also asserts the range SPDRAW001–SPDRAW005, 1 winner, 4 still in the draw, 1 draw held and pool.grouped 5. Larastan 0, Pint, `.\gw types` and `.\gw build` are clean. No manual browser check. On the dev DB: Group #1 is GWL01–GWL200 and Group #2 is GWL201–GWL400. Each has 200 still in the draw (no draw held yet). 168 eligible members are waiting (32 more are needed for Group #3), and 0 are not yet eligible. The counting was already correct: "Eligible remaining" meant members of that group who haven't won, not the company total. The fix is presentation only, plus a `Carbon` PHPDoc on `DrawGroup::$cycle_started_month`. `GenerateDrawGroups::eligibleUngroupedMemberIds()` is now public so the page reuses the real eligibility rule. Details: `Docs/INSTRUCTIONS.md` "Monthly Draw (M13)".
+- [x] **T-187 — Member Dashboard cards explain themselves; Total Income reconciles with the Wallet (user-requested, chat)** · Completed: 30-09-2026 · Verified: `MemberPortalTest` dashboard tests 2/2, including a new test (Level ₹9,000 + Pair ₹5,500 = income total ₹14,500; wallet ₹13,000 after a ₹1,500 registration debit). `tsc` and Pint are clean. Built with `.\gw build` (npm/pnpm are blocked on this machine). No manual browser check. Cause: GWL01 saw Wallet ₹14,500 against an Income Summary of ₹9,000, because the old card counted only Level + Purchase/Repurchase and left out Pair/Reward ₹5,500. The new layout is recorded in `Docs/INSTRUCTIONS.md` "Member Dashboard (M01)". Also in this session: `/member/login` Tab order now goes Customer ID → Password (see "Login pages").
+- [x] **T-186 — Level Income short of a level's qualified directs is held, not lapsed, and released when the directs are met (no time limit)** · Completed: 30-09-2026 · Verified:
+  - Full suite **421/422**. The 1 failure is `NotificationsTest` "profile change requests … each alert the Super Admin". It sorts 3 notifications made in the same second by `created_at`, so the order is flaky. It passed on 2 isolated re-runs, and this task changed nothing in notifications. It is left as is.
+  - `LevelIncomeTest` + `EarningsVerifierTest` 28/28, reproducing `Docs/TEST.md` scenario 36 as rewritten: held ₹400, released once into the wallet, per-level counts, an inactive beneficiary stays held, release through the real cash-approval flow, release on rule publish. The verifier test covers held clean, released clean and a stuck-held warning.
+  - Pint, Larastan 0, `tsc`, `vp check` (2 TSX files) and `vp build` are clean.
+  - Dev DB: the migration was applied and `level-income:release-held` released GWL01's ₹1,000 (GWL02's L1). `earnings:verify` shows all PASS, 0 warnings.
+  - No manual browser check.
+
+  Reason: during earnings testing the user saw GWL01's L1 from GWL02 lapse, then GWL01 got a 2nd direct, and asked that it not lapse. The user chose: hold and release, no time limit, and convert the existing lapsed rows.
+
+  Changes:
+  - `CalculateLevelIncome` writes a `held` row with the real amount.
+  - New `ReleaseHeldLevelIncome` action. It is triggered by the new listener `ReleaseHeldLevelIncomeOnPaymentConfirmed` (payer's sponsor), by `PublishRuleVersion` after a publish, and by the new command `level-income:release-held`.
+  - Migration `hold_level_income_until_directs`: `held` status, `released_at`, and conversion of the old rows.
+  - `EarningsVerifier` handles held and released rows.
+  - Member Level Income page gets an On hold card (INSTRUCTIONS.md M10). Compensation Audit gets a `held` filter.
+  - Docs: `DOMAIN_LOGIC.md` §6, `TEST.md` scenario 36 + Commands, `DATABASE_SCHEMA.md`.
+- [x] **T-185c — Repurchase on EMI, part 3: handover of the fully paid piece, or of the silver after a break; no income, restock owed** · Completed: 30-09-2026 · Verified: full suite **420/420**; Larastan 0; Pint, `vp check` (4 TSX files), `tsc` and the build are clean. On the dev DB, `earnings:verify` shows 0 errors.
+  - User answers (30-09-2026): the member pays GST + hallmark when the piece is handed over; on break-silver the member pays that day's making + GST; the piece must weigh **≥ the grams owed**, and the member pays the extra grams.
+  - New `StoreEmiDeliveryTest` 3/3 reproduces `Docs/TEST.md` scenario 42:
+    - the piece: locked ₹35,000 + GST ₹1,050 = ₹36,050, with ₹35,000 prepaid and ₹1,050 collected; stock unchanged; restock 100 g / ₹35,000; no income; the bill shows prepaid and due; the booking is closed;
+    - silver: a 15 g piece is refused; a 20 g piece is ₹9,064 (₹8,000 + ₹800 making + ₹264 GST) with ₹7,000 prepaid (17.5 g × ₹400) and ₹2,064 collected; stock −1; restock 17.5 g / ₹7,000;
+    - wrong status and another store are refused.
+  - Migration `add_store_emi_delivery_to_store_sales` (`store_emi_booking_id`, `prepaid_amount`) has been applied to the dev DB.
+  - Changes:
+    - `DeliverStoreEmiBooking::piece()/silver()`;
+    - `ConfirmStoreSale` takes the booking and the prepaid amount;
+    - `StoreSale::isStoreEmiDelivery()`; Purchase/Repurchase and Store Profit return early for such a sale;
+    - `EarningsVerifier` errors on any income row for one;
+    - the invoice shows "Less: paid through Repurchase EMIs" / "Paid at delivery";
+    - A08 has "Hand over piece" / "Hand over X g silver" dialogs.
+  - Docs: `DOMAIN_LOGIC.md` §16.13 point 4, `TEST.md` scenario 42, `DATABASE_SCHEMA.md`, `INSTRUCTIONS.md` A08.
+- [x] **T-185b — Repurchase on EMI, part 2: automatic break at 3 overdue EMIs → silver owed** · Completed: 30-09-2026 · Verified: included in the 420/420 run.
+  - New `StoreEmiBreakTest` 4/4 reproduces `Docs/TEST.md` scenario 41:
+    - 2 overdue EMIs do not break it; the 3rd does: EMIs #3–10 are `cancelled`, stock goes back 1 → 2, principal ₹7,000, silver ₹400/g (the last paid EMI's date), **17.500 g** owed; Level Income is unchanged; the member is notified; a cancelled EMI cannot be paid;
+    - held earnings are released on break (₹1,000);
+    - with nothing paid it breaks with nothing owed, and the member can book again;
+    - the threshold follows the Super Admin setting.
+  - Changes:
+    - `BreakStoreEmiBooking` and `BreakOverdueStoreEmiBookings` (run by `ProcessEmiDueStatuses` after it marks EMIs overdue);
+    - rule key `store_emi_break_overdue_count` (seeder 3; Rule Versions store section; validation 1–24; diff label);
+    - `StoreEmiBooking::scopeOpen()` (a broken booking with nothing owed is closed);
+    - notification `store_emi_booking_broken` to the member and the Store Admin;
+    - the member EMI page shows the closed box with the grams owed.
+  - Docs: `DOMAIN_LOGIC.md` §16.13 points 1 and 3, `TEST.md` scenario 41.
+- [x] **T-185a — Repurchase on EMI, part 1: Store Admin request → Super Admin approval (Current Rate lock, 10/20 EMIs, piece held) → member pays from the EMI page; Level Income only** · Completed: 30-09-2026 · Verified: full suite **413/413**; Larastan 0; Pint, `tsc`, `vp check` on the 5 changed TSX files and the build are clean. On the dev DB, `earnings:verify` shows 0 errors.
+  - New `StoreEmiBookingTest` 7/7 reproduces `Docs/TEST.md` scenario 40:
+    - approval locks ₹35,000 over 10 EMIs of ₹3,850 → ₹3,535 (total ₹36,925); the piece's stock goes 2 → 1; EMI #1 is due today; the plan relation never sees the schedule;
+    - EMI #1 gives Level Income S1 ₹192.50 and S2 ₹77, with no Purchase/Repurchase, Store Profit or Pair rows;
+    - Pay All is ₹31,500 and completes the booking; 20 EMIs run ₹2,100 → ₹1,767.50;
+    - refusals: a second open request, a count of 15, another store's piece, an unknown member, out of stock;
+    - a Store Admin gets 403 on approval; the company Admin can approve; a cancel needs a message and holds nothing;
+    - an overdue store EMI holds earnings;
+    - the three pages render.
+  - Migration `create_store_emi_bookings_table` has been applied to the dev DB. It carries the full T-185 schema, including the break/delivery columns, `emi_schedules.kind`, a nullable `membership_plan_id`, and the `cancelled` installment status (raw SQL on PostgreSQL).
+  - Changes:
+    - `CalculateEmiRateBooking::currentRateFor()` (the plan path now delegates to it, unchanged);
+    - `QuoteStoreEmiBooking`, `RequestStoreEmiBooking`, `DecideStoreEmiBooking`;
+    - `StoreEmiBooking` model; `EmiSchedule::kind`/`storeEmiBooking()`; `Member::emiSchedule()` scoped to `membership`, and `storeEmiBookings()`;
+    - `InitiateEmiInstallmentPayment`, `QuoteFullEmiPayment` and `InitiateFullEmiPayment` accept any schedule of the member;
+    - `ConfirmEmiInstallmentPayment` completes a fully paid store booking;
+    - `CalculateLevelIncome` and `EarningsVerifier` use the piece's metal for a store EMI;
+    - `Payment::storeEmiBooking()`/`emiLabel()`;
+    - notifications `store_emi_booking_requested` / `_decided` on every channel;
+    - pages A08 `admin/store-emi`, S16 `super-admin/store-emi-bookings`, and a Repurchase on EMI section on M06, with a shared `InstallmentTable`; sidebar links.
+  - Docs: `DOMAIN_LOGIC.md` §16.13, `TEST.md` scenarios 40–41, `DATABASE_SCHEMA.md`, `INSTRUCTIONS.md` A08/S16/M06/request inventory, `ARCHITECTURE.md`.
+  - No manual browser check.
+  - **Next:** T-185b (automatic break at 3 overdue EMIs → silver owed), then T-185c (delivery). T-185c needs 2 user answers first (`DOMAIN_LOGIC.md` §16.13 point 4).
+- [x] **T-183 — Store upline income (Purchase/Repurchase L1–12, Store Profit Sponsor L1–3) unlocks at 10 qualified directs, for life; before that it lapses** · Completed: 30-09-2026 · Verified: full suite 405/406. The one failure is the known `NotificationsTest` same-timestamp flake, which is unrelated. Larastan 0, Pint and the build are clean. On the dev DB, `earnings:verify` shows 0 errors / 0 warnings.
+  - New `StoreIncomeUnlockTest` 5/5 reproduces `Docs/TEST.md` scenario 39:
+    - U1 (9 directs) gets a skipped `store_income_locked` row; U2 (10) is paid ₹100 and unlocked; self stays ₹500;
+    - a 10th direct's approved registration unlocks U1 at once, and after losing a direct U1 is still paid ₹200;
+    - Store Profit: owner ₹200, no row for the locked S1, S2 ₹25;
+    - a version without the key pays everyone and records nothing;
+    - the verifier catches paid-while-locked and skipped-while-unlocked.
+  - `StoreModuleTest` and `EarningsVerifierTest` switch the setting to 0 because they are not about it.
+  - Changes:
+    - migration `add_store_income_unlocked_at_to_members` (applied to the dev DB, additive);
+    - `StoreIncomeUnlock` service (lazy check + records the unlock once);
+    - `UnlockStoreIncomeOnPaymentConfirmed` listener (the payer's sponsor is checked on every confirmed payment);
+    - guards in `CalculatePurchaseRepurchaseIncome` and `CalculateStoreProfitDistribution`;
+    - rule key `store_income_min_directs` (seeder 10; Rule Versions → Silver tab, store section; request validation; diff label);
+    - `EarningsVerifier` checks unlock against the row or sale time.
+  - The dev DB's active rule version has no key yet, so the condition is **off** until Super Admin enters 10 and publishes.
+  - Docs: `DOMAIN_LOGIC.md` §15 and §16.4, `TEST.md` scenario 39, `DATABASE_SCHEMA.md`.
+  - No manual browser check.
+- [x] **T-182 — An overdue EMI holds the member's earnings until the record is clear** · Completed: 30-09-2026 · Verified: full suite 400/401. The one failure is the known same-timestamp ordering flake in `NotificationsTest`, which is unrelated. Larastan 0, Pint, `tsc` and the build are clean. New `OverdueEmiHoldTest` 7/7 reproduces `Docs/TEST.md` scenario 38:
+    - with EMI 5 overdue, M's ₹1,000 Level 1 is a held (`pending`) credit and the balance is ₹0; paying EMI 5 releases it (₹1,000);
+    - with EMIs 5 and 6 overdue, paying 5 still holds and paying 6 releases; "Pay All Remaining EMIs" also releases;
+    - Pair/Reward pays nothing while overdue, the entries stay unused, and it pays ₹500 at the next month-end after payment;
+    - a Booster month stays pending and is paid on the first run after the EMI is paid;
+    - a one-time plan member and a member whose EMI is only `due` are credited at once;
+    - the verifier accepts a held credit while the member is overdue and warns when one is left with no overdue EMI.
+  - Changes:
+    - `Member::hasOverdueEmi()` / `heldEarnings()`;
+    - `WalletLedgerService::creditEarning()` writes a pending credit while overdue and `releaseHeldEarnings()` confirms them all once clear. It is used by Level Income, Purchase/Repurchase and Store Profit;
+    - `ConfirmEmiInstallmentPayment` releases after every confirmed EMI payment;
+    - `EvaluatePairMilestones` and `ProcessBoosterPayouts` skip a member with an overdue EMI;
+    - `EarningsVerifier` treats a pending credit as held;
+    - the ledger label is "held (EMI overdue)";
+    - the Wallet and EMI Schedule pages show an amber notice with the held amount.
+  - No schema change: `wallet_ledger_entries.status` already had `pending`. The dev DB has 0 overdue EMIs, so nothing is held.
+  - Docs: `DOMAIN_LOGIC.md` §12, `TEST.md` scenario 38.
+  - No manual browser check.
+- [x] **T-184 — "Pay All Remaining EMIs": an EMI member pays every unpaid EMI in one payment (Current Rate without maintenance)** · Completed: 30-09-2026 · Verified: full suite 394/394; Larastan 0; Pint clean; `tsc` and the build are clean. New `FullEmiPaymentTest` 8/8 reproduces `Docs/TEST.md` scenario 37:
+    - Future Rate: 16 unpaid EMIs make one ₹16,000 payment (`covers_installments = 16`, EMIs 5–20 linked), Level Income S1 ₹800 / S2 ₹320 / S3 ₹160, Pair entries created by that payment only, and a second approval is a no-op;
+    - Current Rate Plan D: after 2 single EMIs the amount is ₹30,000, not ₹31,050, the rows become ₹5,000 each and Gold L1 is ₹600;
+    - rounding: Plan A comes to ₹29,062.50 = 15 × ₹1,937.50;
+    - guards: a pending single payment blocks the full payment and vice versa; a rejected full payment changes nothing and paying again works; a pending booking request is cancelled; a paid-up schedule or a one-time plan has no offer; the page offer and the blocked reason; POST pay-all by cash.
+  - Migration `add_covers_installments_to_payments` has been applied to the dev DB (additive, no data change).
+  - Changes:
+    - new `QuoteFullEmiPayment` (amount; Current Rate principal comes from the latest `booked` event) and `InitiateFullEmiPayment`;
+    - `ConfirmEmiInstallmentPayment` settles every linked installment and rewrites Current Rate rows to their principal;
+    - `InitiateEmiInstallmentPayment` refuses while a full payment is pending;
+    - `Payment::emiLabel()` is used by the cash notifications;
+    - `EmiController@payAll` with route `member.emi.pay-all`, and the EMI page's "Pay All Remaining EMIs" card with a confirm dialog;
+    - Payment History and Super Admin Cash Payments show "Full payment — N EMIs";
+    - an `EmiRateBookingEvent` `details` property type.
+  - Docs: `DOMAIN_LOGIC.md` §5 points 8–9, `TEST.md` scenario 37, `DATABASE_SCHEMA.md`, `INSTRUCTIONS.md` M06.
+  - No manual browser check.
+- [x] **T-181 — EMI payments distribute income but are never a new entry (user point "EMI-2", 30-09-2026): confirmed already implemented, with a new end-to-end test** · Completed: 30-09-2026 · Verified: new `EmiPaymentNoNewEntryTest` 1/1 and Pint clean. It runs the real flow (`RegisterMember` + `ApproveCashPayment` + `InitiateEmiInstallmentPayment`) for a Plan A member paying installments 1–8. Each of the 8 payments has its own 12 Level Income rows (L1 paid). Pair entries stay at 0 until the 6th EMI, become exactly 1, and never grow after that. An EMI installment creates no Booster qualification. No code change was needed. `DOMAIN_LOGIC.md` §5 step 2 carries the re-confirmation.
+- [x] **T-180 — Income Booster Level 1 runs 12 months (was 6); Levels 2–3 stay 6** · Completed: 29-09-2026 · Verified: full suite 385/385; Pint clean. The user had set Booster Level 1 `duration_months` to 12 in `RuleVersionSeeder` and in the dev DB's active rule version, and confirmed that 12 is correct. No code change was needed, because the duration is read from the rule. `BoosterTest` now expects 12 schedules (month_no 1–12) and 16 pending schedules after month 1 (11 + 5). The `EarningsVerifierTest` booster fixture inserts 12 months. Docs: `DOMAIN_LOGIC.md` §9 (table L1 = 12 months / ₹60,000, §9.1 step 4, qualification rule), `TEST.md` scenario 3, `EARNINGS_TESTING_GUIDE.md`. The dev DB has no booster qualifications yet, so nothing needed a recalculation.
+- [x] **T-179 — Level Income needs qualified directs per level (default 2 × level no.: L1 = 2 … L12 = 24); if short, that level's income lapses** · Completed: 29-09-2026 · Verified: full suite 382/385 at the time. The 3 Booster failures came from the Booster Level 1 duration change and were fixed in T-180. New `LevelIncomeTest` cases reproduce `Docs/TEST.md` scenario 36: L1 paid ₹1,000, L2 `insufficient_directs` ₹0, L3 ₹200; after a 4th direct, a later payment pays L2 ₹400 while the old row stays ₹0; a 5-of-6 EMI direct and a cancelled direct do not count; a version without the key pays as before. Two new `EarningsVerifierTest` cases cover the new warnings. Pint, Larastan 0, `tsc` and the build are clean. Before starting, it was checked that no directs condition for Level Income existed anywhere (code, Rule Versions or docs). Changes:
+    - `CalculateLevelIncome`: after the inactive/excluded checks, a beneficiary with fewer `PairQualifiedDirects` than `level_income_min_directs[level]` gets a skipped `insufficient_directs` row;
+    - new rule key `level_income_min_directs` (seeder defaults 2 … 24, one set for both metals); Rule Versions → Silver tab has a "Level Income — Directs Needed (L1 – L12)" section (a version without the key shows 0s); request validation; diff label;
+    - `EarningsVerifier`: accepts an `insufficient_directs` row while the count is still short, and warns when the count differs now (skipped with enough directs today, or paid with too few);
+    - Purchase/Repurchase, Store Profit, Pair and Booster are untouched;
+    - docs: `DOMAIN_LOGIC.md` §6, `TEST.md` scenario 36, `INSTRUCTIONS.md` S03.
+    - Dev DB: active rule version 3 has no `level_income_min_directs` yet, so the condition is **off** until Super Admin enters the values on Rule Versions and publishes.
+- [x] **T-178 — Pair/Reward Min Directs is a milestone total of qualified directs (default 2 × milestone no.: 2, 4 … 30), not a flat 2 for every milestone** · Completed: 29-09-2026 · Verified: full suite 379/380, where the one failure is the known same-timestamp ordering flake in `NotificationsTest` (unrelated; it passes and fails alternately on reruns of that file alone). New `PairRewardTest` cases reproduce `Docs/TEST.md` scenario 35: 3 directs + 55L/55R pays M1 only, and the 4th direct unlocks M2 (₹5,500 in total); a Plan A direct counts only at 6 paid EMIs; a cancelled direct never counts. Scenario 2 and the multi-milestone test now add 4 directs. `EarningsVerifierTest` covers the new warning. Pint, Larastan 0, `tsc` and the build are clean. On the dev DB, `earnings:verify` gives 0 errors / 0 warnings, and active rule version 3 already carried 2, 4 … 30. Changes:
+    - new `App\Services\PairQualifiedDirects` counts directs that are `active` and Pair-eligible (one-time plan with registration paid; EMI plan with paid installments ≥ `pair_qualification_emis`). It is used by `EvaluatePairMilestones` (the gate is `qualified >= min_directs`) and by the member Pair/Reward page;
+    - `EarningsVerifier` warns when a paid milestone's member now has fewer qualified directs than that milestone's total;
+    - `RuleVersionSeeder` defaults are 2, 4 … 30. The Rule Versions pair column is renamed "Total Directs"; on the member page the column is "Directs Needed" and the next-milestone box shows "Needs N qualified directs — you have X";
+    - Booster's own Min Directs and all other earnings are untouched;
+    - docs: `DOMAIN_LOGIC.md` §7.1/§7.3 (+ §21 decision-log note), `TEST.md` scenario 35, `INSTRUCTIONS.md` M11.
+    - **Open for the user:** GWL04's M2 (₹5,000) was paid earlier today under rule version 2 (flat 2 directs), when GWL04 had 2 directs. Under the new rule it would not yet be earned. It was left as is, pending the user's decision.
+- [x] **T-177 — Testing commands `jobs:month-end` (Pair/Reward month-end evaluation + Draw Group generation) and `jobs:draw` (Monthly Draw) run the scheduled period jobs on demand** · Completed: 29-09-2026 · Verified: new `ManualJobCommandsTest` 2/2 (9/9 together with the scheduled-jobs tests): a reached milestone is paid once and a draw group is formed; a re-run pays or groups nothing again; `jobs:draw` skips a group whose next month has no prize and draws one month per run. Pint and Larastan 0 are clean. Both commands dispatch the same Job classes as `App\Console\Scheduling`, so no earning logic changed; they ask for confirmation in production (`--force` skips it). Reason: the user expected GWL01's Pair/Reward (17L/10R) straight away, but Pair/Reward is month-end only (§7.3) and no `schedule:work` was running on the dev machine. The month-end Pair evaluation was run once on the dev DB (GWL01 milestone 1, ₹500). Usage is in `Docs/TEST.md` → Commands.
 - [x] **T-176 — Seeded rule defaults = Super Admin's rule version 5; the 10 test joinings' Level Income recalculated** · Completed: 29-09-2026 · Verified: a seeder-vs-version-5 comparison (27 keys, 0 differences, inside a rolled-back transaction); `earnings:verify` 0 errors after the reset; full suite 375/376, where the one failure was the known same-timestamp flake in `NotificationsTest`, which passed on rerun. Changes:
     - `RuleVersionSeeder`: Level Income Level 3 → 1% for both metals; Purchase/Repurchase Silver → self 5 / L1 2 / L2–6 1 / L7–12 0.5; Gold L2 → 1;
     - `LevelIncomeTest` and `StoreModuleTest` expectations, `DOMAIN_LOGIC.md` §6/§15 and `TEST.md` scenarios 1, 4 and 5 were updated to the new numbers;

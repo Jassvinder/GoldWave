@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
+ * @property string $prize_value decimal:2 cast — e.g. "20000.00"
  * @property-read DrawGroup $drawGroup
  */
 class DrawGroupMonthConfig extends Model
@@ -16,6 +17,7 @@ class DrawGroupMonthConfig extends Model
         'prize_name',
         'prize_value',
         'metal_type',
+        'winners_count',
     ];
 
     protected function casts(): array

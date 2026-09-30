@@ -64,6 +64,8 @@ function advanceToInstallment2Due(): void
 beforeEach(function () {
     Carbon::setTestNow(Carbon::create(2026, 2, 17));
     $this->seed();
+    // T-196 — Online (Razorpay) is off by default; the online-flow tests here keep that path covered.
+    config(['services.payments.online_enabled' => true]);
     createActiveSponsor('GWL900');
 });
 

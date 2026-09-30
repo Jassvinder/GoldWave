@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Admin\StoreDashboardController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Models\BoosterQualification;
+use App\Models\DrawExecution;
 use App\Models\DrawGroupMember;
 use App\Models\Member;
 use App\Models\Store;
+use App\Services\MemberNetworkSummary;
 use App\Services\PairPoolBreakdown;
 use App\Support\Dates;
 use App\Support\Portal;
@@ -32,6 +34,7 @@ class DashboardController extends Controller
         StoreDashboardController $storeDashboard,
         SuperAdminDashboardController $superAdminDashboard,
         PairPoolBreakdown $pairPool,
+        MemberNetworkSummary $network,
     ): Response {
         $user = $request->user();
         $member = $user?->member;
@@ -41,7 +44,7 @@ class DashboardController extends Controller
         $inStorePortal = $user?->isStoreAdmin() === true && Portal::current($request) !== Portal::MEMBER;
 
         if ($member && ! $inStorePortal) {
-            return $this->memberDashboard($member, $pairPool);
+            return $this->memberDashboard($member, $pairPool, $network);
         }
 
         // Super Admin and the company Admin (29-09-2026) share the company dashboard.
@@ -60,7 +63,7 @@ class DashboardController extends Controller
         return Inertia::render('dashboard');
     }
 
-    private function memberDashboard(Member $member, PairPoolBreakdown $pairPool): Response
+    private function memberDashboard(Member $member, PairPoolBreakdown $pairPool, MemberNetworkSummary $network): Response
     {
         $member->load(['membershipPlan', 'emiSchedule.installments']);
 
@@ -68,17 +71,46 @@ class DashboardController extends Controller
         $totalInstallments = $schedule?->installments->count() ?? 0;
         $paidInstallments = $schedule?->installments->where('status', 'paid')->count() ?? 0;
 
-        $incomeTotals = $member->incomeLedgerCalculations()
-            ->where('eligibility_status', 'paid')
-            ->selectRaw('type, sum(amount) as total')
-            ->groupBy('type')
-            ->pluck('total', 'type');
+        // Income is read from the wallet ledger itself, so the Income card's total always reconciles with the Wallet card.
+        $credited = $member->walletLedgerEntries()
+            ->where('entry_type', 'credit')
+            ->where('status', 'confirmed')
+            ->selectRaw('category, sum(amount) as total')
+            ->groupBy('category')
+            ->pluck('total', 'category');
+
+        $debited = $member->walletLedgerEntries()
+            ->where('entry_type', 'debit')
+            ->where('status', 'confirmed')
+            ->selectRaw('category, sum(amount) as total')
+            ->groupBy('category')
+            ->pluck('total', 'category');
+
+        $heldLevelIncome = $member->incomeLedgerCalculations()
+            ->where('type', 'level_income')
+            ->where('eligibility_status', 'held')
+            ->sum('amount');
+
+        $money = fn (float|int|string|null $value): string => number_format((float) $value, 2, '.', '');
 
         $pairPoolBreakdown = $pairPool->forMember($member);
 
         $activeBoosterCount = BoosterQualification::where('member_id', $member->id)
             ->whereHas('payoutSchedules', fn ($q) => $q->where('status', 'pending'))
             ->count();
+
+        // 01-10-2026 (user-requested) — per qualified level: how much Booster income has been paid so far.
+        $boosterLevels = BoosterQualification::where('member_id', $member->id)
+            ->with('payoutSchedules')
+            ->orderBy('level_no')
+            ->get()
+            ->map(fn (BoosterQualification $qualification): array => [
+                'level_no' => $qualification->level_no,
+                'received' => number_format((float) $qualification->payoutSchedules->where('status', 'paid')->sum('amount'), 2, '.', ''),
+                'months_paid' => $qualification->payoutSchedules->where('status', 'paid')->count(),
+                'months_total' => $qualification->payoutSchedules->count(),
+            ])
+            ->all();
 
         $activeDrawGroup = DrawGroupMember::where('member_id', $member->id)
             ->where('is_winner_removed', false)
@@ -110,20 +142,57 @@ class DashboardController extends Controller
                 'paid_installments' => $paidInstallments,
                 'total_installments' => $totalInstallments,
             ] : null,
-            'wallet_balance' => (string) $member->wallet_balance,
+            'wallet' => [
+                'balance' => $money($member->wallet_balance),
+                'on_hold' => $money($member->wallet_hold_amount),
+                'withdrawn' => $money($debited['payout'] ?? 0),
+                'used_for_registrations' => $money($debited['assisted_registration'] ?? 0),
+            ],
             'direct_count' => $member->directs()->count(),
+            'team' => $network->teamCounts($member),
+            // Every income type credited to the wallet, plus income earned but not yet credited.
             'income' => [
-                'level_income' => (string) ($incomeTotals['level_income'] ?? 0),
-                'purchase_repurchase' => (string) ($incomeTotals['purchase_repurchase'] ?? 0),
+                'total' => $money($credited->only(['level_income', 'pair_reward', 'booster', 'purchase_repurchase_income', 'store_distribution'])->sum()),
+                'level_income' => $money($credited['level_income'] ?? 0),
+                'pair_reward' => $money($credited['pair_reward'] ?? 0),
+                'booster' => $money($credited['booster'] ?? 0),
+                'purchase_repurchase' => $money($credited['purchase_repurchase_income'] ?? 0),
+                'store_profit' => $money($credited['store_distribution'] ?? 0),
+                'held_level_income' => $money($heldLevelIncome),
+                'held_emi_overdue' => $member->heldEarnings(),
             ],
             // Team vs. unused vs. used vs. not-yet-eligible, so the unused count alone never looks like missing entries.
             'pair' => [
                 'left' => $pairPoolBreakdown['left'],
                 'right' => $pairPoolBreakdown['right'],
+                'milestones_achieved' => $member->pairRewardTransactions()->count(),
             ],
             'booster_active_levels' => $activeBoosterCount,
+            'booster_levels' => $boosterLevels,
             'draw_active' => $activeDrawGroup,
+            // T-199 — draws this member won, and prizes received as a winner's Sponsor (upline benefit).
+            'draw' => $this->drawSummary($member),
             'alerts' => $alerts,
         ]);
+    }
+
+    /** @return array{won: int, upline_benefits: int, latest_upline: array{prize_name: string|null, prize_value: string|null, winner_customer_id: string|null}|null} */
+    private function drawSummary(Member $member): array
+    {
+        $latestUpline = DrawExecution::with(['winner', 'drawGroup.monthConfigs'])
+            ->where('upline_benefit_member_id', $member->id)
+            ->latest('executed_at')
+            ->first();
+        $prize = $latestUpline?->drawGroup->monthConfigs->firstWhere('cycle_month_no', $latestUpline->cycle_month_no);
+
+        return [
+            'won' => DrawExecution::where('winner_member_id', $member->id)->count(),
+            'upline_benefits' => DrawExecution::where('upline_benefit_member_id', $member->id)->count(),
+            'latest_upline' => $latestUpline === null ? null : [
+                'prize_name' => $prize?->prize_name,
+                'prize_value' => $prize?->prize_value,
+                'winner_customer_id' => $latestUpline->winner->customer_id,
+            ],
+        ];
     }
 }

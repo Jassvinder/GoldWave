@@ -1,4 +1,9 @@
 import { Head, usePage, useForm } from '@inertiajs/react';
+import {
+    PaymentModePicker,
+    type PaymentMode,
+    type PaymentOptions,
+} from '@/components/payment-mode-picker';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
@@ -28,6 +33,7 @@ type Plan = {
 type Props = {
     plans: Plan[];
     wallet_balance: number;
+    payment_options: PaymentOptions;
 };
 
 type SponsorState =
@@ -40,6 +46,7 @@ type SponsorState =
 export default function AdminAssistedRegistration({
     plans,
     wallet_balance,
+    payment_options,
 }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const [sponsor, setSponsor] = useState<SponsorState>({ status: 'idle' });
@@ -52,7 +59,9 @@ export default function AdminAssistedRegistration({
         email: '',
         mobile: '',
         membership_plan_id: '' as number | '',
-        payment_mode: 'online' as 'online' | 'cash' | 'wallet',
+        payment_mode: 'cash' as PaymentMode,
+        upi_reference: '',
+        upi_screenshot: null as File | null,
     });
 
     async function checkSponsorCode(code: string) {
@@ -321,54 +330,37 @@ export default function AdminAssistedRegistration({
 
                             <div className="grid gap-2">
                                 <Label>Payment Mode</Label>
-                                <div className="flex gap-2">
-                                    {(
-                                        [
-                                            {
-                                                value: 'online',
-                                                label: 'Online (new member pays)',
-                                            },
-                                            {
-                                                value: 'cash',
-                                                label: 'Cash (new member pays)',
-                                            },
-                                            {
-                                                value: 'wallet',
-                                                label: 'Store Wallet',
-                                            },
-                                        ] as const
-                                    ).map((option) => (
-                                        <button
-                                            key={option.value}
-                                            type="button"
-                                            onClick={() =>
-                                                form.setData(
-                                                    'payment_mode',
-                                                    option.value,
-                                                )
-                                            }
-                                            className={`flex-1 rounded-md border px-3 py-2 text-sm ${
-                                                form.data.payment_mode ===
-                                                option.value
-                                                    ? 'border-primary bg-primary text-primary-foreground'
-                                                    : 'border-input bg-transparent'
-                                            }`}
-                                        >
-                                            {option.label}
-                                        </button>
-                                    ))}
-                                </div>
-                                {form.data.payment_mode === 'wallet' && (
-                                    <p className="text-muted-foreground text-sm">
-                                        The registration amount will be deducted
-                                        from this store's Wallet balance (₹
-                                        {wallet_balance.toFixed(2)} available)
-                                        and the new member is activated
-                                        immediately.
-                                    </p>
-                                )}
-                                <InputError
-                                    message={form.errors.payment_mode}
+                                <PaymentModePicker
+                                    options={payment_options}
+                                    mode={form.data.payment_mode}
+                                    onModeChange={(mode) =>
+                                        form.setData('payment_mode', mode)
+                                    }
+                                    upiReference={form.data.upi_reference}
+                                    onUpiReferenceChange={(value) =>
+                                        form.setData('upi_reference', value)
+                                    }
+                                    onUpiScreenshotChange={(file) =>
+                                        form.setData('upi_screenshot', file)
+                                    }
+                                    errors={{
+                                        mode: form.errors.payment_mode,
+                                        upi_reference:
+                                            form.errors.upi_reference,
+                                        upi_screenshot:
+                                            form.errors.upi_screenshot,
+                                    }}
+                                    walletLabel="Store Wallet"
+                                    walletNote={
+                                        <p className="text-muted-foreground text-sm">
+                                            The registration amount will be
+                                            deducted from this store's Wallet
+                                            balance (₹
+                                            {wallet_balance.toFixed(2)}{' '}
+                                            available) and the new member is
+                                            activated immediately.
+                                        </p>
+                                    }
                                 />
                             </div>
 

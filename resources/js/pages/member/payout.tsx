@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { formatDate } from '@/lib/utils';
 import { cancel, store } from '@/routes/member/payout';
 
@@ -96,11 +97,20 @@ export default function Payout({
                             details before requesting a payout.
                         </p>
                     ) : !bank_detail.verified_at ? (
-                        <p className="text-muted-foreground text-sm">
-                            Your bank details ({bank_detail.bank_name} ···{' '}
-                            {bank_detail.account_number.slice(-4)}) are awaiting
-                            Super Admin verification.
-                        </p>
+                        <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                            <p className="font-medium">
+                                Payout requests open once your bank details are
+                                verified
+                            </p>
+                            <p className="mt-1">
+                                Your bank details ({bank_detail.bank_name} ···
+                                {bank_detail.account_number.slice(-4)}) are
+                                waiting for verification by the company. You'll
+                                get a notification when they're verified, and
+                                then you can request any amount from ₹
+                                {min_amount} up to your available balance here.
+                            </p>
+                        </div>
                     ) : Number(available_balance) < Number(min_amount) ? (
                         <p className="text-muted-foreground text-sm">
                             You need at least ₹{min_amount} available to request
@@ -108,29 +118,48 @@ export default function Payout({
                             {available_balance}.
                         </p>
                     ) : (
-                        <form
-                            onSubmit={submit}
-                            className="flex items-end gap-2"
-                        >
-                            <div className="grid gap-2">
+                        <form onSubmit={submit} className="flex flex-col gap-2">
+                            <Label htmlFor="payout-amount">
+                                Amount (₹{min_amount} to ₹{available_balance})
+                            </Label>
+                            <div className="flex flex-wrap items-start gap-2">
                                 <Input
+                                    id="payout-amount"
                                     type="number"
                                     step="0.01"
-                                    placeholder="Amount"
+                                    min={min_amount}
+                                    max={available_balance}
+                                    placeholder={`Enter any amount from ₹${min_amount}`}
+                                    className="max-w-xs"
                                     value={data.amount}
                                     onChange={(e) =>
                                         setData('amount', e.target.value)
                                     }
+                                    required
                                 />
-                                {errors.amount && (
-                                    <p className="text-destructive text-sm">
-                                        {errors.amount}
-                                    </p>
-                                )}
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() =>
+                                        setData('amount', available_balance)
+                                    }
+                                >
+                                    Full balance
+                                </Button>
+                                <Button type="submit" disabled={processing}>
+                                    Request Payout
+                                </Button>
                             </div>
-                            <Button type="submit" disabled={processing}>
-                                Request Payout
-                            </Button>
+                            {errors.amount && (
+                                <p className="text-destructive text-sm">
+                                    {errors.amount}
+                                </p>
+                            )}
+                            <p className="text-muted-foreground text-xs">
+                                The amount is held from your wallet until the
+                                company processes the payout. TDS and the
+                                processing fee are deducted when it is paid.
+                            </p>
                         </form>
                     )}
                 </FormSection>

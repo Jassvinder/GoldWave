@@ -5,8 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 /**
+ * @property Carbon $cycle_started_month
  * @property-read Collection<int, DrawGroupMember> $members
  * @property-read Collection<int, DrawGroupMonthConfig> $monthConfigs
  * @property-read Collection<int, DrawExecution> $executions

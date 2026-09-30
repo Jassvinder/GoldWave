@@ -49,6 +49,9 @@ class EarningsVerifier
     /** @var array<string, mixed> */
     private array $ruleCache = [];
 
+    /** @var array<int, int> qualified-direct count per member, per run (T-178/T-179) */
+    private array $qualifiedDirectCounts = [];
+
     /** @var array<string, array{label: string, checked: int, errors: int, warnings: int, findings: list<array{severity: string, message: string, ref: string}>}> */
     private array $report = [];
 
@@ -63,6 +66,7 @@ class EarningsVerifier
         $this->limit = $limit;
         $this->report = [];
         $this->ruleCache = [];
+        $this->qualifiedDirectCounts = [];
         $this->members = DB::table('members')->get()->keyBy('id');
         $this->plans = DB::table('membership_plans')->get()->keyBy('id');
 
@@ -118,8 +122,10 @@ class EarningsVerifier
             }
 
             $payer = $this->members->get($payment->member_id);
-            $metal = $this->metalOf($payer);
+            // T-185 — a store Repurchase on EMI uses its piece's metal.
+            $metal = $this->storeEmiMetal((int) $payment->id) ?? $this->metalOf($payer);
             $rates = (array) $this->rule($stored->first()->rule_version_id, $metal === 'gold' ? 'level_income_rates_gold' : 'level_income_rates');
+            $minDirects = (array) $this->rule($stored->first()->rule_version_id, 'level_income_min_directs');
             $chain = $this->sponsorChain($payment->member_id, self::MAX_LEVELS);
 
             if ($stored->count() !== self::MAX_LEVELS || $stored->pluck('level_no')->unique()->count() !== self::MAX_LEVELS) {
@@ -138,7 +144,7 @@ class EarningsVerifier
                 $beneficiary = $chain[$level - 1] ?? null;
                 $rate = (float) ($rates[(string) $level] ?? 0);
 
-                $this->compareIncomeRow('level', $row, $ref." level {$level}", $beneficiary, $rate, (float) $payment->amount, requireActive: true);
+                $this->compareIncomeRow('level', $row, $ref." level {$level}", $beneficiary, $rate, (float) $payment->amount, requireActive: true, requiredDirects: (int) ($minDirects[(string) $level] ?? 0));
             }
         }
     }
@@ -147,8 +153,17 @@ class EarningsVerifier
 
     private function checkPurchaseRepurchase(): void
     {
-        $sales = DB::table('store_sales')->where('status', 'confirmed')->whereNotNull('member_id')->orderBy('id')->get();
+        // T-185c — a Repurchase on EMI handover earns nothing; it is checked for that on its own below.
+        $sales = DB::table('store_sales')->where('status', 'confirmed')->whereNotNull('member_id')->whereNull('store_emi_booking_id')->orderBy('id')->get();
         $rows = DB::table('income_ledger_calculations')->where('type', 'purchase_repurchase')->get()->groupBy('source_store_sale_id');
+
+        foreach (DB::table('store_sales')->whereNotNull('store_emi_booking_id')->pluck('id') as $saleId) {
+            $this->tick('purchase');
+
+            if ($rows->has($saleId)) {
+                $this->error('purchase', 'A Repurchase on EMI handover must not generate Purchase/Repurchase income, but rows exist.', "store sale #{$saleId}");
+            }
+        }
 
         foreach ($sales as $sale) {
             $this->tick('purchase');
@@ -189,7 +204,26 @@ class EarningsVerifier
                     continue;
                 }
 
-                $this->compareIncomeRow('purchase', $row, $ref." level {$level}", $chain[$level - 1] ?? null, (float) ($rates[(string) $level] ?? 0), $base, requireActive: false);
+                $beneficiary = $chain[$level - 1] ?? null;
+
+                // T-183 — an upline level needs the beneficiary to have unlocked store income by the time of the row.
+                $storeDirects = (int) ($this->rule($row->rule_version_id, 'store_income_min_directs') ?? 0);
+
+                if ($row->skip_reason === 'store_income_locked') {
+                    if ($storeDirects === 0) {
+                        $this->error('purchase', "Skipped as 'store_income_locked', but this rule version has no store-income directs condition.", $ref." level {$level}");
+                    } elseif ($beneficiary !== null && $this->storeIncomeUnlockedBy($beneficiary, $row->created_at)) {
+                        $this->error('purchase', "Skipped as 'store_income_locked', but {$beneficiary->customer_id} had already unlocked store income.", $ref." level {$level}");
+                    }
+
+                    continue;
+                }
+
+                if ($storeDirects > 0 && $row->eligibility_status === 'paid' && $beneficiary !== null && ! $this->storeIncomeUnlockedBy($beneficiary, $row->created_at)) {
+                    $this->error('purchase', "Paid to {$beneficiary->customer_id} before they unlocked store income ({$storeDirects} qualified directs).", $ref." level {$level}");
+                }
+
+                $this->compareIncomeRow('purchase', $row, $ref." level {$level}", $beneficiary, (float) ($rates[(string) $level] ?? 0), $base, requireActive: false);
             }
         }
 
@@ -245,9 +279,11 @@ class EarningsVerifier
 
     /**
      * Shared comparison of one `income_ledger_calculations` row against what it should be. `requireActive`: Level Income
-     * skips an inactive upline (Purchase/Repurchase does not).
+     * skips an inactive upline (Purchase/Repurchase does not). `requiredDirects` (Level Income only, T-179): qualified
+     * directs the beneficiary needed. Directs can change after the payment, so a difference from today's count is only
+     * ever a warning.
      */
-    private function compareIncomeRow(string $check, stdClass $row, string $ref, ?stdClass $beneficiary, float $rate, float $base, bool $requireActive): void
+    private function compareIncomeRow(string $check, stdClass $row, string $ref, ?stdClass $beneficiary, float $rate, float $base, bool $requireActive, int $requiredDirects = 0): void
     {
         if ($beneficiary === null) {
             if ($row->eligibility_status !== 'skipped' || $row->skip_reason !== 'chain_too_short' || $row->beneficiary_member_id !== null || (float) $row->amount !== 0.0) {
@@ -281,9 +317,27 @@ class EarningsVerifier
                 return;
             }
 
+            // T-186 — too few directs is `held`, never skipped (the T-186 migration converted the old lapsed rows).
             $this->error($check, "Expected ₹{$expectedAmount} to {$beneficiary->customer_id} but the row is skipped ({$row->skip_reason}).", $ref);
 
             return;
+        }
+
+        // T-186 — held for too few directs: the amount is fixed at payment time and must be released as soon as the
+        // beneficiary meets the active rule version's count for the level.
+        $isHeld = $row->eligibility_status === 'held';
+
+        if ($isHeld) {
+            if ($row->skip_reason !== 'insufficient_directs' || $requiredDirects === 0) {
+                $this->error($check, "Held, but only a level short of its qualified directs is held and this rule version needs {$requiredDirects} at this level.", $ref);
+            } else {
+                $activeRequired = (int) (((array) $this->activeRule('level_income_min_directs'))[(string) $row->level_no] ?? 0);
+                $directsNow = $this->qualifiedDirectCount((int) $beneficiary->id);
+
+                if (! $inactiveNow && $directsNow >= $activeRequired) {
+                    $this->warn($check, "Held (needs {$activeRequired} qualified directs) but {$beneficiary->customer_id} has {$directsNow} now, so ₹{$row->amount} should have been released — run `php artisan level-income:release-held`.", $ref);
+                }
+            }
         }
 
         if ($isDummy) {
@@ -294,6 +348,11 @@ class EarningsVerifier
 
         if ($inactiveNow) {
             $this->warn($check, "Paid ₹{$row->amount} to {$beneficiary->customer_id}, who is not active now (status changed since).", $ref);
+        }
+
+        // A released row (T-186) was paid when the active version's count was met, so it is not compared here.
+        if (! $isHeld && $row->released_at === null && $requiredDirects > 0 && ($directsNow = $this->qualifiedDirectCount((int) $beneficiary->id)) < $requiredDirects) {
+            $this->warn($check, "Paid, but this level needs {$requiredDirects} qualified directs and {$beneficiary->customer_id} has {$directsNow} now (changed since, or paid under the wrong count).", $ref);
         }
 
         if ((int) $row->beneficiary_member_id !== (int) $beneficiary->id) {
@@ -313,8 +372,17 @@ class EarningsVerifier
 
     private function checkStoreProfit(): void
     {
-        $sales = DB::table('store_sales')->where('status', 'confirmed')->orderBy('id')->get();
+        $sales = DB::table('store_sales')->where('status', 'confirmed')->whereNull('store_emi_booking_id')->orderBy('id')->get();
         $rows = DB::table('store_profit_distributions')->get()->groupBy('store_sale_id');
+
+        // T-185c — "store ko kuchh nahi milega": a Repurchase on EMI handover has no Store Profit rows.
+        foreach (DB::table('store_sales')->whereNotNull('store_emi_booking_id')->pluck('id') as $saleId) {
+            $this->tick('store');
+
+            if ($rows->has($saleId)) {
+                $this->error('store', 'A Repurchase on EMI handover must not distribute store profit, but rows exist.', "store sale #{$saleId}");
+            }
+        }
         $stores = DB::table('stores')->get()->keyBy('id');
         $memberByUser = $this->members->filter(fn ($m) => $m->user_id !== null)->keyBy('user_id');
 
@@ -352,7 +420,26 @@ class EarningsVerifier
                     continue;
                 }
 
-                $expected['sponsor_level_'.$level] = $sponsor;
+                // T-183 — with a directs condition, a sponsor level is paid only once the sponsor has unlocked store income.
+                $type = 'sponsor_level_'.$level;
+                $storeDirects = (int) ($this->rule($stored->first()->rule_version_id, 'store_income_min_directs') ?? 0);
+                $row = $stored->firstWhere('beneficiary_type', $type);
+
+                if ($storeDirects > 0 && $row === null) {
+                    if ($this->storeIncomeUnlockedBy($sponsor, $sale->created_at)) {
+                        $this->error('store', "{$type} ({$sponsor->customer_id}) had unlocked store income before this sale but got nothing.", $ref);
+                    }
+
+                    $level++;
+
+                    continue;
+                }
+
+                if ($storeDirects > 0 && ! $this->storeIncomeUnlockedBy($sponsor, $row->created_at)) {
+                    $this->error('store', "{$type} ({$sponsor->customer_id}) was paid before unlocking store income ({$storeDirects} qualified directs).", $ref);
+                }
+
+                $expected[$type] = $sponsor;
                 $level++;
             }
 
@@ -514,6 +601,13 @@ class EarningsVerifier
                 $this->error('pair', 'The stored consumed counts differ from the milestone requirement.', $ref);
             }
 
+            // T-178 — a warning, not an error: this compares against today's directs, and a direct can become inactive later.
+            $qualifiedDirects = $this->qualifiedDirectCount((int) $tx->member_id);
+
+            if ($qualifiedDirects < (int) $milestone['min_directs']) {
+                $this->warn('pair', "Milestone needs {$milestone['min_directs']} qualified directs, but the member has {$qualifiedDirects} now.", $ref);
+            }
+
             $silver = (float) $this->rule($tx->rule_version_id, 'pair_value_per_entry');
             $gold = (float) $this->rule($tx->rule_version_id, 'pair_value_per_entry_gold');
             $reward = round($consumed->sum(fn ($e) => $e->metal === 'gold' ? $gold : $silver), 2);
@@ -532,6 +626,42 @@ class EarningsVerifier
         }
     }
 
+    /** T-185 — the piece's metal when this EMI payment belongs to a store Repurchase on EMI, else null. */
+    private function storeEmiMetal(int $paymentId): ?string
+    {
+        $metal = DB::table('emi_installments as i')
+            ->join('store_emi_bookings as b', 'b.emi_schedule_id', '=', 'i.emi_schedule_id')
+            ->where('i.payment_id', $paymentId)
+            ->value('b.metal');
+
+        return $metal === null ? null : (string) $metal;
+    }
+
+    /** T-183 — the member had unlocked store upline income at (or before) the given moment. */
+    private function storeIncomeUnlockedBy(stdClass $member, ?string $moment): bool
+    {
+        $unlockedAt = $member->store_income_unlocked_at ?? null;
+
+        return $unlockedAt !== null && $moment !== null && strtotime((string) $unlockedAt) <= strtotime($moment);
+    }
+
+    private function hasOverdueEmi(int $memberId): bool
+    {
+        return DB::table('emi_installments as i')
+            ->join('emi_schedules as s', 's.id', '=', 'i.emi_schedule_id')
+            ->where('s.member_id', $memberId)
+            ->where('i.status', 'overdue')
+            ->exists();
+    }
+
+    private function qualifiedDirectCount(int $memberId): int
+    {
+        return $this->qualifiedDirectCounts[$memberId] ??= $this->members
+            ->where('sponsor_id', $memberId)
+            ->filter(fn (stdClass $direct): bool => $this->isPairEligible($direct))
+            ->count();
+    }
+
     private function isPairEligible(stdClass $member): bool
     {
         $plan = $this->plans->get($member->membership_plan_id);
@@ -545,7 +675,7 @@ class EarningsVerifier
         }
 
         $required = (int) (((array) $this->activeRule('pair_qualification_emis'))[$plan->code] ?? PHP_INT_MAX);
-        $schedule = DB::table('emi_schedules')->where('member_id', $member->id)->value('id');
+        $schedule = DB::table('emi_schedules')->where('member_id', $member->id)->where('kind', 'membership')->value('id');
 
         return $schedule !== null && DB::table('emi_installments')->where('emi_schedule_id', $schedule)->where('status', 'paid')->count() >= $required;
     }
@@ -639,8 +769,11 @@ class EarningsVerifier
 
                 $entry = $found->first();
 
-                if ($entry->entry_type !== 'credit' || $entry->status !== 'confirmed' || $entry->category !== $category($row)) {
-                    $this->error('ledger', "The wallet entry should be a confirmed '{$category($row)}' credit but is {$entry->status} {$entry->entry_type} '{$entry->category}'.", $ref);
+                // T-182 — a `pending` credit is an earning held while the member has an overdue EMI.
+                if ($entry->entry_type !== 'credit' || ! in_array($entry->status, ['confirmed', 'pending'], true) || $entry->category !== $category($row)) {
+                    $this->error('ledger', "The wallet entry should be a confirmed (or held) '{$category($row)}' credit but is {$entry->status} {$entry->entry_type} '{$entry->category}'.", $ref);
+                } elseif ($entry->status === 'pending' && ! $this->hasOverdueEmi((int) $entry->member_id)) {
+                    $this->warn('ledger', "₹{$entry->amount} is still held, but member #{$entry->member_id} has no overdue EMI now, so it should have been released.", $ref);
                 }
 
                 if (! $this->same((float) $entry->amount, (float) $row->{$amountColumn}) || (int) $entry->member_id !== (int) $row->{$memberColumn}) {
