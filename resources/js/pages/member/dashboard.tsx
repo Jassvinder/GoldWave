@@ -71,6 +71,13 @@ type Props = {
     }[];
     draw_active: boolean;
     draw: {
+        wins: {
+            group_no: number;
+            cycle_month_no: number;
+            executed_at: string | null;
+            prize_name: string | null;
+            prize_value: string | null;
+        }[];
         won: number;
         upline_benefits: number;
         latest_upline: {
@@ -394,6 +401,13 @@ export default function Dashboard({
                                     value: draw.won,
                                     muted: draw.won === 0,
                                 },
+                                // 01-10-2026 — each win with the jewellery and its value.
+                                ...draw.wins.map((win) => ({
+                                    label: `Won · Group #${win.group_no}, Month ${win.cycle_month_no}`,
+                                    value: win.prize_name
+                                        ? `${win.prize_name} · ${inr(win.prize_value ?? 0)}`
+                                        : '—',
+                                })),
                                 {
                                     // T-199 — prizes received because a direct member won (Sponsor with 10+ directs).
                                     label: 'Upline benefits received',
@@ -404,7 +418,8 @@ export default function Dashboard({
                             footer={
                                 draw.latest_upline && (
                                     <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                                        Latest: {draw.latest_upline.prize_name}
+                                        Latest upline benefit:{' '}
+                                        {draw.latest_upline.prize_name}
                                         {draw.latest_upline.prize_value &&
                                             ` · ₹${Number(draw.latest_upline.prize_value).toLocaleString('en-IN')}`}{' '}
                                         — your direct{' '}

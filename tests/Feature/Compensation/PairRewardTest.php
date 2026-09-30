@@ -13,6 +13,7 @@ use App\Models\RuleValue;
 use App\Models\User;
 use App\Services\PairQualifiedDirects;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * DOMAIN_LOGIC.md §7 (Reward/Pair Income), Docs/TEST.md scenario 2
@@ -468,4 +469,34 @@ test('registering a one-time plan under a placement chain triggers pair-entry cr
         ->assertRedirect();
 
     expect(PairEntry::where('member_id', $root->id)->where('source_payment_id', $registrationPayment->id)->exists())->toBeTrue();
+});
+
+test('a joining more than 500 levels deep still gives a Pair entry to every upline, and the backfill restores ones the old cap missed', function () {
+    $planE = MembershipPlan::where('code', 'E')->firstOrFail();
+    $top = pairMember('DEEP-TOP');
+    $parent = pairMember('DEEP-1', $top, 'right');
+    for ($i = 2; $i <= 520; $i++) {
+        $parent = pairMember("DEEP-{$i}", $parent, 'left');
+    }
+    $joiner = pairMember('DEEP-JOINER', $parent, 'left', $planE);
+    $payment = Payment::create([
+        'member_id' => $joiner->id, 'type' => 'registration', 'amount' => 20000, 'mode' => 'cash', 'status' => 'paid',
+        'idempotency_key' => (string) Str::uuid(),
+    ]);
+
+    app(CreatePairEntries::class)($payment);
+
+    expect(PairEntry::where('source_payment_id', $payment->id)->count())->toBe(521);
+    expect(PairEntry::where('source_payment_id', $payment->id)->where('member_id', $top->id)->value('side'))->toBe('right');
+
+    // Simulate the old 500-level cap: the 21 highest uplines lost their entry. The backfill puts them back once.
+    $lost = PairEntry::where('source_payment_id', $payment->id)->orderByDesc('id')->limit(21)->pluck('id');
+    PairEntry::whereIn('id', $lost)->delete();
+
+    $this->artisan('pair-entries:backfill-deep')->assertSuccessful();
+    $this->artisan('pair-entries:backfill-deep')->assertSuccessful();
+
+    expect(PairEntry::where('source_payment_id', $payment->id)->count())->toBe(521);
+    expect(PairEntry::where('source_payment_id', $payment->id)->where('member_id', $top->id)->first())
+        ->side->toBe('right')->status->toBe('unused')->metal->toBe('silver');
 });

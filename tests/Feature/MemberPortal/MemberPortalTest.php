@@ -1,10 +1,13 @@
 <?php
 
+use App\Models\BoosterPayoutSchedule;
+use App\Models\BoosterQualification;
 use App\Models\CompanyWallet;
 use App\Models\CompanyWalletLedgerEntry;
 use App\Models\EmiSchedule;
 use App\Models\Member;
 use App\Models\MembershipPlan;
+use App\Models\RuleVersion;
 use App\Models\User;
 use App\Notifications\BankDetailsVerified;
 use App\Services\WalletLedgerService;
@@ -95,13 +98,13 @@ test('the dashboard income total itemises every income type and reconciles with 
 
 test('the Income Booster card lists what each qualified level has paid so far (01-10-2026)', function () {
     $member = portalMember('DASH-BOOST');
-    $ruleVersionId = App\Models\RuleVersion::where('is_active', true)->value('id');
+    $ruleVersionId = RuleVersion::where('is_active', true)->value('id');
 
     foreach ([1 => [5000, 5000, 5000], 2 => [20000, 20000]] as $level => $months) {
-        $qualification = App\Models\BoosterQualification::create(['member_id' => $member->id, 'level_no' => $level, 'qualified_at' => now(), 'rule_version_id' => $ruleVersionId]);
+        $qualification = BoosterQualification::create(['member_id' => $member->id, 'level_no' => $level, 'qualified_at' => now(), 'rule_version_id' => $ruleVersionId]);
 
         foreach ($months as $i => $amount) {
-            App\Models\BoosterPayoutSchedule::create([
+            BoosterPayoutSchedule::create([
                 'booster_qualification_id' => $qualification->id,
                 'month_no' => $i + 1,
                 'scheduled_date' => now()->addMonths($i)->toDateString(),

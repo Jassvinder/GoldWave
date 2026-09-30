@@ -348,5 +348,10 @@ test('the upline benefit shows on the sponsor\'s Draw page and Dashboard and on 
             ->where('groups.0.next_draw.cycle_month_no', 2));
 
     $this->actingAs($winner->user)->get('/dashboard')
-        ->assertInertia(fn ($page) => $page->where('draw.won', 1));
+        ->assertInertia(fn ($page) => $page
+            ->where('draw.won', 1)
+            // 01-10-2026 — the win names its prize and value on the Dashboard.
+            ->where('draw.wins.0.prize_name', 'Silver Jewellery')
+            ->where('draw.wins.0.prize_value', '20000.00')
+            ->where('draw.wins.0.cycle_month_no', 1));
 });

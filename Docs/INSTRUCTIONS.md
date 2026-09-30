@@ -83,6 +83,8 @@ _(Also referred to as "Store Operations" — merged into one role; no separate S
 
 Super Admin also gets: full Admin Dashboard (see below), Admin Member Management, Admin Compensation Management, Admin Draw Management, and Reports — these are described as their own sections below because they are functionally distinct screens, not because they belong to a separate role.
 
+**Mobile sidebar (all portals, 01-10-2026, user-reported):** on a phone the sidebar opens as a sheet. Tapping any link now closes the sheet and its dark overlay as the new page starts loading (`CloseMobileSidebarOnNavigate` in `components/app-shell.tsx`). Before this fix the page changed underneath, but the sheet and overlay stayed on screen.
+
 ---
 
 ## Registration & Onboarding (Public/Auth)
@@ -251,6 +253,7 @@ A member (GWL01) saw Wallet ₹14,500 next to an "Income Summary" of ₹9,000 wi
   - **Wallet Balance** — Total income credited − Withdrawn (Payouts) − Used for member registrations. If a Payout request is in progress, it adds a note with the reserved amount.
   - **Pair/Reward Income** — the ₹ earned from Pair/Reward as the headline, then Milestones achieved · Entries ready for next milestone (L/R) · Entries already used · Team members not yet eligible.
 - **My Membership & Team** section: Membership Plan (EMI or one-time), EMI Installments Paid ("X of Y" + remaining), Direct Members, **Total Team** (T-194: total with Left team / Right team rows, links to Tree View), Income Booster (active levels), Monthly Draw — each with its description.
+- **Income Booster card amounts (01-10-2026, user-requested):** under "n levels active", one row per qualified level, e.g. **Level 1 · 2 of 6 months — ₹10,000.00**. The amount is the Booster income that level has actually paid (paid payout schedules only). A **Total received** row appears when there is more than one level.
 - **T-194 — team numbers everywhere:** Directs View and Tree View show a **Total Team** strip (Direct Members · Left · Right) between the toolbar and the diagram, for the member being viewed. All three pages use `MemberNetworkSummary::teamCounts()`, so they always agree. The Left/Right totals are the whole Binary downline, and include unassigned company placeholder entries, the same as Income Booster counts them.
 
 ## Income Booster (M12)
@@ -284,7 +287,8 @@ Admin view: draw cycle/date, group size configuration, generated groups, eligibl
   - **Super Admin Draw Management:** each result with an upline benefit shows a highlighted amber row: badge **Upline benefit**, Sponsor ID (name) and the prize.
   - **Winner's group, Winners table:** under the winner, "Sponsor GWLxx also received this prize", or "You (their Sponsor) also received this prize".
   - **Sponsor's Monthly Draw page:** an amber card **Upline benefits you received (n)** above everything, with Draw (Group # · Month, date), Your direct who won, and Prize. It appears even when the sponsor is in no group.
-  - **Member Dashboard, Monthly Draw card:** rows for **Draws won** and **Upline benefits received**, plus a "Latest: prize — your direct GWLxx won the draw" note.
+  - **Member Dashboard, Monthly Draw card:** rows for **Draws won** and **Upline benefits received**, plus a "Latest upline benefit: prize — your direct GWLxx won the draw" note.
+  - **01-10-2026, user-requested:** each win also has its own row, "Won · Group #n, Month m — Silver Jewellery · ₹20,000.00".
 
 Rule: `DOMAIN_LOGIC.md` §8.
 

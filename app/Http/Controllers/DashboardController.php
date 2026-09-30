@@ -176,7 +176,7 @@ class DashboardController extends Controller
         ]);
     }
 
-    /** @return array{won: int, upline_benefits: int, latest_upline: array{prize_name: string|null, prize_value: string|null, winner_customer_id: string|null}|null} */
+    /** @return array{wins: array<int, array{group_no: int, cycle_month_no: int, executed_at: string|null, prize_name: string|null, prize_value: string|null}>, won: int, upline_benefits: int, latest_upline: array{prize_name: string|null, prize_value: string|null, winner_customer_id: string|null}|null} */
     private function drawSummary(Member $member): array
     {
         $latestUpline = DrawExecution::with(['winner', 'drawGroup.monthConfigs'])
@@ -185,8 +185,27 @@ class DashboardController extends Controller
             ->first();
         $prize = $latestUpline?->drawGroup->monthConfigs->firstWhere('cycle_month_no', $latestUpline->cycle_month_no);
 
+        // 01-10-2026 (user-requested) — which prize each win brought, not only how many.
+        $wins = DrawExecution::with('drawGroup.monthConfigs')
+            ->where('winner_member_id', $member->id)
+            ->orderByDesc('executed_at')
+            ->get()
+            ->map(function (DrawExecution $execution): array {
+                $config = $execution->drawGroup->monthConfigs->firstWhere('cycle_month_no', $execution->cycle_month_no);
+
+                return [
+                    'group_no' => $execution->drawGroup->group_no,
+                    'cycle_month_no' => $execution->cycle_month_no,
+                    'executed_at' => Dates::date($execution->executed_at),
+                    'prize_name' => $config?->prize_name,
+                    'prize_value' => $config?->prize_value,
+                ];
+            })
+            ->all();
+
         return [
-            'won' => DrawExecution::where('winner_member_id', $member->id)->count(),
+            'wins' => $wins,
+            'won' => count($wins),
             'upline_benefits' => DrawExecution::where('upline_benefit_member_id', $member->id)->count(),
             'latest_upline' => $latestUpline === null ? null : [
                 'prize_name' => $prize?->prize_name,
