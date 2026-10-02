@@ -4,6 +4,7 @@ namespace App\Actions\Auth;
 
 use App\Models\User;
 use App\Services\OtpService;
+use App\Support\Portal;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 
@@ -25,6 +26,7 @@ class VerifyLoginOtp
 
         Auth::login($user);
         session(['goldwave_login_method' => 'otp']);
+        Portal::stamp(Portal::MEMBER);
 
         return $user;
     }

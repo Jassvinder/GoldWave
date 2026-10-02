@@ -20,6 +20,12 @@
 | Lint/format (backend)         | `vendor/bin/pint`            | Before committing PHP changes                                     | No style violations (Laravel Pint)                                        |
 | Static analysis (backend)     | `vendor/bin/phpstan analyse` | Before committing PHP changes                                     | No new static-analysis errors (Larastan)                                  |
 
+**`gw.cmd` shortcut (28-09-2026, user-requested):** on this dev machine Windows Smart App Control blocks `pnpm.exe` (pnpm 12 ships a native, unsigned exe), so `pnpm run …` fails with "An Application Control policy has blocked this file". `gw.cmd` in the project root runs the same tools directly and needs no pnpm. From the project root in PowerShell, run `.\gw build` (= `pnpm run build`), `.\gw dev`, `.\gw types` (= `types:check`), `.\gw check [files]` (= `check:fix`; pass file paths to avoid reformatting the whole project), `.\gw front` (types then build), `.\gw test [filter]`, `.\gw php` (Pint on changed files + Larastan), or `.\gw all` (types, Pint, Larastan, tests, build). Run `.\gw` alone to see this list.
+
+**Running period jobs on demand (T-177, 29-09-2026, user-requested):** the scheduler fires Pair/Reward only on the month's last day at 23:30, and draw grouping and the draw only on the 15th. To test them without waiting, run `php artisan jobs:month-end`, which runs the Pair/Reward evaluation and then Draw Group generation, and prints the milestones paid and the groups formed. Run `php artisan jobs:draw` for the Monthly Draw. These dispatch the same Jobs the scheduler uses. Both are idempotent: a milestone is never paid twice and a member is never grouped twice. **Each `jobs:draw` run draws the next cycle month** of every active group, even within the same calendar month. A month without its own prize uses the Silver/Gold default from Draw Settings (30-09-2026), so no group is skipped for want of a prize. Run it once per simulated month. The scheduled 15th job itself draws a group at most once per calendar month. Any single scheduled job can also be run immediately with `php artisan schedule:test` (it asks which one). Queued jobs dispatched that way need `queue:work` running. **Adding test entries (30-09-2026):** `php artisan test:entries "GWL01:left,PREV:right"` registers members through the real flow (RegisterMember + cash approval, Plan E by default, `--plan=` to change it). `PREV` means the entry added just before it in the same run. Each member is named after its own Customer ID (GWL17 = "Test Member 17"), never after a member count. A count-based temp script had shifted every name by one from GWL16 onward, once a company placeholder row was added. The command refuses to run in production. **Held Level Income (T-186, 30-09-2026):** `php artisan level-income:release-held` releases every `held` Level Income row whose beneficiary now has the level's qualified directs, and prints the amount per member. It is idempotent. The same release already runs on every confirmed payment and every rule-version publish, so this command is mainly needed after the T-186 migration or for a manual check. **Deep Pair entries (T-187, 01-10-2026):** `php artisan pair-entries:backfill-deep` creates the Pair entries that joinings more than 500 levels deep missed under the old depth cap. It is idempotent and prints the entries created per upline.
+
+**Background processes for local manual testing (T-158, 28-09-2026):** `.\gw queue` (`queue:work`) and `.\gw schedule` (`schedule:work`) each keep running in their own terminal. With no queue worker, every queued job waits in the `jobs` table forever. That includes report exports, which stay "pending", queued notifications and broadcasts. This is how two Super Admin report requests got stuck on 28-09-2026. Production needs the same two processes (`Docs/DEPLOYMENT.md`).
+
 Do not fabricate commands. This table is verified against the actual scaffolded project (Laravel 13 + React starter kit + Pest + Pint + Larastan). Update it if any tooling changes.
 
 ## Risk-based Coverage
@@ -44,7 +50,7 @@ These are the concrete numeric acceptance tests every compensation Action (`Docs
 
 ### 1. Level Income — full 12-level chain
 
-**Given** a Sponsor/Direct chain A→B→C→D→E→F→G→H→I→J→K→L (A is the paying member's direct Sponsor, L is 12 levels up) and the active rule version's `level_income_rates` = `{1:5, 2:2, 3:2, 4-8:1, 9-12:0.5}` (percent).
+**Given** a Sponsor/Direct chain A→B→C→D→E→F→G→H→I→J→K→L (A is the paying member's direct Sponsor, L is 12 levels up) and the active rule version's `level_income_rates` = `{1:5, 2:2, 3:1, 4-8:1, 9-12:0.5}` (percent; Level 3 is 1% since 29-09-2026, it was 2%).
 **When** the paying member makes a confirmed ₹5,000 payment (one-time or EMI installment — same formula either way).
 **Then** exactly 12 `income_ledger_calculations` rows (type=`level_income`) are created:
 
@@ -52,11 +58,11 @@ These are the concrete numeric acceptance tests every compensation Action (`Docs
 | ----- | ------------- | --------- | -------- |
 | 1     | A             | 5%        | ₹250     |
 | 2     | B             | 2%        | ₹100     |
-| 3     | C             | 2%        | ₹100     |
+| 3     | C             | 1%        | ₹50      |
 | 4–8   | D, E, F, G, H | 1% each   | ₹50 each |
 | 9–12  | I, J, K, L    | 0.5% each | ₹25 each |
 
-Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shorter than 12 (e.g. only 5 sponsors exist above the payer), levels 6–12 get an `eligibility_status = skipped` row with a reason, not a silently missing row (`skip_reason = chain_too_short`, `beneficiary_member_id = null` — resolved 13-09-2026, `DOMAIN_LOGIC.md` §21, since no member exists at that level to attach). **Edge case:** if a resolved beneficiary's own `members.status` is anything other than `active` (e.g. `cancelled`), that level is likewise `skipped` with `skip_reason = upline_inactive`, `beneficiary_member_id` still recorded (unlike the chain-too-short case) — reuses the same Active/not-Active definition already settled for sponsor-inactive-at-registration, not a new rule (resolved 13-09-2026, `DOMAIN_LOGIC.md` §21).
+Total distributed: ₹750 (15% of ₹5,000). **Edge case:** if the chain is shorter than 12 (e.g. only 5 sponsors exist above the payer), levels 6–12 get an `eligibility_status = skipped` row with a reason, not a silently missing row (`skip_reason = chain_too_short`, `beneficiary_member_id = null` — resolved 13-09-2026, `DOMAIN_LOGIC.md` §21, since no member exists at that level to attach). **Edge case:** if a resolved beneficiary's own `members.status` is anything other than `active` (e.g. `cancelled`), that level is likewise `skipped` with `skip_reason = upline_inactive`, `beneficiary_member_id` still recorded (unlike the chain-too-short case) — reuses the same Active/not-Active definition already settled for sponsor-inactive-at-registration, not a new rule (resolved 13-09-2026, `DOMAIN_LOGIC.md` §21).
 
 ### 2. Pair/Reward — incremental consumption crossing a milestone, with carry-forward
 
@@ -68,23 +74,23 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 
 **Beneficiary-chain regression to test (resolved 13-09-2026, `DOMAIN_LOGIC.md` §7's Pair/Reward Beneficiary Chain Rule):** given a Binary Position chain P1(direct placement parent)→P2→P3 above a newly-eligible member N, where N sits on P1's Right leg, P1 is itself on P2's Left leg, and P2 is on P3's Right leg — when N's joining becomes eligible, exactly 3 `pair_entries` rows are created: P1 gets one **Right** entry (N is directly on P1's right), P2 gets one **Left** entry (P1's whole subtree, including N, sits on P2's left), and P3 gets one **Right** entry (P2's whole subtree sits on P3's right) — a team-size count all the way up, not just crediting P1.
 
-### 3. Income Booster — qualify once, pay 6 months regardless of later drop-off (RESOLVED 12-09-2026: duration 3→6 months, concurrency confirmed)
+### 3. Income Booster — qualify once, pay for the level's full duration regardless of later drop-off (RESOLVED 12-09-2026: duration 3→6 months, concurrency confirmed; Level 1 → 12 months 29-09-2026, T-180)
 
-**Given** Booster Level 1 requires 10 directs + 500 binary team size (split 250 Left / 250 Right, `DOMAIN_LOGIC.md` §9) for ₹5,000/month × 6 months, and a member reaches 12 directs and 520 team size (260L/260R) in month 1 (Level 2's 20-directs/1,500-team threshold is not met, so Level 1 is the only level qualifying so far).
+**Given** Booster Level 1 requires 10 directs + 500 binary team size (split 250 Left / 250 Right, `DOMAIN_LOGIC.md` §9) for ₹5,000/month × 12 months (T-180; was 6), and a member reaches 12 directs and 520 team size (260L/260R) in month 1 (Level 2's 20-directs/1,500-team threshold is not met, so Level 1 is the only level qualifying so far).
 **When** the qualification is evaluated.
-**Then** one `booster_qualifications` row (level_no=1) is created, and exactly 6 `booster_payout_schedules` rows are created (month_no 1–6, ₹5,000 each, total ₹30,000).
+**Then** one `booster_qualifications` row (level_no=1) is created, and exactly 12 `booster_payout_schedules` rows are created (month_no 1–12, ₹5,000 each, total ₹60,000).
 **When** the member's direct count later drops back to 4 in month 2 (before month 2's payout runs).
 **Then** month 2's ₹5,000 is still paid — qualification is a one-time gate, not a maintained condition (`DOMAIN_LOGIC.md` §9).
-**When**, instead, the same member newly crosses the Level 2 threshold (20 directs, 1,500 team split 750L/750R) in month 2 while the Level 1 schedule (months 1–6) is still running.
+**When**, instead, the same member newly crosses the Level 2 threshold (20 directs, 1,500 team split 750L/750R) in month 2 while the Level 1 schedule (months 1–12) is still running.
 **Then** a **second, independent** `booster_qualifications` row (level_no=2) is created, with its own 6 `booster_payout_schedules` rows (month_no 2–7, ₹20,000 each, total ₹1,20,000) running **concurrently** alongside the still-active Level-1 schedule — neither schedule is cancelled or merged (`DOMAIN_LOGIC.md` §9.1 concurrency rule, resolved via direct user confirmation 12-09-2026). **Regression to test:** in the same month where both schedules are active, the member's wallet ledger must show two separate booster credit entries (₹5,000 from Level 1 + ₹20,000 from Level 2 = ₹25,000 that month), not one merged/overwritten entry.
 **Given** instead a member has 12 directs and a 490 Left / 10 Right binary team (500 total, the correct combined total for Level 1).
 **Then** the member does **not** qualify for Level 1 — the split is enforced independently, not just the combined total (`DOMAIN_LOGIC.md` §21 T-011 pre-coding pass, user-confirmed). No `booster_qualifications` row is created until both legs independently reach at least 250.
 
 ### 4. Purchase/Repurchase Upline Income — full chain with the duplicate-beneficiary guard
 
-**Given** member P's Sponsor chain is A(L1, direct sponsor)→B(L2)→C(L3)→D(L4)→E(L5)→F(L6)→G(L7)→H(L8)→I(L9)→J(L10)→K(L11)→L(L12), and rates are self 2%, direct Sponsor 1%, L2–6 0.5% each, L7–12 0.25% each.
+**Given** member P's Sponsor chain is A(L1, direct sponsor)→B(L2)→C(L3)→D(L4)→E(L5)→F(L6)→G(L7)→H(L8)→I(L9)→J(L10)→K(L11)→L(L12), and the sale is **gold** at the Gold defaults since 29-09-2026: self 2%, L1 1%, L2 1%, L3–6 0.5% each, L7–12 0.25% each.
 **When** P makes a confirmed ₹10,000 store purchase.
-**Then**: P receives ₹200 (2%); A receives ₹100 (1%, as direct Sponsor — not the 0.5% a plain "Level 2" rate would imply); B–F receive ₹50 each (0.5%); G–L receive ₹25 each (0.25%). Total distributed: ₹700 (7% of the sale — 2% self + 5% upline). **Regression to test:** because a Sponsor/Direct chain is a strict ancestor path (see the clarification in `DOMAIN_LOGIC.md` §15/§21), no member can structurally appear twice in this list — the duplicate-beneficiary guard should never actually trigger in a correct chain walk; write a test asserting it stays inert (12 distinct beneficiaries, no member repeated) rather than trying to force a duplicate that shouldn't be reachable.
+**Then**: P receives ₹200 (2%); A receives ₹100 (1%); B receives ₹100 (1%); C–F receive ₹50 each (0.5%); G–L receive ₹25 each (0.25%). Total distributed: ₹750 (7.5% of the sale — 2% self + 5.5% upline). A **silver** sale of ₹10,000 at the Silver defaults (5% / 2% / 1% × 5 / 0.5% × 6) would pay P ₹500, A ₹200, B–F ₹100 each and G–L ₹50 each: ₹1,500 in total (15%). **Regression to test:** because a Sponsor/Direct chain is a strict ancestor path (see the clarification in `DOMAIN_LOGIC.md` §15/§21), no member can structurally appear twice in this list — the duplicate-beneficiary guard should never actually trigger in a correct chain walk; write a test asserting it stays inert (12 distinct beneficiaries, no member repeated) rather than trying to force a duplicate that shouldn't be reachable.
 
 ### 5. Store Profit Distribution — owner + 3 levels (RESOLVED 12-09-2026: co-application with scenario 4 confirmed)
 
@@ -93,6 +99,7 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 **Then** 4 `store_profit_distributions` rows: Store Owner ₹1,000, L1 ₹250, L2 ₹125, L3 ₹125 — total ₹1,500 (3% of the sale).
 **When**, additionally, this same sale is a **member's own jewellery purchase** (scenario 2 of the 3 resolved store-sale scenarios, `DOMAIN_LOGIC.md` §16.4) rather than a walk-in/non-member sale.
 **Then** scenario 4's Purchase/Repurchase Upline Income (2% self / 1% direct Sponsor / 0.5% L2–6 / 0.25% L7–12) **also fires on this same transaction**, in addition to the 4 Store Profit Distribution rows above — the two ledgers are independent and both are created; this is no longer blocked on client confirmation (`DOMAIN_LOGIC.md` §21). **Regression to test:** a walk-in/non-member sale (no purchasing member) creates only the 4 `store_profit_distributions` rows and zero `income_ledger_calculations` rows — assert both shapes, not just the combined case.
+**SUPERSEDED 28-09-2026 (T-170, user decision):** a walk-in sale now also creates **one** `income_ledger_calculations` row (`purchase_repurchase`, `level_no` null). It pays the **Store Owner** the whole Purchase/Repurchase percentage that a member purchaser's chain would have shared: self + L1…L12 of that metal's rates (Gold 7.5% / Silver 15% with the 29-09-2026 defaults), on the sale's income base. For the ₹50,000 gold sale above, the Store Owner therefore gets ₹1,000 (Store Profit) + **₹3,750** (walk-in income) in their member wallet. The wallet line reads "Walk-in store sale income — <store> sale #N" so the history shows it came from the store. A store whose owner is not a network member gets no walk-in income row (same as Store Profit). A member purchase is unchanged (scenario 4).
 
 ### 6. Monthly Draw — grouping, execution, upline benefit threshold
 
@@ -169,8 +176,10 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 
 ### 10. EMI Rate Booking — Current Rate Booking formula and Future Rate Booking commitment (NEW 12-09-2026 — client spec v2.0)
 
-**Given** a member registers on Plan A (₹1,000/month × 20 months, 100gm Silver) and selects **Current Rate Booking** (`DOMAIN_LOGIC.md` §3.0), and the current silver rate is ₹3,500/tola (100gm = 10 tola).
-**When** the EMI schedule is generated.
+**CHANGED 20-09-2026 (T-116):** registration no longer asks for a rate-booking method — every EMI plan registers on Future Rate (the "Given instead … Future Rate Booking" block below is now the only registration outcome). The Current Rate formula below is exercised through `CalculateEmiRateBooking` with **zero EMIs paid** (the whole-schedule case, a formula fixture) and, for real members, through the post-registration switch in **scenario 21**.
+
+**Given** the Current Rate formula is evaluated for Plan A (₹1,000/month × 20 months, 100gm Silver) with nothing paid, and the current silver rate is ₹3,500/tola (100gm = 10 tola).
+**When** the EMI amount is calculated.
 **Then** Total Current-Rate Jewellery Value = 10 tola × ₹3,500 = ₹35,000; Maintenance Cost = 1% of ₹35,000 = ₹350; EMI Amount = (₹35,000 ÷ 20) + ₹350 = ₹1,750 + ₹350 = **₹2,100/month**, and all 20 `emi_installments` rows are created at ₹2,100 each (total ₹42,000 over the schedule) — not the plan's headline ₹1,000/month, which only applies to Future Rate Booking. The rate used (₹3,500/tola) and the fixed weight (100gm) must be snapshotted on the `emi_schedules` row so this calculation is reproducible even if the silver rate changes next month.
 **Given** instead the same member selects **Future Rate Booking**.
 **Then** the EMI Amount is simply the plan's base amount, ₹1,000/month for 20 months (no maintenance cost added); Future Jewellery Commitment = ₹1,000 × 20 = ₹20,000; at final EMI completion/delivery, the member receives Silver Jewellery worth ₹20,000 **at whichever silver rate is applicable on the delivery date** — if the rate has moved since booking, the delivered weight is not fixed at 100gm the way Current Rate Booking's is. **Regression to test:** switching the example to Plan D (₹10,000/month × 10 months, 10gm Gold) must use the same two formulas — do not special-case Plan A's numbers into the calculation code. **Note:** the Plan D Pair/Reward completed-EMI count is unrelated to this rate-booking calculation — it defaults to **1** completed EMI (RESOLVED 12-09-2026, `DOMAIN_LOGIC.md` §7.3/§21) — do not conflate the two when writing Plan D fixtures.
@@ -190,7 +199,7 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 
 ### 12. EMI installment schedule generation — due-date cadence and overdue transition (NEW 13-09-2026 — user-confirmed, no source spec existed for this)
 
-**Given** a member activates a Plan A membership (20 installments) on **17-02-2026**, Current Rate Booking, EMI amount ₹2,100/month (scenario 10's worked numbers).
+**Given** a member activates a Plan A membership (20 installments) on **17-02-2026**, Future Rate (registration always is, T-116), EMI amount ₹1,000/month.
 **When** the EMI schedule is generated.
 **Then** exactly 20 `emi_installments` rows are created with `due_date` on the activation-date anniversary each month: installment 1 = 17-02-2026, installment 2 = 17-03-2026, installment 3 = 17-04-2026, … installment 20 = 17-09-2027 — **not** the 1st of the month or any other fixed calendar day. All 20 rows start at `status = upcoming` (installment 1 may start `due` if generation happens on/after its own due date — see below).
 **Given** installment 3 (due 17-04-2026) is unpaid.
@@ -279,6 +288,316 @@ Total distributed: ₹800 (16% of ₹5,000). **Edge case:** if the chain is shor
 **Given** a `role=admin` (Store Owner) or `role=member` user, authenticated.
 **When** they request any `super-admin/reports/*` route, including attempting to `download` an existing, `ready` `report_exports` row by guessing/incrementing its numeric ID.
 **Then** every request is rejected (403) — Reports Center access is Super-Admin-only per `DOMAIN_LOGIC.md` §2's "no company-wide... access" rule for Admin, and this is a separate module from Member's own M17 / Admin's own A06 reports, which stay untouched and independently scoped.
+
+### 19. Super Admin network overview — true downline, Left/Right legs, status split, Store Owners (NEW 19-09-2026 — pre-coding pass, DOMAIN_LOGIC.md §21 T-129)
+
+**Given** this Binary Position tree under `R` (sponsor of `L1`, `R1`, `R2` is `R`; every member `active` unless stated): `R` → left `L1`, right `R1`; `L1` → left `L2` (status `draft`), right `R2` (owns a Store); `L2` → left `L3`; `R1` → right `R3` (company dummy, `dummy_status=unassigned`).
+**When** `MemberNetworkSummary::forMember(R)` is computed.
+**Then** `direct_count`=3 (Sponsor-based: `L1`, `R1`, `R2` — never the placement children); **left leg** total=4 (`L1`,`L2`,`R2`,`L3`) = active 3 + inactive 1 + dummy 0; **right leg** total=2 (`R1`,`R3`) = active 1 + inactive 0 + dummy 1; **team total**=6 (not 2 — the old `team_size` bug counted only immediate placement children); store owners in downline = 1 (`R2`, with their store name), all on the left leg. `total` for each leg equals `BinaryTeamSizeCounter::countSides()` for the same member (the two must never disagree).
+**Given** the same tree, **When** computed for `L1`, **Then** left=2 (`L2`,`L3`), right=1 (`R2`); for a leaf (`L3`) left=0/right=0/store owners=[]; the counts never include the member itself.
+**Given** the Member Management list's page contains `R`, `L1` and `L3`, **When** `MemberNetworkSummary::forMany([R, L1, L3])` runs, **Then** it returns the same numbers as three separate `forMember` calls, using one recursive query for the whole page (not one per row).
+**Regression to test:** the list's "Store Owners only" filter matches exactly the members whose own user owns a Store (`R2` only), not members merely having one in their downline; a non-Super-Admin (`member`/`admin`) requesting `super-admin/members*` is still rejected.
+
+### 20. Store Owner who is also a Member — two separate logins, two separate portals (NEW 19-09-2026 — pre-coding pass, DOMAIN_LOGIC.md §21 T-131)
+
+**Given** a user with `role=admin` who owns a store (Store ID `GWLST…`, store password) **and** has an `active` `members` row (Customer ID, initial password = Customer ID), e.g. the dev DB's `GWL37`.
+**When** they log in on `/member/login` with Customer ID + password (or via OTP), **Then** the session records `goldwave_portal=member`; `/dashboard` renders `member/dashboard`; `/member/profile`, `/member/directs`, `/member/tree` are 200; every `/admin/*` route is 403 (they are "in" the Member Portal).
+**When** the same user instead logs in with Store ID + store password on `/login`, **Then** the session records `goldwave_portal=store`; `/dashboard` renders `admin/dashboard` (the Store Dashboard) — **not** the member dashboard even though a `members` row exists; `/admin/sales` is 200; `/member/profile` is 403.
+**Given** a plain `role=member` user, **Then** nothing changes: member routes 200, `/admin/*` 403 (role gate), regardless of portal value. **Given** a `role=admin` user with a store but **no** `members` row, **Then** member login with any Customer ID fails as before and `/member/*` stays 403. **Given** a `role=admin` user with a member row but no `goldwave_portal` in session (e.g. an old session), **Then** member routes are 403 and `/dashboard` shows the Store Dashboard — the member portal is only ever entered through the Member login.
+**Regression to test:** Super Admin can still open `member/directs`/`member/tree` for any member (unchanged); `role=admin` + `portal=member` cannot use `super-admin/*`; logging out and logging in via the other door flips the portal (the value is set at every login, never carried over).
+
+### 21. Book at Current Rate after registration — paid EMIs credited, maintenance on the remaining value (NEW 20-09-2026 — client reply + user confirmation, DOMAIN_LOGIC.md §3.0 / §21 T-116)
+
+**Given** a member on Plan A (₹1,000/month × 20, 100gm Silver), registered on Future Rate, has paid **4 EMIs (₹4,000)**, and the silver rate is ₹350/gm.
+**When** they open the Membership Plan page.
+**Then** a "Book at Current Rate" quote shows: weight 100gm Silver; rate ₹350/gm; total value ₹35,000; paid 4 EMIs / ₹4,000; remaining value ₹31,000; pending EMIs 16; maintenance ₹310 (1% of ₹31,000); **new EMI ₹2,247.50** (31,000 ÷ 16 = 1,937.50, + 310); still to pay ₹35,960 (16 × 2,247.50).
+**When** they confirm.
+**Then** the 16 unpaid `emi_installments` rows are ₹2,247.50 each, the 4 paid rows keep ₹1,000, due dates are unchanged; `emi_schedules` is `current_rate` with `rate_per_gram_at_booking = 350`, `fixed_weight_grams = 100`, `maintenance_cost = 310`, `installment_amount = 2247.50`, `installments_paid_at_booking = 4`, `amount_paid_at_booking = 4000`, `current_rate_booked_at` set; the Membership page now shows the 100gm weight; the button is gone.
+**Given** a second fixture — Plan D (₹10,000/month × 10, 10gm Gold), 2 EMIs paid (₹20,000), gold ₹6,000/gm.
+**Then** total ₹60,000; remaining ₹40,000; 8 pending; maintenance ₹400; **new EMI ₹5,400** (40,000 ÷ 8 = 5,000, + 400). (Do not special-case Plan A.)
+
+**SUPERSEDED 28-09-2026 (T-167, user decision): maintenance now declines every month.** The figures above were the flat-maintenance rule. From T-167, the principal is the same every month (remaining value ÷ pending EMIs), and each month's maintenance is 1% of the value **still remaining at that installment**, so every EMI is a little smaller than the one before. Maintenance is rounded to 2 decimals per month. Any principal rounding remainder goes into the last EMI, so the principals always add up to exactly the remaining value.
+
+- **Plan D fixture (clean numbers):** principal ₹5,000 × 8; maintenance ₹400, 350, 300, 250, 200, 150, 100, 50 → **EMIs ₹5,400, 5,350, 5,300, 5,250, 5,200, 5,150, 5,100, 5,050**. Still to pay **₹41,800** (40,000 + 1,800). The schedule stores `installment_amount = 5400` (the first EMI) and `maintenance_cost = 400` (the first month's).
+- **Plan A fixture:** principal ₹1,937.50 × 16; EMI 1 = 1,937.50 + 310.00 = **₹2,247.50**; EMI 2 = 1,937.50 + 290.63 (1% of 29,062.50) = **₹2,228.13**; EMI 3 = 1,937.50 + 271.25 = ₹2,208.75; … EMI 16 = 1,937.50 + 19.38 (1% of 1,937.50) = **₹1,956.88**. Total maintenance ₹2,635.04 (2,635 exact, plus 8 half-paisa round-ups). Still to pay **₹33,635.04**.
+- The unpaid installments are updated **in installment-number order** with these amounts. Paid rows and due dates are untouched.
+- **With making charges (T-165, 28-09-2026):** the booking's total value is metal value plus the making % recorded with the rate; hallmark and GST are not part of it. Plan D, gold ₹6,000/gm (₹60,000 per 10 gm), making **12%**, 2 EMIs paid (₹20,000) → metal ₹60,000 + making ₹7,200 = total **₹67,200**; remaining ₹47,200 over 8 → principal ₹5,900; **EMI 1 = 5,900 + 472 = ₹6,372**; EMI 2 = 5,900 + 413 = ₹6,313; … EMI 8 = 5,900 + 59 = ₹5,959. Still to pay **₹49,324** (47,200 + 2,124). With making 0% every earlier fixture is unchanged.
+**Regression / guard cases to test:** (a) a schedule already on Current Rate cannot be booked again and its amounts are untouched; (b) with the paid amount ≥ total value (e.g. silver at ₹30/gm → ₹3,000 < ₹4,000 paid) the request is rejected and nothing changes; (c) with an installment payment still `pending` (cash awaiting approval) the request is rejected; (d) if the metal rate changed, or another EMI was paid, between quote and confirm, the request is rejected as stale; (e) all EMIs paid → no button and a direct request is rejected; (f) a one-time plan (E/F) or a member with no EMI schedule never sees the button and cannot post; (g) a Future Rate member's Membership page exposes no weight; (h) a member cannot book another member's schedule (the action always resolves the caller's own schedule).
+
+### 22. Super Admin reverts a Current Rate booking — only while no EMI was paid after it (NEW 21-09-2026 — user decision, DOMAIN_LOGIC.md §3.0)
+
+**Given** scenario 21's member (Plan A, 4 EMIs paid, booked at the Current Rate: 16 unpaid installments at ₹2,247.50, schedule `current_rate`).
+**When** a Super Admin reverts with the reason "Booked by mistake".
+**Then** the 16 unpaid installments are ₹1,000 again, the 4 paid ones are untouched, due dates unchanged, the schedule is `future_rate` with `installment_amount = 1000`, and `metal_rate_id`, `rate_per_gram_at_booking`, `fixed_weight_grams`, `maintenance_cost`, `current_rate_booked_at`, `installments_paid_at_booking`, `amount_paid_at_booking` are all null. Two `emi_rate_booking_events` rows exist for the schedule: `booked` (by the member) and `reverted` (by the Super Admin, with the reason).
+**Then** the member's Membership page shows Future Rate, no weight, and the "Book at Current Rate" button again — a fresh booking works and is logged as a second `booked` event.
+**Guard cases:** (a) an EMI paid after the booking (5 paid vs 4 at booking) → revert refused, nothing changes; (b) an installment payment still `pending` → refused; (c) a schedule that was Current Rate from registration (no `current_rate_booked_at`) → refused; (d) a Future Rate schedule → refused; (e) an empty reason → validation error; (f) a member or Admin (non-Super-Admin) posting the revert route → 403, and a member cannot revert their own booking.
+
+### 23. Razorpay online payment — order, verification, webhook, idempotency (NEW 22-09-2026 — pre-coding pass, DOMAIN_LOGIC.md §10.1 / §21 T-137; network is always faked, real Razorpay is never called in tests)
+
+**Given** Razorpay keys are configured and a Plan A member has a pending online registration payment of ₹1,000.00.
+**When** the gateway creates the intent.
+**Then** exactly one `POST /v1/orders` is sent with HTTP Basic auth (key id : key secret), `amount = 100000` (paise), `currency = INR`, `receipt = "GW-<payment id>"`; the returned order id is saved in `payments.gateway_order_id`; the returned redirect URL is a **signed** `payments/{payment}/checkout` link. Asking again for the same pending payment sends **no** second order request (the order is reused). An unsigned checkout URL is refused (403).
+**When** the member completes Checkout and the page posts back `razorpay_payment_id`, `razorpay_order_id`, `razorpay_signature` where the signature is a valid HMAC-SHA256 of `order_id|payment_id` with the key secret, and Razorpay's payment record for that id says `captured`, the same order id, `amount = 100000`, `INR`.
+**Then** the payment becomes `paid` with `provider_reference = <razorpay payment id>`, the membership activates (Customer ID assigned) and `PaymentConfirmed` fires exactly once.
+**Variants that must NOT activate anything (payment stays `pending`):** (a) a wrong signature; (b) a signature valid for a different order id; (c) Razorpay reports a different amount or currency; (d) Razorpay reports the payment `failed` / `created`; (e) the Razorpay lookup itself fails (network error) — the member sees a "will be confirmed automatically" message. **Authorized payment:** when Razorpay reports `authorized`, a `POST /v1/payments/{id}/capture` with the same amount and currency is sent first and the payment is confirmed only if it then reports `captured`.
+**Webhook:** a body signed with the webhook secret (`X-Razorpay-Signature`, HMAC-SHA256 of the **raw** body) with event `order.paid` (or `payment.captured`) for our order and the right amount → the same confirmation as above. A tampered body or missing/wrong signature → 400, nothing changes. Replaying the identical webhook, or verifying after the webhook already confirmed → no second activation/income (`PaymentConfirmed` still once). `payment.failed` and any other event → 200 and ignored (payment stays `pending`, retryable). An order id we do not know → 200 and ignored. A signed webhook whose amount differs from our payment → not confirmed.
+**Gateway selection:** no Razorpay keys → `FakePaymentGateway` (non-production only); both keys set → `RazorpayGateway`; production with no keys → refuses to boot the gateway (never falls back to the fake one). **EMI:** an online EMI installment payment goes through the same gateway and confirms the installment identically.
+
+### 24. Notifications — bell, inbox, read state, channel failures (NEW 22-09-2026 — pre-coding pass, DOMAIN_LOGIC.md §21 T-139…T-142)
+
+**Given** a member submits a cash EMI payment of ₹1,000 (installment 3) and a Super Admin exists.
+**Then** the Super Admin has exactly one unread notification "Cash payment awaiting approval" (category `payment`, body names the member, ₹1,000.00 and "EMI #3", link to Cash Payments); no other user has one. A cash **registration** creates the same alert (body says "new registration").
+**When** the Super Admin approves it → the member gets "Cash payment approved" (database + email + SMS); when rejected → "Cash payment rejected". A member with no email/mobile simply skips those channels.
+**Given** a member files a profile change request → Super Admin gets "Profile change request" (category `request`, link to the requests queue); approve/reject → the member gets the reviewed notification. A payout request → Super Admin "Payout request" with the amount. Pending-profile submission with bank details → Super Admin "Bank details to verify" linking to that member.
+**Bell:** the shared Inertia `notifications` prop has `unread_count` and the 6 latest items for the logged-in user only; another user's notifications never appear. **Open:** `GET notifications/{id}/open` marks that notification read and redirects to its link; someone else's notification id → 404; a link that is not an internal path is never followed.
+**Page:** category tabs list only categories that have items, with unread counts; "Unread only" hides read ones; "Mark all as read" clears every unread one for that user only; pagination is 15 per page; a Super Admin sees `super-admin/notifications`, a member `member/notifications`, a Store Owner `admin/notifications`.
+**Failure isolation:** if the mail or SMS channel throws, the business action still succeeds, the bell notification exists and the error is logged. **Legacy:** an old `ProfileChangeRequestReviewed` row (no title/category, attached to the Member) is moved to the member's user and still renders sensibly.
+
+### 25. SMS gateway — one path for OTP and notifications (NEW 22-09-2026)
+
+**Given** `SMS_DRIVER=log` (default). **When** an OTP is requested by mobile **or** a notification with the SMS channel is sent. **Then** both go through `SmsGatewayContract`: the log driver records recipient + text, nothing is sent to any network. `NOTIFY_SMS_ENABLED=false` removes the SMS channel from every notification; a user without a mobile number is skipped; a throwing gateway is caught and logged.
+
+### 26. EMI due reminders — schedule, idempotency, eligibility (NEW 22-09-2026 — DOMAIN_LOGIC.md §21)
+
+**Given** Plan A member (active), installments due on 17-10-2026 (#2, `upcoming`), 17-11-2026 (#3). **When** the reminder job runs on 14-10-2026 → one "EMI due in 3 days" reminder for #2 (bell + email + SMS); running it again the same day sends nothing. On 17-10-2026 (status `due`) → one "EMI due today". On 18-10-2026 (`overdue`) → one "EMI overdue"; on 25-10-2026 → one more (7 days later); nothing on 19-10…24-10. Installment #3 gets **no** reminder while #2 is unpaid (only the earliest unpaid installment is reminded). Paying #2 stops its reminders. A member whose status is not active, a fully paid schedule and a member without a user get none. Reminder text carries the amount and DD-MM-YYYY due date and links to the EMI Schedule page.
+
+### 27. Earnings Verification — independent re-computation catches what the Actions got wrong (NEW 22-09-2026)
+
+**Given** a chain GWL900 → A → B → C registered and approved through the real Actions (each a ₹20,000 Plan E cash payment), and a store sale of ₹10,000 by C at a store whose owner is a member sponsored by C.
+**Then** `earnings:verify` (and the Super Admin page) report **0 errors** across Level Income (3 payments), Purchase/Repurchase (1 sale), Store Profit (1 sale), Pair entries, Booster, Wallet ledger links and Wallet balances.
+**Tampering that must be caught, each with a readable message naming the payment/sale/member:** a Level Income row's amount, rate or beneficiary changed; a level row deleted, or a paid payment with no Level Income rows at all; a Purchase/Repurchase or Store Profit amount changed; a wallet entry's amount changed, deleted, or an orphan entry added; a member's cached wallet balance changed; a Pair entry moved to the other leg or deleted; a Pair reward whose value, consumed-entry counts or milestone do not match, or a consumed entry with no reward; a Booster month with the wrong amount/date, or "paid" with no wallet entry.
+**Not an error:** an upline whose status changed after the payment (skipped as inactive then, active now — or the reverse) is a **warning**. The command exits 0 clean, 1 on any error, 2 for an unknown check name; the Super Admin page shows a report only after "Run verification" and is Super-Admin-only. **Not re-derived (documented limits):** whether a member qualified for a Booster level, and Monthly Draw eligibility/winners.
+
+### 28. Dummy entries on EMI — silent installment #1, no compensation until assignment, then a fresh schedule (NEW 22-09-2026 — user decision, DOMAIN_LOGIC.md §14.2/§14.3 T-149)
+
+**Given** `dummy_entry_enabled = true`, `dummy_entry_daily_count = 1`, `dummy_entry_plan_code = 'A'` (₹1,000 × 20 installments, 100gm Silver).
+**When** the daily generation job runs (or Super Admin clicks "Generate Now").
+**Then** the new dummy entry gets a full `emi_schedules` row (`installment_amount = ₹1,000`, `total_installments = 20`, `rate_booking_method = future_rate`) plus exactly **one** `emi_installments` row (`installment_no = 1`, `status = paid`) linked to a `payments` row (`type = registration`, `mode = cash`, `status = paid`, `cash_status = approved`) created directly as paid — never through `InitiateEmiInstallmentPayment`/`ApproveCashPayment`. **Then**, because of that: the payment never appears in the Super Admin Cash Payments queue, `PaymentConfirmed` is never dispatched for it, and zero `IncomeLedgerCalculation`/`PairEntry` rows reference it — no compensation of any kind is triggered, to any upline, ever, for this payment.
+**Given** the entry stays unassigned for several months (generated 01-09-2026, still unassigned on 15-12-2026).
+**Then** it still has exactly 1 `emi_installments` row — no installment #2 is generated while unassigned, so there is nothing to be "next EMI due" for a dummy.
+
+**Given** the same entry, still unassigned on 15-12-2026.
+**When** Super Admin assigns a real leader's details to it (`AssignDummyEntryToLeader`).
+**Then** installments #2–20 (19 rows) are generated in the same transaction, anchored to **today (15-12-2026)**, not the 01-09-2026 generation date: installment #2's `due_date = 15-12-2026` with `status = due` (no grace period — a due date reached today is immediately due, matching `GenerateEmiInstallments`' own rule), installment #3's `due_date = 15-01-2027` with `status = upcoming`, and so on monthly. **No catch-up and no back-dating** for the 3½ months the entry sat unassigned.
+**Given** the now-real leader pays installment #2 themselves (cash or online) through the ordinary EMI Schedule page.
+**Then** this is an entirely ordinary EMI payment from here on — `PaymentConfirmed` fires, and Level Income/Pair/Booster evaluate normally against the leader's real Sponsor/Placement chain, exactly like any other member's EMI installment.
+
+**Given** the dummy-seeded leader's Sponsor chain terminates at the seeded company root (`is_company_root = true`), as it always does for a dummy-originated leader.
+**When** any of their real payments (or a real downline member's payment that reaches the root through the chain) fires Level Income, Purchase/Repurchase Income, or Store Profit Distribution.
+**Then** the company root is **never** credited — each Action records `eligibility_status = skipped`, `skip_reason = upline_dummy` for that level (Store Profit Distribution has no audit row for its skip; it silently omits the level). **Regression to test:** this must also hold for a still-_unassigned_ dummy that happens to sit in a real member's Sponsor chain (structurally rare, since dummies are never sponsors of real members, but the guard is unconditional on `is_company_dummy && dummy_status !== 'assigned'`, not root-specific). `EarningsVerifier` independently re-derives and confirms this — including a tamper case where a wrongly-credited root/dummy row is caught with a message naming the beneficiary.
+
+**Not fixed, flagged instead (`DOMAIN_LOGIC.md` §21):** a dummy-turned-leader can never become Booster-qualified through the normal pipeline, since their conceptual "registration" (installment #1) never dispatches `PaymentConfirmed`, and Booster's own qualification listener only reacts to `payments.type = registration` — every real payment they make afterward is `type = emi_installment`, which that listener's filter excludes.
+
+### 29. Purchase / Repurchase / Buyback — member vs. walk-in (NEW 23-09-2026 — user decision, DOMAIN_LOGIC.md §16.11 T-150)
+
+**Given** the Store Admin selects transaction type Repurchase on the Sales form, with no Customer ID entered.
+**When** the form is submitted.
+**Then** the request is rejected with a `customer_id` validation error — a Repurchase always requires an existing member, enforced both by `RecordStoreSaleRequest` (`required_if:transaction_type,repurchase`) and, as the real source of truth, by `ConfirmStoreSale` itself (so any other caller is protected too).
+
+**Given** the Store Admin selects transaction type Purchase, with no Customer ID entered.
+**When** the form is submitted with valid item/amount details.
+**Then** the sale is recorded with `member_id = null` — this is a normal, first-class walk-in Purchase, not an error. Purchase/Repurchase Upline Income (§15) does not fire (no purchasing member to credit), but Store Profit Distribution (§16.4) still fires in full, based on the **store owner's own** Sponsor/Direct chain — a walk-in customer has no bearing on it.
+**Given** the same, but with a valid Customer ID entered instead.
+**Then** the sale is recorded with `member_id` set, and both Purchase/Repurchase Upline Income (§15, to the purchasing member's own chain) and Store Profit Distribution (§16.4) fire.
+
+**Given** a Buyback with no Customer ID and no walk-in name.
+**When** the form is submitted.
+**Then** the request is rejected with a `walk_in_name` validation error — exactly one identity path (Customer ID or walk-in name) is required, never neither.
+**Given** a Buyback with a walk-in name ("Ramesh Kumar") and mobile, no Customer ID.
+**When** the form is submitted.
+**Then** the `store_buybacks` row is recorded with `member_id = null`, `walk_in_name = 'Ramesh Kumar'`, `walk_in_mobile` set — same pricing formula as a member buyback (§16.7), and still never touches `store_profit_distributions`/`income_ledger_calculations` (§16.9) either way.
+**Given** a Buyback with a valid Customer ID and no walk-in name.
+**Then** the row is recorded with `member_id` set and both `walk_in_name`/`walk_in_mobile` null — identical to the pre-23-09-2026 member-only behavior.
+
+**Given** `new_sale` is submitted directly to the manual Sales form endpoint (`POST /admin/sales`).
+**Then** the request is rejected — `RecordStoreSaleRequest` only accepts `purchase`/`repurchase` since 23-09-2026; `new_sale` is reserved for `RecordPlanJewelleryDelivery`'s automatic path (§16.10), which calls `ConfirmStoreSale` directly and never goes through this Request.
+
+### 30. Store-Wallet-Funded Cash Collection, Jewellery Restock Shipments, and Assisted Registration (NEW 24-09-2026 — user decision, DOMAIN_LOGIC.md §12.2/§16.12, T-151/T-152/T-153)
+
+**Given** a member initiates a cash EMI installment payment (or a cash registration), creating a `pending` `payments` row.
+**When** a Store Admin finds them by Customer ID on the Sales page and clicks "Collect via Store Wallet".
+**Then** the store's own Store Wallet is debited the exact payment amount, the payment becomes `status=paid` with `mode` still `cash` and `paying_store_id` set to that store, and — for an EMI installment — the installment becomes `paid`, or — for a registration — the member is activated (Customer ID assigned, `status=active`), exactly as `ApproveCashPayment` would, with no separate Super Admin approval step.
+**Given** the store's own Store Wallet balance is less than the payment amount.
+**Then** the collection is blocked with an `amount` validation error, and the payment stays `pending`.
+
+**Given** a member's plan-jewellery delivery (`RecordPlanJewelleryDelivery`) at Store X, where the member's `paid` registration payment's `paying_store_id` is **not** Store X (paid online, paid cash with no store, or paid cash but settled through a different store).
+**Then** a `store_restock_shipments` row is created in the same transaction as the delivery, `status=owed`, snapshotting the plan's item name/metal/weight and the delivery's sale amount as `value`.
+**Given** instead the registration payment's `paying_store_id` **is** Store X (settled via T-151's Store-Wallet-Funded Cash Collection at that same store).
+**Then** no restock shipment is created — the store already holds the money.
+**Given** an owed shipment.
+**When** Super Admin marks it "Mark Sent".
+**Then** `status=sent`, `sent_at`/`sent_by` recorded; the store cannot yet confirm it received (still-`owed` and already-`received` shipments both reject a "Confirm Received" attempt), and a different store cannot touch this shipment at all (403).
+**When** the store (or Super Admin) then confirms it received.
+**Then** `status=received`, and the item is added to that store's `store_inventory_items` via `AllocateStoreInventoryItem`'s existing merge-or-create logic (quantity 1, price = the shipment's snapshotted value).
+
+**Given** a logged-in Member (or Store) opens "Register a New Member" (`/member/register-new` or `/admin/register-new`) and registers a **different, new** member — same fields as the public `/join` form, including a manually-typed sponsor code.
+**When** they choose payment mode **Wallet** and submit.
+**Then** `RegisterMember` runs exactly as it does for the public flow (creating the new member + a `pending` registration payment, `mode=wallet`), and `ConfirmWalletFundedRegistration` immediately settles it in the same request: the logged-in payer's own wallet (Member's `wallet_balance` via `WalletLedgerService::debit()`, or the Store's own Store Wallet) is debited the registration amount, the Company Wallet is credited the same amount (`company_wallet_ledger_entries`, category `assisted_registration`), the payment becomes `paid` with `paying_member_id` or `paying_store_id` set (never both), and the **new** member is activated — with their own Level Income/Pair/Booster/etc. all evaluating from their own Sponsor/Placement chain exactly as normal, no special treatment for how the payment was funded.
+**Given** the payer's wallet balance is less than the registration amount.
+**Then** the request is blocked with an `amount` validation error; the new member and their `pending` payment row still exist (mirroring a normal registration's pending state) — no wallet was touched.
+**Given** payment mode Cash or Online is chosen instead (still available on this form).
+**Then** behavior is completely unchanged from the public `/join` flow — a pending cash payment (Super Admin approval) or a Razorpay checkout redirect.
+
+### 31. Store sale priced automatically at the current rate — locked amount, income on metal value only (NEW 28-09-2026 — user decision, DOMAIN_LOGIC.md §21 "28-09-2026 feedback batch", T-169)
+
+**Given** the current gold rate row is ₹60,000 per 10 gm (₹6,000/gm) with making **12%**, and Super Admin's `store_gst_percent` is **3**.
+**When** a store records a Purchase of one 5 gm gold item (from inventory, or entered with metal and weight).
+**Then** the store types **no** rate, amount or GST. The sale is priced by the server: metal ₹30,000 (5 × 6,000) + making ₹3,600 = subtotal (`sale_amount`) **₹33,600**; GST 3% = **₹1,008**; total **₹34,608**. The row snapshots `metal_rate_id`, `rate` (per gram), `metal_value` 30,000, `making_charge_percent` 12, `making_charges` 3,600 and `gst_percent` 3. (The user's own worked example adds ₹45 hallmark before GST → subtotal 33,645, GST 1,009.35, total 34,654.35. Hallmark comes with T-171.)
+**Then** Store Profit Distribution and Purchase/Repurchase income are calculated on the **metal value ₹30,000 only**, e.g. the Store Owner's 2% = ₹600, not 2% of 33,600. Historic rows without `metal_value` keep using `sale_amount`.
+**Given** quantity 2 of the same item → every figure doubles (metal 60,000, making 7,200, GST 2,016, total 69,216).
+**Given** no rate has ever been set for the metal → the sale is refused with a `metal` error. A rate entered on an earlier day keeps applying until a newer one is entered.
+**Given** a manual (non-inventory) item → metal **and** weight are required.
+
+### 32. Current Rate booking needs Super Admin approval (NEW 28-09-2026 — user decision, DOMAIN_LOGIC.md §3.0 T-166 note)
+
+**Given** scenario 21's member (Plan A, 4 EMIs paid) presses "Request Booking at Current Rate".
+**Then** a `current_rate_booking_requests` row is `pending`. The schedule and every installment are **unchanged** (still ₹1,000). The Membership page shows "Current Rate booking requested" instead of the button, and a second request is refused. Every Super Admin gets the notification immediately (bell + page; email and SMS channels too). The Super Admin dashboard shows 1 pending request and an alert. The Rate Booking Requests page shows the metal to buy: 100 g silver, rate per 10 gm, metal value, making, total ₹35,000, 16 pending EMIs, new EMI first → last.
+**When** Super Admin approves (posting the rate id and paid count they were shown).
+**Then** exactly scenario 21's booking is applied. The `booked` event is performed by the Super Admin, the request is `approved`, and the member is notified.
+**Approval-day rule:** Plan D with 2 paid requests; before approval the member pays EMI 3 and gold moves to ₹6,500/g → the approval quote is 3 paid / 7 pending at ₹6,500. Approving gives 65,000 − 30,000 = 35,000 over 7, so **EMI 4 = 5,000 + 350 = ₹5,350**. An overdue unpaid EMI still counts as pending.
+**Stale view:** if an EMI was paid after Super Admin loaded the page (they posted 4 paid, now 5) → refused, and the request stays pending.
+**Cancel:** an empty message is refused. With a message, the request is `cancelled`, the schedule is untouched, and the EMI Schedule page shows "cancelled on DD-MM-YYYY" with Super Admin's message. The member may request again. A member cannot open the Super Admin queue (403).
+
+### 33. Bills — generated on request, duplicates, hallmark/HUID, company delivery (NEW 28-09-2026 — user decisions, DOMAIN_LOGIC.md §16.2 T-171 note)
+
+**Store bill (the user's own worked example):** 5 g gold at ₹60,000 per 10 gm, 12% making, 3% GST. The sale is recorded at subtotal 33,600 / GST 1,008 / total 34,608 with **no bill**. When "Generate bill" is used with **Hallmarked** ticked and one piece (HUID `AB12CD`, charge ₹45), the result is subtotal **₹33,645**, GST **₹1,009.35**, total **₹34,654.35**. The HUID is stored (upper-cased) and `hallmark_charges` = 45. The Store Owner's income is unchanged at 2% of the ₹30,000 metal value = ₹600.
+**Guards:** the HUID count must equal the quantity; a HUID is 6–8 letters/digits (T-175, 29-09-2026; 5 or 9 characters is refused) and may not repeat. A second "Generate bill" is refused. Opening the bill right after generating shows **ORIGINAL**, and every later view shows **DUPLICATE COPY** with the same number. No bill → the invoice URL is 404. Super Admin can open any generated store bill.
+**Company delivery:** a Current Rate member (100 g silver locked at ₹300/g). Today's silver row has 10% making and GST is 3%. Super Admin delivers "Silver anklet" 50 g × 2 with 2 HUIDs at ₹45 each → metal **₹30,000** (locked rate) + making **₹3,000** + hallmark **₹90** = **₹33,090**; GST **₹992.70**; total **₹34,082.70**; bill `GWD-…`. Before the last EMI is paid, delivery is refused ("Delivered after the last EMI — N EMI(s) still to pay"). The entitlement row is created on delivery and marked delivered. There is **no income** (no store sale, no Purchase/Repurchase row, wallet unchanged), and a second delivery is refused.
+### 34. System Maintenance — an entry inserted directly under the root (NEW 29-09-2026 — user decision, DOMAIN_LOGIC.md §2 T-174 note)
+
+**Given** member A sits on the root's Left (sponsor = root). **When** Super Admin inserts on the Left.
+**Then** a new entry X is created exactly like a daily dummy entry: unassigned company dummy, the dummy plan (default Plan A), sponsor = root, installment #1 silently paid. X also has `benefits_limited = true`. X takes the root's Left slot and A moves under X on the **Left**; A's sponsor is still the root. A second Left insert Y takes the root's Left slot and X moves under Y (Left): repeated inserts form a line. An insert on an empty side just takes that slot.
+**Given** X is assigned to a leader and member B joins with sponsor X on X's Right (Plan E).
+**Then** X gets B's pair entry on its Right leg. B's Level 1 row is `skipped` / `benefits_limited`, and X's wallet stays empty. X is never paid Level Income, Purchase/Repurchase (not even its own self 2%), Store Profit or Draw (including the Draw upline benefit), and X never enters a Draw group. A joined before X existed, so X has no pair entry from A. X's Booster team counts the whole live subtree, including A. The Earnings Verifier reports **0 errors**: it ignores an ancestor that was created after the joining.
+**Access:** an Admin gets 403 on the page and on the insert. A side other than `left`/`right` is refused.
+
+### 35. Pair/Reward — each milestone needs 2 more qualified directs (NEW 29-09-2026 — user decision, DOMAIN_LOGIC.md §7.3, T-178)
+
+**Given** the default milestones (M1 5L/5R, total 2 directs; M2 50L/50R, total 4 directs; ₹50 per silver entry) and beneficiary P with **55 unused Left and 55 unused Right** silver entries.
+**When** P has 3 qualified directs (all Plan E, registration paid) and the month-end evaluation runs.
+**Then** only **M1** is paid: 5L + 5R consumed, ₹500. M2's entries are there (50L/50R left), but 3 < 4 directs, so 50L/50R carry forward unconsumed.
+**When** a 4th Plan E direct joins (registration paid) and the evaluation runs again.
+**Then** **M2** is paid: 50L + 50R consumed, ₹5,000. Wallet total ₹5,500.
+**Given** instead P starts with 4 qualified directs and the same 55L/55R. **Then** a single run pays **both** M1 and M2 (₹5,500), as before.
+**Given** P has 2 Plan E directs plus one Plan A direct with 5 of the 6 required EMIs paid, and 55L/55R. **Then** only M1 is paid (the Plan A direct is not counted yet). Once its 6th EMI is paid, P has 3 qualified directs, which is still < 4, so M2 is still not paid. A direct that is not `active` (e.g. `cancelled`) never counts.
+**Regression to test:** Booster's own Min. Directs (`EvaluateBoosterQualification`) is unchanged. `earnings:verify` warns when a paid milestone's member currently has fewer qualified directs than that milestone's total.
+
+### 36. Level Income — each level needs 2 more qualified directs; short of them the income is held (NEW 29-09-2026, T-179; hold-and-release CHANGED 30-09-2026, T-186 — user decisions, DOMAIN_LOGIC.md §6)
+
+**Given** the default `level_income_min_directs` (L1 = 2, L2 = 4, L3 = 6 …) and the default Silver rates (L1 5%, L2 2%, L3 1%). There is a sponsor chain S3 → S2 → S1 → P: S1 sponsors P, S2 sponsors S1, and S3 sponsors S2. Counting their Plan E directs with registration paid (the chain link itself included): **S1 has 2**, **S2 has 3** and **S3 has 6**.
+**When** P's ₹20,000 Plan E registration payment is confirmed.
+**Then** L1 → S1 is **paid ₹1,000** (5%; 2 ≥ 2). L2 → S2 is **`held` ₹400** (`insufficient_directs`, 3 < 4; 2% of ₹20,000, no wallet entry yet). L3 → S3 is **paid ₹200** (1%; 6 ≥ 6). Levels 4–12 are `chain_too_short`.
+**When** S2 then gets a 4th qualified direct. **Then** (CHANGED 30-09-2026, T-186 — was "lapsed, never paid later") the held row becomes `paid` ₹400 with `released_at` set, S2's wallet gets one confirmed ₹400 credit, and a second release run pays nothing more.
+**Given** S1's second direct is a Plan A member with 5 of 6 EMIs paid. **Then** S1 has 1 qualified direct, so L1 on P's payment is `held` `insufficient_directs`. A direct that is not `active` never counts either.
+**T-186 release rules to test:**
+- Each level is released on its own count. A beneficiary at 2 directs holding only an L2 row (needs 4) gets nothing.
+- A beneficiary who is not `active` keeps the row held, and it is released once they are active again.
+- Through the real flow, a second direct's cash approval releases the sponsor's held L1 at once: S1's wallet = ₹1,000 released + ₹1,000 L1 on the new payment.
+- Publishing a rule version that lowers L2 to 1 direct releases every held L2 row. In the test that is ₹400 + ₹400 for S2.
+**Regression to test:** Purchase/Repurchase and Store Profit rows ignore the directs rule. A rule version without `level_income_min_directs` pays exactly as before. `earnings:verify` accepts a `held` row (amount = rate × payment) while the beneficiary still has fewer directs than the active version needs. It **warns** "should have been released" when the count is met but the row is still held. A released row is checked like any paid row and has exactly one wallet credit.
+
+### 37. Pay All Remaining EMIs at once (NEW 30-09-2026 — user decision, DOMAIN_LOGIC.md §5 point 9, T-184)
+
+**Given (Future Rate)** a Plan A member (₹1,000 × 20, Silver) has paid EMIs 1–4. EMI 5 is `overdue` and 6–20 are `upcoming`, which makes 16 unpaid EMIs. Their sponsor chain is S1 → S2 → S3 (directs gate off), and the Silver rates are L1 5%, L2 2%, L3 1%.
+**When** they choose "Pay All Remaining EMIs" by cash and Super Admin approves.
+**Then** one `payments` row is created: `type = emi_installment`, amount **₹16,000**, `covers_installments = 16`. EMIs 5–20 all point to it and all become `paid`, with amounts unchanged at ₹1,000. Level Income is paid on ₹16,000: **S1 ₹800, S2 ₹320, S3 ₹160**, one set of 12 rows. The paid count goes from 4 to 20, which is ≥ 6, so the Pair entries are created now, once. Plan-jewellery delivery is no longer refused.
+**Given (Current Rate)** a Plan D member (₹10,000 × 10, Gold) booked at the Current Rate with 2 EMIs paid, using the T-167 clean fixture of scenario 21: remaining ₹40,000 over 8, principal ₹5,000, EMIs ₹5,400, 5,350, 5,300, 5,250, 5,200, 5,150, 5,100, 5,050. They then paid EMI 3 (₹5,400) and EMI 4 (₹5,350) one by one.
+**When** they pay all remaining EMIs.
+**Then** the amount is **₹30,000** (40,000 − 5,000 × 2). This is the principal of the 6 unpaid EMIs with no maintenance; with maintenance it would have been ₹31,050. After confirmation EMIs 5–10 are `paid` at **₹5,000 each** (sum ₹30,000). Level Income uses the Gold rates on ₹30,000, for example L1 at 2% = **₹600**.
+**Rounding check (Current Rate, Plan A fixture of scenario 21):** remaining ₹31,000 over 16, principal ₹1,937.50. After 1 EMI paid since booking, the full amount is 31,000 − 1,937.50 = **₹29,062.50**, which is 15 rows × ₹1,937.50.
+**Guards to test:**
+- no unpaid EMI means the option is refused and not offered;
+- an unpaid EMI with a `pending` payment (cash awaiting approval) makes the full payment refused;
+- while a full payment is pending, a single-EMI payment is refused;
+- a pending Current Rate booking request is cancelled with the system message when a full payment is initiated;
+- if a cash full payment is rejected, no installment changes (still unpaid, amounts unchanged), and paying again works;
+- a one-time plan member (E/F) has no option;
+- a member cannot pay another member's schedule;
+- approving the same full payment twice changes nothing more.
+
+### 38. An overdue EMI holds the member's earnings until the record is clear (NEW 30-09-2026 — user decision, DOMAIN_LOGIC.md §12, T-182)
+
+**Given** member M is on Plan A and has paid EMIs 1–4. **EMI 5 is `overdue`**, and M's wallet balance is ₹0. P is sponsored by M (M is P's Level 1; directs gate off; Silver L1 5%).
+**When** P's ₹20,000 Plan E registration is confirmed.
+**Then** the Level 1 row to M is `paid` ₹1,000 as usual. Its wallet credit is **`pending` (held)**, and M's `wallet_balance` stays **₹0**. M's wallet page shows ₹1,000 held with "Pay your overdue EMI to release it".
+**When** M pays EMI 5 (₹1,000, cash approved).
+**Then** the held ₹1,000 becomes `confirmed` and M's balance is **₹1,000**. EMI 5's own Level Income goes to M's upline as usual.
+**Given** instead that EMIs 5 **and** 6 are overdue. **Then** paying EMI 5 alone keeps the ₹1,000 held (still ₹0), and paying EMI 6 releases it. "Pay All Remaining EMIs" (scenario 37) also releases it.
+**Pair/Reward:** M has 5L/5R unused entries and 2 qualified directs, and EMI 5 is overdue at month-end. **Then** no reward is paid and the 10 entries stay unused. After M pays, the next month-end pays **₹500**.
+**Booster:** M holds a Level 1 schedule, and month 2 (₹5,000) falls due while EMI 5 is overdue. **Then** the daily processor leaves it `pending`. After M pays EMI 5, the next run pays it.
+**Unaffected (regression):** a Plan E member (no EMI schedule) is credited at once; a member whose EMIs are merely `due` (not overdue) is credited at once. `earnings:verify` accepts a held credit while the member is overdue, warns when a held credit remains with no overdue EMI, and the wallet balance check counts only confirmed credits.
+
+### 39. Store upline income unlocks at 10 qualified directs, for life (NEW 30-09-2026 — user decision, DOMAIN_LOGIC.md §15/§16.4, T-183)
+
+**Given** `store_income_min_directs = 10` and the Silver defaults: Purchase/Repurchase self 5%, L1 2%, L2 1%; Store Profit owner 2%, Sponsor L1 0.5%, L2 0.25%. Buyer B's sponsor chain is U1 → U2. U1 has **9** qualified directs (B included) and U2 has **10**. Every direct is Plan E with its registration paid.
+**When** B buys Silver jewellery with a metal value of ₹10,000 (member Purchase).
+**Then** B's self income is **₹500** (unchanged). L1 → U1 is **skipped `store_income_locked`, ₹0**. L2 → U2 is **paid ₹100**, and U2's `store_income_unlocked_at` is now set. L3+ are `chain_too_short`.
+**When** U1's 10th direct registers (Plan E, payment confirmed).
+**Then** U1 is unlocked at that moment, before any store sale.
+**When** one of U1's directs is later cancelled (9 qualified again) and B buys another ₹10,000.
+**Then** L1 → U1 is **paid ₹200**: the unlock is for life.
+**Store Profit:** store owner O's sponsor chain is S1 → S2. S1 has 3 qualified directs (O included) and S2 has 10. A ₹10,000 Silver sale at O's store gives O **₹200** (unchanged), **no row** for S1 (locked, lapsed), and S2 **₹25** (0.25%, Sponsor Level 2).
+**Regression:**
+- a rule version without the key (or with 0) pays every level as before and records no unlock;
+- a walk-in sale's Store Owner income is unchanged;
+- `earnings:verify` errors when a locked member was paid, or an unlocked member's level was skipped or missing, judged by `store_income_unlocked_at` against the sale time.
+
+### 40. Repurchase on EMI — booking, approval and payments (NEW 30-09-2026 — user decisions, DOMAIN_LOGIC.md §16.13, T-185a)
+
+**Given** silver ₹350/g with 0% making, a store piece "Silver Anklet" (100 g, quantity 2), and a member M (sponsor S1 → S2; directs gate off; Silver Level rates L1 5%, L2 2%).
+**When** the Store Admin requests a Repurchase on EMI for M with **10 EMIs**, and Super Admin approves.
+**Then:**
+- the total value is 100 × 350 = **₹35,000**;
+- principal ₹3,500 × 10, with maintenance 1% of what is still remaining: ₹350, 315, 280, 245, 210, 175, 140, 105, 70, 35;
+- **EMIs are ₹3,850, 3,815, 3,780, 3,745, 3,710, 3,675, 3,640, 3,605, 3,570, 3,535** (total ₹36,925);
+- a `store_repurchase` schedule is created, with EMI #1 `due` today and the rest monthly;
+- the piece's stock goes 2 → **1**.
+
+**When** M pays EMI #1 (₹3,850, cash approved). **Then** Level Income is **S1 ₹192.50, S2 ₹77**. There are no Purchase/Repurchase rows, no Store Profit rows, and no Pair entries. M's plan schedule is untouched.
+**When** M then pays all remaining EMIs. **Then** the amount is **₹31,500** (35,000 − 3,500), and the booking becomes `completed`.
+**With 20 EMIs** instead: principal ₹1,750; EMI 1 = 1,750 + 350 = **₹2,100**; EMI 20 = 1,750 + 17.50 = **₹1,767.50**.
+**Guards to test:**
+- a second store EMI request for M while one is pending or active is refused;
+- a Purchase, a walk-in customer, a piece of another store, an out-of-stock piece, or an EMI count other than 10/20 is refused;
+- a Store Admin cannot approve (Super Admin and the company Admin can, like other booking requests, T-173);
+- a cancel needs a message and leaves stock unchanged;
+- an overdue store EMI holds M's earnings (scenario 38).
+
+### 41. Repurchase on EMI — automatic break at 3 overdue EMIs (NEW 30-09-2026 — user decisions, DOMAIN_LOGIC.md §16.13, T-185b)
+
+**Given** the 10-EMI booking above. M paid EMI #1 (₹3,850) and EMI #2 (₹3,815); EMI #2 was paid on a day when silver was **₹400/g**. EMIs #3, #4 and #5 then become overdue.
+**When** the daily EMI job marks the 3rd one overdue.
+**Then:**
+- the booking is `broken`, EMIs #3–#10 are `cancelled`, and the piece's stock is back up by 1;
+- the principal paid is 3,500 × 2 = **₹7,000** (the ₹665 of maintenance is excluded);
+- the silver owed is 7,000 ÷ 400 = **17.500 g**;
+- M no longer has an overdue EMI, so any earnings held because of it are released;
+- the Level Income already paid on EMIs #1–#2 is unchanged.
+
+**If** nothing was paid, the booking breaks with nothing owed.
+
+### 42. Repurchase on EMI — handing over the piece, or the silver after a break (NEW 30-09-2026 — user decisions, DOMAIN_LOGIC.md §16.13 point 4, T-185c)
+
+**Fully paid piece.** **Given** the 10-EMI booking of scenario 40 (100 g silver at a locked ₹350/g, 0% making, so the metal value is ₹35,000), with every EMI paid (`completed`), and a GST setting of **3%**.
+**When** the Store Admin hands the piece over.
+**Then:**
+- a store sale is recorded: type `repurchase`, metal value ₹35,000, making ₹0, subtotal ₹35,000, **GST ₹1,050, total ₹36,050**, `prepaid_amount` **₹35,000**, so **₹1,050 is collected at delivery**;
+- the piece's stock does not change (it was already held at approval);
+- a restock owed of 100 g / ₹35,000 is created, and the booking is `delivered`;
+- there are no Purchase/Repurchase or Store Profit rows.
+
+**Break silver.** **Given** the broken booking of scenario 41: **17.500 g** owed. Today silver is **₹400/g with 10% making**, GST is 3%, and the store has a 20 g and a 15 g silver piece.
+**Then** the 15 g piece is refused because it is lighter than 17.5 g.
+**When** the 20 g piece is handed over. **Then:**
+- metal value 20 × 400 = ₹8,000; making ₹800; subtotal ₹8,800; GST ₹264; **total ₹9,064**;
+- `prepaid_amount` = 17.5 × 400 = **₹7,000**, so **₹2,064 is collected**;
+- the 20 g piece's stock goes down by 1;
+- a restock owed of 17.5 g / ₹7,000 is created, and the booking is `delivered`.
+
+**Regression:**
+- a booking in another status, or of another store, cannot be handed over;
+- the member can request a new Repurchase on EMI afterwards (the old one is closed);
+- `earnings:verify` errors if a handover sale has any income row.
 
 ## Concurrency Verification (T-020, 15-09-2026)
 

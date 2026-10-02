@@ -72,4 +72,19 @@ class User extends Authenticatable implements PasskeyUser
     {
         return $this->hasOne(Store::class, 'owner_user_id');
     }
+
+    /**
+     * DOMAIN_LOGIC.md §2 (29-09-2026) — Super Admin or the company Admin: both run the company-side portal (the Admin
+     * without a few Super-Admin-only pages) and receive the company alerts.
+     */
+    public function isCompanyStaff(): bool
+    {
+        return in_array($this->role, ['super_admin', 'admin'], true);
+    }
+
+    /** The Store Owner role (`store_admin`, shown as "Store Admin"). */
+    public function isStoreAdmin(): bool
+    {
+        return $this->role === 'store_admin';
+    }
 }

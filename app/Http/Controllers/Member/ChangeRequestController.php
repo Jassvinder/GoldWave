@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Profile\SubmitProfileChangeRequestRequest;
 use App\Models\ProfileChangeRequest;
 use App\Support\Dates;
+use App\Support\WebpImageStore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -49,7 +50,7 @@ class ChangeRequestController extends Controller
                 'bank_name' => $request->string('bank_name')->toString(),
             ];
         } elseif ($fieldName === 'profile_photo_path') {
-            $path = $request->file('new_photo')->store('profile-photos', 'public');
+            $path = WebpImageStore::store($request->file('new_photo'), 'profile-photos');
 
             if ($path === false) {
                 throw ValidationException::withMessages(['new_photo' => 'The photo could not be stored.']);
@@ -62,8 +63,11 @@ class ChangeRequestController extends Controller
 
         $action($member, $fieldName, $newValue, $request->string('reason')->toString() ?: null);
 
-        return redirect()->route('member.change-requests.index')
-            ->with('status', 'Change request submitted.');
+        // T-143 — a request filed from the Profile page returns there; the M04 page keeps its own tracker.
+        $destination = $request->input('return_to') === 'profile' ? 'member.profile.show' : 'member.change-requests.index';
+
+        return redirect()->route($destination)
+            ->with('status', 'Change request submitted. The Super Admin has been notified.');
     }
 
     /** @return array<string, mixed> */

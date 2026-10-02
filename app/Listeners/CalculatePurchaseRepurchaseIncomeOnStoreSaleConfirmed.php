@@ -8,8 +8,8 @@ use App\Events\StoreSaleConfirmed;
 /**
  * ARCHITECTURE.md's event-driven compensation wiring: every confirmed store
  * sale triggers Purchase/Repurchase Upline Income independently of Store
- * Profit Distribution (DOMAIN_LOGIC.md §15) — the Action itself is a no-op
- * when the sale has no purchasing member.
+ * Profit Distribution (DOMAIN_LOGIC.md §15) — for a walk-in sale (no
+ * purchasing member) the Action pays the Store Owner instead (T-170).
  */
 class CalculatePurchaseRepurchaseIncomeOnStoreSaleConfirmed
 {

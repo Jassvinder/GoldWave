@@ -2,9 +2,11 @@
 
 namespace App\Http\Requests\Payments;
 
+use App\Services\Payments\PaymentModes;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
-/** DOMAIN_LOGIC.md §10 — same Online/Cash choice as registration payment (§3.1). */
+/** DOMAIN_LOGIC.md §10 — same payment choice as registration (§3.1): Cash / GPay-UPI (+ Online when enabled), T-196. */
 class PayEmiInstallmentRequest extends FormRequest
 {
     public function authorize(): bool
@@ -18,7 +20,8 @@ class PayEmiInstallmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'mode' => ['required', 'in:online,cash'],
+            'mode' => ['required', Rule::in(PaymentModes::offered())],
+            ...PaymentModes::upiProofRules('mode'),
         ];
     }
 }

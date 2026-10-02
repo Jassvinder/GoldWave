@@ -24,11 +24,23 @@ return new class extends Migration
         Schema::create('store_sales', function (Blueprint $table) {
             $table->id();
             $table->foreignId('store_id')->constrained('stores');
+            // §16.8 — the tracked stock item this sale draws from, if any.
+            $table->foreignId('store_inventory_item_id')->nullable()->constrained('store_inventory_items');
             $table->foreignId('member_id')->nullable()->constrained('members');
             $table->enum('transaction_type', ['new_sale', 'purchase', 'repurchase']);
             $table->string('item_name');
+            $table->enum('metal', ['gold', 'silver'])->nullable();
             $table->decimal('item_weight', 10, 3)->nullable();
+            $table->unsignedInteger('quantity')->default(1);
             $table->decimal('rate', 14, 2)->nullable();
+            // T-169 — server-side price snapshot; `metal_value` is the income base (null on typed-amount sales).
+            $table->foreignId('metal_rate_id')->nullable()->constrained('metal_rates');
+            $table->decimal('metal_value', 14, 2)->nullable();
+            $table->decimal('making_charge_percent', 5, 2)->nullable();
+            $table->decimal('making_charges', 14, 2)->nullable();
+            // T-171 — added before GST when the bill is generated.
+            $table->decimal('hallmark_charges', 14, 2)->nullable();
+            $table->decimal('gst_percent', 5, 2)->nullable();
             $table->decimal('sale_amount', 14, 2);
             $table->decimal('gst_amount', 14, 2)->default(0);
             $table->decimal('total_invoice_amount', 14, 2);
@@ -41,9 +53,49 @@ return new class extends Migration
             $table->index(['store_id', 'transaction_type', 'status']);
         });
 
+        // T-171 — the company's own plan-jewellery handover by Super Admin: a direct entry (no stock), priced like a
+        // purchase, no income, billed at once.
+        Schema::create('company_deliveries', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('product_benefit_id')->unique()->constrained('product_benefits');
+            $table->foreignId('member_id')->constrained('members');
+            $table->string('item_name');
+            $table->enum('metal', ['gold', 'silver']);
+            $table->decimal('item_weight', 10, 3);
+            $table->unsignedInteger('quantity')->default(1);
+            $table->foreignId('metal_rate_id')->nullable()->constrained('metal_rates');
+            $table->decimal('rate', 14, 2);
+            $table->decimal('metal_value', 14, 2);
+            $table->decimal('making_charge_percent', 5, 2);
+            $table->decimal('making_charges', 14, 2);
+            $table->decimal('hallmark_charges', 14, 2)->default(0);
+            $table->decimal('sale_amount', 14, 2);
+            $table->decimal('gst_percent', 5, 2);
+            $table->decimal('gst_amount', 14, 2);
+            $table->decimal('total_invoice_amount', 14, 2);
+            $table->foreignId('delivered_by')->constrained('users');
+            $table->timestamp('delivered_at');
+            $table->timestamps();
+        });
+
+        // T-171 — one row per hallmarked piece (HUID + its charge) on a store sale's or company delivery's bill.
+        Schema::create('hallmark_entries', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('store_sale_id')->nullable()->constrained('store_sales')->cascadeOnDelete();
+            $table->foreignId('company_delivery_id')->nullable()->constrained('company_deliveries')->cascadeOnDelete();
+            $table->unsignedInteger('piece_no');
+            $table->string('huid', 16);
+            $table->decimal('charge', 14, 2);
+            $table->timestamps();
+
+            $table->index('huid');
+        });
+
+        // A bill belongs to a store sale or a company delivery, and exists only once generated (T-171).
         Schema::create('invoices', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('store_sale_id')->unique()->constrained('store_sales')->cascadeOnDelete();
+            $table->foreignId('store_sale_id')->nullable()->unique()->constrained('store_sales')->cascadeOnDelete();
+            $table->foreignId('company_delivery_id')->nullable()->unique()->constrained('company_deliveries');
             $table->string('invoice_no')->unique();
             $table->timestamp('generated_at');
             $table->string('pdf_path')->nullable();
@@ -80,6 +132,8 @@ return new class extends Migration
 
         Schema::dropIfExists('store_profit_distributions');
         Schema::dropIfExists('invoices');
+        Schema::dropIfExists('hallmark_entries');
+        Schema::dropIfExists('company_deliveries');
         Schema::dropIfExists('store_sales');
     }
 };

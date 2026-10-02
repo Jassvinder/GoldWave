@@ -22,6 +22,8 @@ class Store extends Model
 {
     protected $fillable = [
         'name',
+        'store_code',
+        'password',
         'owner_user_id',
         'contact',
         'location',
@@ -30,9 +32,12 @@ class Store extends Model
         'advance_amount',
     ];
 
+    protected $hidden = ['password'];
+
     protected function casts(): array
     {
         return [
+            'password' => 'hashed',
             'jewellery_allocation_value' => 'decimal:2',
             'advance_amount' => 'decimal:2',
         ];
@@ -66,6 +71,12 @@ class Store extends Model
     public function buybacks(): HasMany
     {
         return $this->hasMany(StoreBuyback::class);
+    }
+
+    /** @return HasMany<StoreRestockShipment, $this> */
+    public function restockShipments(): HasMany
+    {
+        return $this->hasMany(StoreRestockShipment::class);
     }
 
     /** The Store Owner's own network Member identity (DOMAIN_LOGIC.md §21). */

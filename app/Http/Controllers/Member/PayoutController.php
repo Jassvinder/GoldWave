@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Member;
 
+use App\Actions\Payout\CancelPayoutRequest;
 use App\Actions\Payout\SubmitPayoutRequest;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Payout\SubmitPayoutRequestRequest;
@@ -93,5 +94,17 @@ class PayoutController extends Controller
 
         return redirect()->route('member.payout.index')
             ->with('status', 'Payout request submitted.');
+    }
+
+    public function cancel(Request $request, PayoutRequest $payout_request, CancelPayoutRequest $action): RedirectResponse
+    {
+        $member = $request->user()->member;
+
+        abort_if($member === null || $payout_request->member_id !== $member->id, 404);
+
+        $action($payout_request);
+
+        return redirect()->route('member.payout.index')
+            ->with('status', 'Payout request cancelled.');
     }
 }

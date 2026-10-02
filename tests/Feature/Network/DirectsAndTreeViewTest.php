@@ -118,6 +118,22 @@ test('Tree View re-roots when navigating to a placement descendant, showing that
         );
 });
 
+test('Tree View loads 3 generations below the root and no deeper (T-118)', function () {
+    $root = createNetworkMember('GWL080');
+    $parent = $root;
+    foreach (range(1, 6) as $generation) {
+        $parent = createNetworkMember('GWL08'.$generation, placementParentId: $parent->id, placementSide: 'left');
+    }
+
+    $this->actingAs($root->user)
+        ->get('/member/tree')
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('root.left.left.left.customer_id', 'GWL083')
+            ->where('root.left.left.left.left', null)
+        );
+});
+
 test('guests are redirected away from Directs and Tree views', function () {
     $this->get('/member/directs')->assertRedirect();
     $this->get('/member/tree')->assertRedirect();
@@ -172,4 +188,27 @@ test('Super Admin search is not restricted to any particular downline', function
     $this->actingAs($admin)
         ->get('/member/directs/search?customer_id=GWL130')
         ->assertRedirect("/member/directs/{$unrelated->id}");
+});
+
+test('Tree and Directs cards carry gender, sponsor name, photo and status for the avatar/inactive indicator (T-119)', function () {
+    $root = createNetworkMember('GWL110');
+    $root->update(['gender' => 'male']);
+    $child = createNetworkMember('GWL111', sponsorId: $root->id, placementParentId: $root->id, placementSide: 'left');
+    $child->update(['gender' => 'female', 'status' => 'cancelled', 'profile_photo_path' => 'profile-photos/x.jpg']);
+
+    $this->actingAs($root->user)->get('/member/tree')->assertInertia(fn ($page) => $page
+        ->where('root.gender', 'male')
+        ->where('root.sponsor_name', null)
+        ->where('root.left.gender', 'female')
+        ->where('root.left.status', 'cancelled')
+        ->where('root.left.sponsor_name', $root->user->name)
+        ->where('root.left.photo_url', fn ($url) => str_ends_with((string) $url, 'profile-photos/x.jpg'))
+    );
+
+    $this->actingAs($root->user)->get('/member/directs')->assertInertia(fn ($page) => $page
+        ->where('selectedMember.gender', 'male')
+        ->where('directs.0.gender', 'female')
+        ->where('directs.0.status', 'cancelled')
+        ->where('directs.0.sponsor_name', $root->user->name)
+    );
 });

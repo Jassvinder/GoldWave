@@ -3,7 +3,7 @@ import { ClipboardList, Receipt } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { FormSection } from '@/components/form-section';
 import { Badge } from '@/components/ui/badge';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatRatePer10g } from '@/lib/utils';
 
 type Sale = {
     id: number;
@@ -84,8 +84,8 @@ const saleColumns: DataTableColumn<Sale>[] = [
         render: (row) => (
             <span>
                 {row.item_weight ? `${row.item_weight}g · ` : ''}
-                {row.rate ? `₹${row.rate}/g · ` : ''}₹{row.total_invoice_amount}{' '}
-                · {row.payment_source}
+                {row.rate ? `${formatRatePer10g(row.rate)} · ` : ''}₹
+                {row.total_invoice_amount} · {row.payment_source}
                 {row.store_wallet_deduction_reference
                     ? ` (ref ${row.store_wallet_deduction_reference})`
                     : ''}

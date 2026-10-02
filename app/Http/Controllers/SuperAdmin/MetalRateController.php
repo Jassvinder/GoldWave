@@ -24,6 +24,7 @@ class MetalRateController extends Controller
                 'id' => $rate->id,
                 'metal' => $rate->metal,
                 'rate_per_gram' => $rate->rate_per_gram,
+                'making_charge_percent' => $rate->making_charge_percent,
                 'effective_from' => Dates::date($rate->effective_from),
             ]);
 
@@ -36,7 +37,8 @@ class MetalRateController extends Controller
     {
         $action(
             $request->string('metal')->toString(),
-            (float) $request->input('rate_per_gram'),
+            (float) $request->input('rate_per_10_grams'),
+            (float) $request->input('making_charge_percent'),
             $request->string('effective_from')->toString(),
             $request->user(),
         );

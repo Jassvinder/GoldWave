@@ -25,7 +25,7 @@ type Props = {
 };
 
 const METHODS = [
-    { value: 'bank_transfer', label: 'Bank Transfer' },
+    { value: 'bank_transfer', label: 'Bank Transfer / Netbanking' },
     { value: 'gpay_upi', label: 'GPay / UPI' },
     { value: 'cheque', label: 'Cheque' },
     { value: 'in_app_provider', label: 'In-App Provider' },

@@ -12,11 +12,13 @@ import {
     Receipt,
     TrendingUp,
     User,
+    UserPlus,
     Users,
     WalletCards,
 } from 'lucide-react';
 import { PortalSidebar } from '@/components/portal-sidebar';
 import { dashboard } from '@/routes';
+import { show as showAssistedRegistration } from '@/routes/member/assisted-registration';
 import { show as showMembership } from '@/routes/member/membership';
 import { index as bookerIndex } from '@/routes/member/booster';
 import { index as changeRequestsIndex } from '@/routes/member/change-requests';
@@ -73,6 +75,11 @@ const sections: NavGroup[] = [
         items: [
             { title: 'Directs View', href: showDirects(), icon: Users },
             { title: 'Tree View', href: showTree(), icon: Network },
+            {
+                title: 'Register a New Member',
+                href: showAssistedRegistration(),
+                icon: UserPlus,
+            },
         ],
     },
     {

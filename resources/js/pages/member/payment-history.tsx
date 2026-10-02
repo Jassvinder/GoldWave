@@ -8,8 +8,10 @@ type Payment = {
     id: number;
     type: 'registration' | 'emi_installment';
     installment_no: number | null;
+    /** T-184 — set on a "Pay All Remaining EMIs" payment. */
+    covers_installments: number | null;
     amount: string;
-    mode: 'online' | 'cash';
+    mode: 'online' | 'cash' | 'upi' | 'wallet';
     status: 'pending' | 'paid' | 'failed';
     provider_reference: string | null;
     paid_at: string | null;
@@ -34,7 +36,9 @@ const columns: DataTableColumn<Payment>[] = [
             <span className="font-medium">
                 {row.type === 'registration'
                     ? 'Registration'
-                    : `Installment #${row.installment_no}`}
+                    : row.covers_installments !== null
+                      ? `Full payment — ${row.covers_installments} EMIs`
+                      : `Installment #${row.installment_no}`}
             </span>
         ),
     },
@@ -42,7 +46,11 @@ const columns: DataTableColumn<Payment>[] = [
     {
         key: 'mode',
         header: 'Mode',
-        render: (row) => <span className="capitalize">{row.mode}</span>,
+        render: (row) => (
+            <span className="capitalize">
+                {row.mode === 'upi' ? 'GPay/UPI' : row.mode}
+            </span>
+        ),
     },
     {
         key: 'provider_reference',

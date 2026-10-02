@@ -8,7 +8,7 @@ test('a scalar rule value change is reported as label: old → new', function ()
         ['item_buyback_percent' => 58],
     );
 
-    expect($changes)->toBe(['Item Buyback %: 60 → 58']);
+    expect($changes)->toBe(['Item Buyback % (Silver): 60 → 58']);
 });
 
 test('an unchanged scalar produces no line', function () {
@@ -26,7 +26,7 @@ test('a changed leaf inside an associative rule value is reported with a readabl
         ['level_income_rates' => ['1' => 6, '2' => 2]],
     );
 
-    expect($changes)->toBe(['Level Income Rates — 1: 5 → 6']);
+    expect($changes)->toBe(['Level Income Rates (Silver) — 1: 5 → 6']);
 });
 
 test('a changed leaf inside a list of rule values is identified by its own milestone/level number, not its array index', function () {

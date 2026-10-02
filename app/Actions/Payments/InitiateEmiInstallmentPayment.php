@@ -3,8 +3,12 @@
 namespace App\Actions\Payments;
 
 use App\Models\EmiInstallment;
+use App\Models\EmiSchedule;
 use App\Models\Member;
 use App\Models\Payment;
+use App\Notifications\CashPaymentAwaitingApproval;
+use App\Services\Notifier;
+use App\Services\Payments\PaymentModes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -23,12 +27,21 @@ class InitiateEmiInstallmentPayment
 {
     public function __invoke(Member $member, EmiInstallment $installment, string $mode): Payment
     {
-        return DB::transaction(function () use ($member, $installment, $mode) {
-            $schedule = $member->emiSchedule()->firstOrFail();
+        $newCashPayment = null;
 
-            if ($installment->emi_schedule_id !== $schedule->id) {
+        $payment = DB::transaction(function () use ($member, $installment, $mode, &$newCashPayment) {
+            // T-185 — the plan's schedule or a store Repurchase on EMI; either way it must be this member's own.
+            $schedule = EmiSchedule::whereKey($installment->emi_schedule_id)->where('member_id', $member->id)->first();
+
+            if ($schedule === null) {
                 throw ValidationException::withMessages([
                     'installment' => 'This installment does not belong to your EMI schedule.',
+                ]);
+            }
+
+            if ($schedule->isStoreRepurchase() && $schedule->storeEmiBooking?->status !== 'active') {
+                throw ValidationException::withMessages([
+                    'installment' => 'This Repurchase on EMI is no longer running.',
                 ]);
             }
 
@@ -46,6 +59,13 @@ class InitiateEmiInstallmentPayment
 
             if ($installment->payment_id) {
                 $existing = Payment::find($installment->payment_id);
+                // T-184 — a pending "Pay All Remaining EMIs" payment covers this installment too.
+                if ($existing && $existing->status === 'pending' && $existing->covers_installments !== null) {
+                    throw ValidationException::withMessages([
+                        'installment' => 'Your payment for all remaining EMIs is waiting for confirmation.',
+                    ]);
+                }
+
                 if ($existing && $existing->status === 'pending') {
                     return $existing;
                 }
@@ -58,12 +78,24 @@ class InitiateEmiInstallmentPayment
                 'mode' => $mode,
                 'status' => 'pending',
                 'idempotency_key' => (string) Str::uuid(),
-                'cash_status' => $mode === 'cash' ? 'pending_verification' : null,
+                'cash_status' => PaymentModes::initialApprovalStatus($mode),
             ]);
 
             $installment->update(['payment_id' => $payment->id]);
 
+            if (PaymentModes::needsApproval($mode)) {
+                $newCashPayment = $payment;
+            }
+
             return $payment;
         });
+
+        // T-141 — a new cash payment waits for the Super Admin's approval, so the Super Admin is told (bell + page).
+        // Re-using an already-pending payment above never notifies a second time.
+        if ($newCashPayment !== null) {
+            Notifier::toSuperAdmins(new CashPaymentAwaitingApproval($newCashPayment));
+        }
+
+        return $payment;
     }
 }

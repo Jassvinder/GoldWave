@@ -45,19 +45,27 @@ class BinaryPlacementResolver
      * (Left/Right) $member's subtree falls under. Index 0 = $member's
      * immediate placement parent, paired with $member's own placement_side.
      *
+     * Fix 01-10-2026: the default used to be a 500-level cap, which silently
+     * gave no Pair entry to any upline more than 500 levels above a joining
+     * (GWL01's M4 on the dev DB). The walk is now unbounded by default; a
+     * cycle in corrupted data is stopped by the visited-id guard instead.
+     *
      * @return list<array{member: Member, side: string}>
      */
-    public function ancestorsWithSide(Member $member, int $maxDepth = 500): array
+    public function ancestorsWithSide(Member $member, ?int $maxDepth = null): array
     {
         $chain = [];
         $current = $member;
+        $visited = [$member->id => true];
 
-        for ($i = 0; $i < $maxDepth; $i++) {
+        for ($i = 0; $maxDepth === null || $i < $maxDepth; $i++) {
             $parent = $current->placementParent()->first();
 
-            if (! $parent) {
+            if (! $parent || isset($visited[$parent->id])) {
                 break;
             }
+
+            $visited[$parent->id] = true;
 
             $chain[] = ['member' => $parent, 'side' => $current->placement_side];
             $current = $parent;

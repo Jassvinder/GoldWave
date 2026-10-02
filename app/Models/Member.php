@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 /**
  * @property-read User|null $user
@@ -52,7 +53,10 @@ class Member extends Model
         'dummy_assigned_at',
         'dummy_assigned_by',
         'is_company_root',
+        'benefits_limited',
+        'store_income_unlocked_at',
         'placeholder_name',
+        'gender',
         'pan_card',
         'aadhaar_card',
         'profile_photo_path',
@@ -71,6 +75,8 @@ class Member extends Model
             'pending_fields_submitted_at' => 'datetime',
             'is_company_dummy' => 'boolean',
             'is_company_root' => 'boolean',
+            'benefits_limited' => 'boolean',
+            'store_income_unlocked_at' => 'datetime',
             'wallet_balance' => 'decimal:2',
             'wallet_hold_amount' => 'decimal:2',
         ];
@@ -80,6 +86,61 @@ class Member extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Never a paid beneficiary of Level Income, Purchase/Repurchase income, Store Profit or the Monthly Draw: an
+     * unassigned company dummy (or the root), or an entry inserted under the root (T-174, `benefits_limited` — it
+     * keeps Pair/Reward and Income Booster only).
+     */
+    public function isExcludedFromGeneralIncome(): bool
+    {
+        return ($this->is_company_dummy && $this->dummy_status !== 'assigned') || $this->benefits_limited;
+    }
+
+    /**
+     * T-182 (DOMAIN_LOGIC.md §12) — any of this member's EMIs is `overdue`. While true, their new earnings are held
+     * (wallet credit `pending`), and Pair/Reward and Booster payouts wait.
+     */
+    public function hasOverdueEmi(): bool
+    {
+        return EmiInstallment::where('status', 'overdue')
+            ->whereHas('emiSchedule', fn ($query) => $query->where('member_id', $this->id))
+            ->exists();
+    }
+
+    /** T-182 — the total of this member's held earnings (pending credits), formatted to 2 decimals. */
+    public function heldEarnings(): string
+    {
+        return number_format((float) $this->walletLedgerEntries()->where('entry_type', 'credit')->where('status', 'pending')->sum('amount'), 2, '.', '');
+    }
+
+    /** The skip reason recorded when such a member is passed over (T-174). */
+    public function generalIncomeSkipReason(): string
+    {
+        return $this->benefits_limited ? 'benefits_limited' : 'upline_dummy';
+    }
+
+    /**
+     * T-162 — this member's permanent registration-link code. Generated once,
+     * the first time it is asked for, and never changed afterwards, so a
+     * shared link keeps working forever. Random (not derived from the
+     * Customer ID), so nobody can work out another member's link.
+     */
+    public function referralCode(): string
+    {
+        if ($this->referral_code) {
+            return $this->referral_code;
+        }
+
+        do {
+            $code = Str::lower(Str::random(12));
+        } while (self::where('referral_code', $code)->exists());
+
+        // Only fills a still-empty column, so two simultaneous first requests can never overwrite each other.
+        self::whereKey($this->id)->whereNull('referral_code')->update(['referral_code' => $code]);
+
+        return $this->referral_code = (string) self::whereKey($this->id)->value('referral_code');
     }
 
     /**
@@ -132,10 +193,21 @@ class Member extends Model
         return $this->hasMany(Payment::class);
     }
 
-    /** @return HasOne<EmiSchedule, $this> */
+    /**
+     * The membership plan's own EMI schedule. T-185 — a store Repurchase on EMI also lives in `emi_schedules`
+     * (`kind = store_repurchase`); it is reached through `storeEmiBookings()`, never through this relation.
+     *
+     * @return HasOne<EmiSchedule, $this>
+     */
     public function emiSchedule(): HasOne
     {
-        return $this->hasOne(EmiSchedule::class);
+        return $this->hasOne(EmiSchedule::class)->where('kind', 'membership');
+    }
+
+    /** @return HasMany<StoreEmiBooking, $this> */
+    public function storeEmiBookings(): HasMany
+    {
+        return $this->hasMany(StoreEmiBooking::class);
     }
 
     /** @return HasMany<ProductBenefit, $this> */

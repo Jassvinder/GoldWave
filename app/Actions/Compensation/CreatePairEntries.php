@@ -50,7 +50,13 @@ class CreatePairEntries
             return;
         }
 
-        DB::transaction(function () use ($chain, $payment) {
+        // T-110 (19-09-2026) — every entry from this one joining/qualifying
+        // event carries the joining member's own plan metal; a milestone's
+        // consumed entries later get valued per-entry by this flag
+        // (EvaluatePairMilestones), never one flat rate for the whole pool.
+        $metal = $member->membershipPlan->product_category;
+
+        DB::transaction(function () use ($chain, $payment, $metal) {
             foreach ($chain as $link) {
                 // DOMAIN_LOGIC.md §14.2 point 5: an unassigned dummy (or the
                 // seeded company root, which is never assignable) never
@@ -64,6 +70,7 @@ class CreatePairEntries
                 PairEntry::create([
                     'member_id' => $link['member']->id,
                     'side' => $link['side'],
+                    'metal' => $metal,
                     'source_payment_id' => $payment->id,
                     'status' => 'unused',
                 ]);

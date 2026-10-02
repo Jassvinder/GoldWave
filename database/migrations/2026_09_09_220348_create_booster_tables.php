@@ -24,6 +24,9 @@ return new class extends Migration
             $table->timestamp('qualified_at');
             $table->foreignId('rule_version_id')->constrained('rule_versions');
             $table->timestamps();
+
+            // A member qualifies for each booster level once.
+            $table->unique(['member_id', 'level_no']);
         });
 
         Schema::create('booster_payout_schedules', function (Blueprint $table) {
@@ -33,7 +36,7 @@ return new class extends Migration
             $table->date('scheduled_date');
             $table->decimal('amount', 14, 2);
             $table->enum('status', ['pending', 'paid'])->default('pending');
-            $table->foreignId('wallet_ledger_entry_id')->nullable()->constrained('wallet_ledger_entries');
+            $table->foreignId('wallet_ledger_entry_id')->nullable()->constrained('wallet_ledger_entries')->nullOnDelete();
             $table->timestamps();
 
             $table->unique(['booster_qualification_id', 'month_no']);

@@ -6,6 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import {
     generate as generateNow,
     update,
 } from '@/routes/super-admin/dummy-entry-settings';
@@ -13,19 +20,29 @@ import {
 type Props = {
     enabled: boolean;
     daily_count: number;
+    plan_code: 'A' | 'B' | 'C' | 'D';
     stats: { generated: number; unassigned: number; assigned: number };
+};
+
+const PLAN_LABELS: Record<string, string> = {
+    A: 'Silver Start — ₹1,000 × 20 (100gm Silver)',
+    B: 'Silver Prime — ₹3,000 × 10 (100gm Silver)',
+    C: 'Gold Rise — ₹5,000 × 10 (5gm Gold)',
+    D: 'Gold Elite — ₹10,000 × 10 (10gm Gold)',
 };
 
 /** INSTRUCTIONS.md S04 — daily count, enable/disable, generation controls. */
 export default function SuperAdminDummyEntrySettings({
     enabled,
     daily_count,
+    plan_code,
     stats,
 }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const { data, setData, post, processing } = useForm({
         enabled,
         daily_count,
+        plan_code,
     });
 
     const submit: FormEventHandler = (e) => {
@@ -105,6 +122,40 @@ export default function SuperAdminDummyEntrySettings({
                                     )
                                 }
                             />
+                        </div>
+                        <div className="grid max-w-xs gap-2">
+                            <Label htmlFor="plan_code">
+                                Membership Plan (T-149)
+                            </Label>
+                            <Select
+                                value={data.plan_code}
+                                onValueChange={(v) =>
+                                    setData(
+                                        'plan_code',
+                                        v as Props['plan_code'],
+                                    )
+                                }
+                            >
+                                <SelectTrigger id="plan_code">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {(['A', 'B', 'C', 'D'] as const).map(
+                                        (code) => (
+                                            <SelectItem key={code} value={code}>
+                                                {PLAN_LABELS[code]}
+                                            </SelectItem>
+                                        ),
+                                    )}
+                                </SelectContent>
+                            </Select>
+                            <p className="text-muted-foreground text-xs">
+                                Every dummy entry is created on this plan.
+                                Installment #1 is recorded as paid (cash,
+                                triggers no compensation); it stays on
+                                installment #1 until a real leader is assigned —
+                                they then pay installment #2 onward themselves.
+                            </p>
                         </div>
                         <Button
                             type="submit"

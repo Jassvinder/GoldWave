@@ -22,13 +22,19 @@ return new class extends Migration
         Schema::create('payments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('member_id')->constrained('members')->cascadeOnDelete();
+            // §12.2(a) — the store whose Store Wallet settled this cash payment, if any.
+            $table->foreignId('paying_store_id')->nullable()->constrained('stores');
+            // §12.2(b) — a different member who paid this registration from their own wallet.
+            $table->foreignId('paying_member_id')->nullable()->constrained('members');
             $table->enum('type', ['registration', 'emi_installment']);
             $table->decimal('amount', 14, 2);
-            $table->enum('mode', ['online', 'cash']);
+            $table->enum('mode', ['online', 'cash', 'wallet']);
             $table->enum('status', ['pending', 'paid', 'failed'])->default('pending');
 
             // Online payment verification (§10.1)
             $table->string('provider_reference')->nullable()->unique();
+            // The provider's order id (Razorpay `order_…`), how a webhook finds this row (T-137).
+            $table->string('gateway_order_id')->nullable()->index();
             $table->json('gateway_payload')->nullable();
             $table->string('idempotency_key')->nullable()->unique();
 
@@ -48,6 +54,19 @@ return new class extends Migration
             $table->foreignId('member_id')->constrained('members')->cascadeOnDelete();
             $table->foreignId('membership_plan_id')->constrained('membership_plans');
             $table->unsignedSmallInteger('total_installments');
+            // Rate booking (§3.0): every schedule starts on Future Rate; a Current Rate booking snapshots the rest.
+            $table->enum('rate_booking_method', ['current_rate', 'future_rate']);
+            $table->decimal('installment_amount', 14, 2);
+            $table->foreignId('metal_rate_id')->nullable()->constrained('metal_rates');
+            $table->decimal('rate_per_gram_at_booking', 14, 2)->nullable();
+            $table->decimal('fixed_weight_grams', 8, 3)->nullable();
+            $table->decimal('maintenance_cost', 14, 2)->nullable();
+            $table->foreignId('rule_version_id')->nullable()->constrained('rule_versions');
+            $table->decimal('future_commitment_amount', 14, 2)->nullable();
+            // Set only when a Future Rate schedule is switched to Current Rate after registration (T-116).
+            $table->timestamp('current_rate_booked_at')->nullable();
+            $table->unsignedSmallInteger('installments_paid_at_booking')->nullable();
+            $table->decimal('amount_paid_at_booking', 14, 2)->nullable();
             $table->timestamps();
         });
 
@@ -68,11 +87,14 @@ return new class extends Migration
         Schema::create('product_benefits', function (Blueprint $table) {
             $table->id();
             $table->foreignId('member_id')->constrained('members')->cascadeOnDelete();
+            // §16.10 — the store it was handed over through, if any.
+            $table->foreignId('store_id')->nullable()->constrained('stores');
             $table->foreignId('membership_plan_id')->constrained('membership_plans');
             $table->enum('metal', ['gold', 'silver'])->nullable();
             $table->foreignId('metal_rate_id')->nullable()->constrained('metal_rates');
             $table->decimal('rate_per_gram_at_entry', 14, 2)->nullable();
             $table->date('entry_date');
+            $table->timestamp('delivered_at')->nullable();
             $table->timestamps();
         });
     }

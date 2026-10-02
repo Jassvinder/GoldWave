@@ -1,17 +1,23 @@
 import {
+    Bell,
     Boxes,
     FileText,
     History,
     LayoutGrid,
+    ShoppingBag,
     ShoppingCart,
     Store as StoreIcon,
+    UserPlus,
 } from 'lucide-react';
 import { PortalSidebar } from '@/components/portal-sidebar';
 import { dashboard } from '@/routes';
+import { show as showAssistedRegistration } from '@/routes/admin/assisted-registration';
 import { index as inventoryIndex } from '@/routes/admin/inventory';
+import { index as notificationsIndex } from '@/routes/admin/notifications';
 import { show as showProfile } from '@/routes/admin/profile';
 import { index as reportsIndex } from '@/routes/admin/reports';
 import { index as salesIndex } from '@/routes/admin/sales';
+import { index as storeEmiIndex } from '@/routes/admin/store-emi';
 import { index as transactionsIndex } from '@/routes/admin/transactions';
 import type { NavGroup } from '@/types';
 
@@ -22,9 +28,19 @@ const sections: NavGroup[] = [
             { title: 'Store Dashboard', href: dashboard(), icon: LayoutGrid },
             { title: 'Store Profile', href: showProfile(), icon: StoreIcon },
             {
+                title: 'Register a New Member',
+                href: showAssistedRegistration(),
+                icon: UserPlus,
+            },
+            {
                 title: 'Repurchases / Sales',
                 href: salesIndex(),
                 icon: ShoppingCart,
+            },
+            {
+                title: 'Repurchase on EMI',
+                href: storeEmiIndex(),
+                icon: ShoppingBag,
             },
             { title: 'Inventory', href: inventoryIndex(), icon: Boxes },
             {
@@ -33,6 +49,11 @@ const sections: NavGroup[] = [
                 icon: History,
             },
             { title: 'Store Reports', href: reportsIndex(), icon: FileText },
+            {
+                title: 'Notifications',
+                href: notificationsIndex(),
+                icon: Bell,
+            },
         ],
     },
 ];

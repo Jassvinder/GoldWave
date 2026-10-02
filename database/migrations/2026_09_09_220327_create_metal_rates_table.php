@@ -17,7 +17,10 @@ return new class extends Migration
         Schema::create('metal_rates', function (Blueprint $table) {
             $table->id();
             $table->enum('metal', ['gold', 'silver']);
+            // Entered per 10 gm and stored per gram (T-165).
             $table->decimal('rate_per_gram', 14, 2);
+            // T-165 — the making % that applies with this effective-dated rate (one per metal).
+            $table->decimal('making_charge_percent', 5, 2)->default(0);
             $table->date('effective_from');
             $table->foreignId('created_by')->constrained('users');
             $table->timestamps();

@@ -29,7 +29,10 @@ return new class extends Migration
         Schema::create('members', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->nullable()->unique()->constrained('users')->nullOnDelete();
-            $table->string('customer_id')->unique();
+            // Nullable: assigned only on activation (§3.2), never before payment is confirmed.
+            $table->string('customer_id')->nullable()->unique();
+            // T-162 — random code behind the member's permanent registration link (/join?ref=…).
+            $table->string('referral_code', 16)->nullable()->unique();
 
             $table->foreignId('sponsor_id')->nullable()->constrained('members')->nullOnDelete();
             $table->foreignId('placement_parent_id')->nullable()->constrained('members')->nullOnDelete();
@@ -48,12 +51,18 @@ return new class extends Migration
             $table->timestamp('dummy_generated_at')->nullable();
             $table->timestamp('dummy_assigned_at')->nullable();
             $table->foreignId('dummy_assigned_by')->nullable()->constrained('users');
+            // The single seeded company root (§14.2) — the top of the tree, never assignable to a leader.
+            $table->boolean('is_company_root')->default(false);
+            // T-174 — an entry inserted directly under the root: earns only Pair/Reward and Income Booster, never Level,
+            // Purchase/Repurchase, Store Profit or Draw (DOMAIN_LOGIC.md §2 System Maintenance note).
+            $table->boolean('benefits_limited')->default(false);
+            $table->string('placeholder_name')->nullable();
+            $table->string('gender', 10)->nullable();
 
             // Pending profile fields (DOMAIN_LOGIC.md §13) — one-time submission, then locked.
             $table->string('pan_card')->nullable();
             $table->string('aadhaar_card')->nullable();
             $table->string('profile_photo_path')->nullable();
-            $table->string('passbook_or_cheque_path')->nullable();
             $table->text('address')->nullable();
             $table->timestamp('pending_fields_submitted_at')->nullable();
 
@@ -65,6 +74,8 @@ return new class extends Migration
 
             $table->index(['sponsor_id']);
             $table->index(['placement_parent_id', 'placement_side']);
+            // One member per Binary Position slot (§4.3).
+            $table->unique(['placement_parent_id', 'placement_side'], 'members_placement_unique');
             $table->index(['is_company_dummy', 'dummy_status']);
             $table->index(['status']);
         });

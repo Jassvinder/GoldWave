@@ -10,8 +10,11 @@ use App\Http\Requests\Registration\RegisterMemberRequest;
 use App\Http\Requests\Registration\ValidateSponsorCodeRequest;
 use App\Models\Member;
 use App\Models\MembershipPlan;
+use App\Services\Payments\PaymentModes;
+use App\Services\Payments\RazorpayGateway;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -24,12 +27,23 @@ use Inertia\Response;
  */
 class RegistrationController extends Controller
 {
-    public function show(): Response
+    public function show(Request $request): Response
     {
+        // T-162 — a member's registration link (`/join?ref=…`) arrives with its sponsor already chosen.
+        // An unknown code is simply ignored: the visitor gets the normal form and types a sponsor code.
+        $ref = $request->string('ref')->toString();
+        $referrer = $ref !== '' ? Member::with('user')->where('referral_code', $ref)->first() : null;
+
         return Inertia::render('registration/register', [
+            'payment_options' => PaymentModes::forPage(),
             'plans' => MembershipPlan::where('is_active', true)->orderBy('id')->get([
                 'id', 'code', 'name', 'amount', 'installment_count', 'product_category', 'fixed_weight_grams',
             ]),
+            'referral' => $referrer ? [
+                'sponsor_customer_id' => $referrer->customer_id,
+                'sponsor_name' => $referrer->user?->name,
+            ] : null,
+            'referral_invalid' => $ref !== '' && $referrer === null,
         ]);
     }
 
@@ -56,8 +70,16 @@ class RegistrationController extends Controller
 
         abort_if($payment === null, 500, 'Registration payment record was not created.');
 
+        PaymentModes::attachUpiProof($payment, $request);
+
         if ($payment->mode === 'online') {
-            $intent = $gateway->createIntent($payment);
+            try {
+                $intent = $gateway->createIntent($payment);
+            } catch (ValidationException $e) {
+                // The registration is already saved; the status page offers "Pay now" so the member can retry.
+                return redirect(self::signedStatusUrl($member))
+                    ->with('payment_error', collect($e->errors())->flatten()->first());
+            }
 
             return redirect($intent['redirect_url']);
         }
@@ -86,7 +108,12 @@ class RegistrationController extends Controller
                 'status' => $member->status,
                 'plan' => $member->membershipPlan?->name,
             ],
-            'payment' => $member->payments->firstWhere('type', 'registration'),
+            'payment' => $payment = $member->payments->firstWhere('type', 'registration'),
+            // A still-pending online payment can always be (re)started from here through a fresh signed checkout link.
+            'pay_url' => PaymentModes::onlineEnabled() && $payment !== null && $payment->mode === 'online' && $payment->status === 'pending'
+                ? RazorpayGateway::checkoutUrl($payment)
+                : null,
+            'payment_error' => session('payment_error'),
         ]);
     }
 }

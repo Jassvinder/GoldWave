@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * DOMAIN_LOGIC.md §9 (Income Booster), Docs/TEST.md scenario 3 — qualify
- * once, pay 6 months regardless of later drop-off, concurrent multi-level
+ * once, pay for the level's duration (L1 12 months, L2/L3 6 — T-180) regardless of later drop-off, concurrent multi-level
  * schedules, and the independently-enforced Left/Right split gate.
  */
 function boosterMember(string $customerId, ?Member $sponsor = null): Member
@@ -129,7 +129,7 @@ beforeEach(function () {
     $this->seed();
 });
 
-test('reaching Level 1 (10 directs, 500 team split 250L/250R) creates one qualification and 6 monthly schedules of ₹5,000', function () {
+test('reaching Level 1 (10 directs, 500 team split 250L/250R) creates one qualification and 12 monthly schedules of ₹5,000 (T-180)', function () {
     $member = boosterMember('BST-1');
     for ($i = 1; $i <= 12; $i++) {
         boosterMember("BST-1-D{$i}", $member); // 12 directs — Level 1 needs 10.
@@ -143,8 +143,8 @@ test('reaching Level 1 (10 directs, 500 team split 250L/250R) creates one qualif
     expect($qualifications[0]->level_no)->toBe(1);
 
     $schedules = $qualifications[0]->payoutSchedules;
-    expect($schedules)->toHaveCount(6);
-    expect($schedules->pluck('month_no')->sort()->values()->all())->toBe([1, 2, 3, 4, 5, 6]);
+    expect($schedules)->toHaveCount(12);
+    expect($schedules->pluck('month_no')->sort()->values()->all())->toBe(range(1, 12));
     expect($schedules->every(fn ($s) => (float) $s->amount === 5000.0))->toBeTrue();
     expect($schedules->every(fn ($s) => $s->status === 'pending'))->toBeTrue();
 });
@@ -233,7 +233,7 @@ test('ProcessBoosterPayouts credits due schedules, marks them paid, is idempoten
     $paidMonth1Count = BoosterPayoutSchedule::where('month_no', 1)->where('status', 'paid')->count();
     expect($paidMonth1Count)->toBe(2);
     $pendingCount = BoosterPayoutSchedule::where('status', 'pending')->count();
-    expect($pendingCount)->toBe(10); // 5 remaining months × 2 levels.
+    expect($pendingCount)->toBe(16); // Level 1: 11 remaining months + Level 2: 5 remaining months (T-180).
 
     // Idempotent rerun — no double credit.
     app(ProcessBoosterPayouts::class)->handle(app(WalletLedgerService::class));

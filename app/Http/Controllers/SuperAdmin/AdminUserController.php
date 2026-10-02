@@ -23,7 +23,7 @@ class AdminUserController extends Controller
 {
     public function index(Request $request): Response
     {
-        $admins = User::where('role', 'admin')
+        $admins = User::where('role', 'store_admin')
             ->with(['store', 'member'])
             ->orderByDesc('id')
             ->get()
@@ -41,9 +41,43 @@ class AdminUserController extends Controller
                 ] : null,
             ]);
 
+        $companyAdmins = User::where('role', 'admin')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (User $user): array => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'mobile' => $user->mobile,
+                'created_at' => Dates::date($user->created_at),
+            ]);
+
         return Inertia::render('super-admin/admin-users', [
             'admins' => $admins,
+            'company_admins' => $companyAdmins,
+            'can_create_company_admins' => $request->user()->role === 'super_admin',
         ]);
+    }
+
+    /** 29-09-2026 (DOMAIN_LOGIC.md §2) — Super Admin creates a company Admin, who logs in with email + password. */
+    public function storeCompanyAdmin(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'mobile' => ['nullable', 'digits:10', 'unique:users,mobile'],
+            'password' => ['required', 'string', 'min:8'],
+        ]);
+
+        User::create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'mobile' => $data['mobile'] ?: null,
+            'password' => $data['password'],
+            'role' => 'admin',
+        ]);
+
+        return redirect()->route('super-admin.admin-users.index')->with('status', 'Company Admin added.');
     }
 
     public function findMember(FindMemberForAdminRequest $request, FindMemberEligibleForAdminPromotion $action): JsonResponse

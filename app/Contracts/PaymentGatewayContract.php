@@ -6,8 +6,9 @@ use App\Models\Payment;
 use Illuminate\Http\Request;
 
 /**
- * ARCHITECTURE.md: the payment gateway vendor is deliberately not chosen yet
- * (a cost/vendor decision for the user, not an architecture default). Every
+ * ARCHITECTURE.md: the payment gateway vendor is Razorpay (decided 21-09-2026,
+ * implementation pending — Docs/TASKS.md T-137); until then `FakePaymentGateway`
+ * is the only binding. Every
  * Action depends on this interface, never on a concrete gateway class, so
  * swapping the bound implementation (see AppServiceProvider) is the only
  * change needed once a real provider is selected — no controller/Action code

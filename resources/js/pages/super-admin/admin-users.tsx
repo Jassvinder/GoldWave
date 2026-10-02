@@ -10,6 +10,7 @@ import InputError from '@/components/input-error';
 import { Label } from '@/components/ui/label';
 import { formatDate } from '@/lib/utils';
 import { findMember, store } from '@/routes/super-admin/admin-users';
+import { store as storeCompanyAdmin } from '@/routes/super-admin/company-admins';
 
 type Admin = {
     id: number;
@@ -21,7 +22,19 @@ type Admin = {
     store: { id: number; name: string; status: string } | null;
 };
 
-type Props = { admins: Admin[] };
+type CompanyAdmin = {
+    id: number;
+    name: string;
+    email: string;
+    mobile: string | null;
+    created_at: string | null;
+};
+
+type Props = {
+    admins: Admin[];
+    company_admins: CompanyAdmin[];
+    can_create_company_admins: boolean;
+};
 
 type MemberLookup =
     | { status: 'idle' }
@@ -37,7 +50,11 @@ type MemberLookup =
  * promotes their existing login. Store assignment stays a separate step
  * (Store Management page).
  */
-export default function SuperAdminUsers({ admins }: Props) {
+export default function SuperAdminUsers({
+    admins,
+    company_admins,
+    can_create_company_admins,
+}: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const [member, setMember] = useState<MemberLookup>({ status: 'idle' });
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -94,7 +111,7 @@ export default function SuperAdminUsers({ admins }: Props) {
 
     return (
         <>
-            <Head title="Admin Users" />
+            <Head title="Store Admins" />
 
             <div className="flex w-full flex-col gap-6 p-4">
                 {flash?.status && (
@@ -106,7 +123,7 @@ export default function SuperAdminUsers({ admins }: Props) {
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">
-                            Promote a Member to Admin
+                            Promote a Member to Store Admin
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -153,7 +170,7 @@ export default function SuperAdminUsers({ admins }: Props) {
                                 }
                                 className="self-start"
                             >
-                                Promote to Admin
+                                Promote to Store Admin
                             </Button>
                         </form>
                     </CardContent>
@@ -161,24 +178,141 @@ export default function SuperAdminUsers({ admins }: Props) {
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>Admin Users</CardTitle>
+                        <CardTitle>Store Admins</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <DataTable
                             columns={adminColumns}
                             rows={admins}
                             rowKey={(row) => row.id}
-                            emptyMessage="No Admin users yet."
+                            emptyMessage="No Store Admins yet."
                             renderActions={(row) => (
                                 <EditAdminUserDialog admin={row} />
                             )}
                         />
                     </CardContent>
                 </Card>
+
+                <CompanyAdmins
+                    admins={company_admins}
+                    canCreate={can_create_company_admins}
+                />
             </div>
         </>
     );
 }
+
+/**
+ * 29-09-2026 (DOMAIN_LOGIC.md §2) — company Admins: every company page except the Super-Admin-only ones. Only a
+ * Super Admin can create one; they log in with email + password like the Super Admin.
+ */
+function CompanyAdmins({
+    admins,
+    canCreate,
+}: {
+    admins: CompanyAdmin[];
+    canCreate: boolean;
+}) {
+    const form = useForm({ name: '', email: '', mobile: '', password: '' });
+
+    const submit: FormEventHandler = (e) => {
+        e.preventDefault();
+        form.post(storeCompanyAdmin.url(), {
+            preserveScroll: true,
+            onSuccess: () => form.reset(),
+        });
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Company Admins</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+                {canCreate && (
+                    <form
+                        onSubmit={submit}
+                        className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+                    >
+                        <div className="grid gap-2">
+                            <Label htmlFor="ca_name">Name</Label>
+                            <Input
+                                id="ca_name"
+                                value={form.data.name}
+                                onChange={(e) => form.setData('name', e.target.value)}
+                                required
+                            />
+                            <InputError message={form.errors.name} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="ca_email">Email</Label>
+                            <Input
+                                id="ca_email"
+                                type="email"
+                                value={form.data.email}
+                                onChange={(e) => form.setData('email', e.target.value)}
+                                required
+                            />
+                            <InputError message={form.errors.email} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="ca_mobile">Mobile</Label>
+                            <Input
+                                id="ca_mobile"
+                                value={form.data.mobile}
+                                onChange={(e) =>
+                                    form.setData('mobile', e.target.value.replace(/\D/g, ''))
+                                }
+                                maxLength={10}
+                            />
+                            <InputError message={form.errors.mobile} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label htmlFor="ca_password">Password</Label>
+                            <Input
+                                id="ca_password"
+                                type="password"
+                                autoComplete="new-password"
+                                value={form.data.password}
+                                onChange={(e) => form.setData('password', e.target.value)}
+                                required
+                            />
+                            <InputError message={form.errors.password} />
+                        </div>
+                        <Button
+                            type="submit"
+                            disabled={form.processing}
+                            className="self-start sm:col-span-2 lg:col-span-4"
+                        >
+                            Add Admin
+                        </Button>
+                    </form>
+                )}
+                <DataTable
+                    columns={companyAdminColumns}
+                    rows={admins}
+                    rowKey={(row) => row.id}
+                    emptyMessage="No company Admins yet."
+                />
+            </CardContent>
+        </Card>
+    );
+}
+
+const companyAdminColumns: DataTableColumn<CompanyAdmin>[] = [
+    {
+        key: 'name',
+        header: 'Name',
+        render: (row) => <span className="font-medium">{row.name}</span>,
+    },
+    { key: 'email', header: 'Email' },
+    { key: 'mobile', header: 'Mobile', render: (row) => row.mobile ?? '—' },
+    {
+        key: 'created_at',
+        header: 'Created',
+        render: (row) => formatDate(row.created_at),
+    },
+];
 
 const adminColumns: DataTableColumn<Admin>[] = [
     {

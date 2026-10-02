@@ -1,6 +1,6 @@
-import { router } from '@inertiajs/react';
+import { Link } from '@inertiajs/react';
 import type { InertiaLinkProps } from '@inertiajs/react';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, Eye } from 'lucide-react';
 import type { ReactNode } from 'react';
 import {
     Table,
@@ -37,13 +37,13 @@ export type DataTableProps<T> = {
     columns: DataTableColumn<T>[];
     rows: T[];
     rowKey: (row: T, index: number) => string | number;
-    /** Row click destination — the row becomes a link when set. */
+    /** Detail-page destination — renders an Eye (view) link in the trailing "Actions" column; the row itself is not clickable (T-134). */
     rowHref?: (row: T) => NonNullable<InertiaLinkProps['href']>;
-    /** Row click handler for non-navigation interactions (e.g. row selection) — ignored when `rowHref` is set. */
+    /** Row click handler for non-navigation interactions (e.g. row selection). */
     onRowClick?: (row: T) => void;
     /** Highlights a row (e.g. the currently selected one) when set. */
     isRowSelected?: (row: T) => boolean;
-    /** Trailing "..." actions column per row. */
+    /** Extra per-row controls in the trailing "Actions" column, rendered before the `rowHref` Eye link. */
     renderActions?: (row: T) => ReactNode;
     /** Current sort column key + direction, and a handler for a sortable header click — omit to render sort icons inertly. */
     sort?: { key: string; direction: 'asc' | 'desc' };
@@ -53,7 +53,7 @@ export type DataTableProps<T> = {
 
 /**
  * Shared listing-page table (T-101) — real `<table>` with sortable headers,
- * an optional row-navigation link, and an optional trailing actions column,
+ * an optional Eye-icon detail link, and an optional trailing actions column,
  * matching `Docs/Screenshots/3.png`/`4.png`'s pattern. Replaces the
  * `<div>`-row-styled-as-a-list pattern every Super Admin listing page used
  * before this task (see `Docs/ARCHITECTURE.md`'s "Frontend Design System").
@@ -70,6 +70,8 @@ export function DataTable<T>({
     onSortChange,
     emptyMessage = 'No results found.',
 }: DataTableProps<T>) {
+    const hasActions = Boolean(renderActions || rowHref);
+
     return (
         <div className="overflow-hidden rounded-md border">
             <Table>
@@ -103,7 +105,7 @@ export function DataTable<T>({
                                 )}
                             </TableHead>
                         ))}
-                        {renderActions && (
+                        {hasActions && (
                             <TableHead className="text-right">
                                 Actions
                             </TableHead>
@@ -114,9 +116,7 @@ export function DataTable<T>({
                     {rows.length === 0 && (
                         <TableRow>
                             <TableCell
-                                colSpan={
-                                    columns.length + (renderActions ? 1 : 0)
-                                }
+                                colSpan={columns.length + (hasActions ? 1 : 0)}
                                 className="text-muted-foreground h-24 text-center"
                             >
                                 {emptyMessage}
@@ -125,21 +125,18 @@ export function DataTable<T>({
                     )}
                     {rows.map((row, index) => {
                         const href = rowHref?.(row);
-                        const clickable = Boolean(href || onRowClick);
 
                         return (
                             <TableRow
                                 key={rowKey(row, index)}
                                 className={cn(
-                                    clickable && 'cursor-pointer',
+                                    onRowClick && 'cursor-pointer',
                                     isRowSelected?.(row) && 'bg-muted/50',
                                 )}
                                 onClick={
-                                    href
-                                        ? () => router.visit(href)
-                                        : onRowClick
-                                          ? () => onRowClick(row)
-                                          : undefined
+                                    onRowClick
+                                        ? () => onRowClick(row)
+                                        : undefined
                                 }
                             >
                                 {columns.map((column) => (
@@ -159,12 +156,24 @@ export function DataTable<T>({
                                               )}
                                     </TableCell>
                                 ))}
-                                {renderActions && (
+                                {hasActions && (
                                     <TableCell
                                         className="text-right"
                                         onClick={(e) => e.stopPropagation()}
                                     >
-                                        {renderActions(row)}
+                                        <div className="flex items-center justify-end gap-1">
+                                            {renderActions?.(row)}
+                                            {href && (
+                                                <Link
+                                                    href={href}
+                                                    aria-label="View details"
+                                                    title="View details"
+                                                    className="text-muted-foreground hover:bg-muted hover:text-foreground inline-flex size-8 items-center justify-center rounded-md"
+                                                >
+                                                    <Eye className="size-4" />
+                                                </Link>
+                                            )}
+                                        </div>
                                     </TableCell>
                                 )}
                             </TableRow>

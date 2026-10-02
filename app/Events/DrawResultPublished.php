@@ -44,6 +44,7 @@ class DrawResultPublished implements ShouldBroadcast
         return [
             'draw_group_id' => $this->execution->draw_group_id,
             'cycle_month_no' => $this->execution->cycle_month_no,
+            'winner_no' => $this->execution->winner_no,
             'winner_member_id' => $this->execution->winner_member_id,
             'upline_benefit_member_id' => $this->execution->upline_benefit_member_id,
             'executed_at' => $this->execution->executed_at ? Carbon::parse($this->execution->executed_at)->toIso8601String() : null,

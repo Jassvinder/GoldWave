@@ -24,7 +24,7 @@ class MemberPolicy
 
     public function viewDirects(User $user, Member $target): bool
     {
-        if ($user->role === 'super_admin') {
+        if ($user->isCompanyStaff()) {
             return true;
         }
 
@@ -35,7 +35,7 @@ class MemberPolicy
 
     public function viewTree(User $user, Member $target): bool
     {
-        if ($user->role === 'super_admin') {
+        if ($user->isCompanyStaff()) {
             return true;
         }
 

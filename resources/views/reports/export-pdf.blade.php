@@ -14,18 +14,17 @@
 <body>
     <h1>{{ $title }}</h1>
     <table>
-        <thead>
-            <tr>
-                @foreach ($header as $column)
-                    <th>{{ $column }}</th>
-                @endforeach
-            </tr>
-        </thead>
+                                <thead>
+                                    <tr>
+                                        @foreach ($header as $column)
+                                            <th>{{ $column }}</th>
+                                        @endforeach
+                                    </tr>
+                                </thead>
         <tbody>
             @foreach ($rows as $row)
                 <tr>
-                    @foreach ($row as $cell)
-                        <td>{{ $cell }}</td>
+                    @foreach ($row as $cell)<td>{{ $cell }}</td>
                     @endforeach
                 </tr>
             @endforeach

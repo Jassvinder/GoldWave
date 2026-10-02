@@ -4,6 +4,8 @@ namespace App\Actions\Profile;
 
 use App\Models\Member;
 use App\Models\MemberBankDetail;
+use App\Notifications\BankDetailsSubmitted;
+use App\Services\Notifier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -52,7 +54,7 @@ class SubmitPendingProfileFields
             ]);
         }
 
-        return DB::transaction(function () use ($member, $panCard, $aadhaarCard, $profilePhotoPath, $address, $bankDetails) {
+        $submitted = DB::transaction(function () use ($member, $panCard, $aadhaarCard, $profilePhotoPath, $address, $bankDetails) {
             $locked = Member::whereKey($member->id)->lockForUpdate()->firstOrFail();
 
             if ($locked->pending_fields_submitted_at !== null) {
@@ -80,5 +82,10 @@ class SubmitPendingProfileFields
 
             return $locked->fresh();
         });
+
+        // T-141 — the new bank details need verifying, so the Super Admin is told (bell + Notifications page).
+        Notifier::toSuperAdmins(new BankDetailsSubmitted($submitted));
+
+        return $submitted;
     }
 }

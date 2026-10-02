@@ -6,6 +6,7 @@ use App\Models\Member;
 use App\Models\WalletLedgerEntry;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * ARCHITECTURE.md: the ONLY class allowed to write `wallet_ledger_entries` or
@@ -52,6 +53,108 @@ class WalletLedgerService
             ]);
 
             $locked->increment('wallet_balance', $amount);
+
+            return $entry;
+        });
+    }
+
+    /**
+     * T-182 (DOMAIN_LOGIC.md §12) — credit an earning: exactly `credit()`, except that while the member has an overdue
+     * EMI it is written as a **held** credit (status `pending`), which is not part of `wallet_balance` until
+     * `releaseHeldEarnings()` confirms it.
+     */
+    public function creditEarning(
+        Member $member,
+        string $category,
+        float $amount,
+        ?Model $source,
+        string $description,
+    ): WalletLedgerEntry {
+        if (! $member->hasOverdueEmi()) {
+            return $this->credit($member, $category, $amount, $source, $description);
+        }
+
+        return WalletLedgerEntry::create([
+            'member_id' => $member->id,
+            'entry_type' => 'credit',
+            'category' => $category,
+            'source_type' => $source?->getMorphClass(),
+            'source_id' => $source?->getKey(),
+            'amount' => $amount,
+            'status' => 'pending',
+            'description' => $description,
+        ]);
+    }
+
+    /**
+     * T-182 — once the member has no overdue EMI left, every held earning becomes `confirmed` and is added to the
+     * balance. A no-op while an EMI is still overdue, or when nothing is held. Returns the amount released.
+     */
+    public function releaseHeldEarnings(Member $member): float
+    {
+        return DB::transaction(function () use ($member) {
+            $locked = Member::whereKey($member->id)->lockForUpdate()->firstOrFail();
+
+            if ($locked->hasOverdueEmi()) {
+                return 0.0;
+            }
+
+            $held = WalletLedgerEntry::where('member_id', $locked->id)
+                ->where('entry_type', 'credit')
+                ->where('status', 'pending')
+                ->lockForUpdate()
+                ->get();
+
+            if ($held->isEmpty()) {
+                return 0.0;
+            }
+
+            $total = round((float) $held->sum('amount'), 2);
+
+            WalletLedgerEntry::whereIn('id', $held->pluck('id'))->update(['status' => 'confirmed', 'processed_at' => now()]);
+            $locked->increment('wallet_balance', $total);
+
+            return $total;
+        });
+    }
+
+    /**
+     * DOMAIN_LOGIC.md §12.2(b) — T-153. An immediate, non-hold debit: a
+     * member funding a *different, new* member's Assisted Registration from
+     * their own wallet balance. Unlike the Payout hold→confirmHold
+     * lifecycle (there is no external processing step to wait for — the
+     * debit and the thing it pays for commit together), this settles in one
+     * step, mirroring `StoreWalletService::deduct()`'s shape for stores.
+     */
+    public function debit(
+        Member $member,
+        string $category,
+        float $amount,
+        ?Model $source,
+        string $description,
+    ): WalletLedgerEntry {
+        return DB::transaction(function () use ($member, $category, $amount, $source, $description) {
+            $locked = Member::whereKey($member->id)->lockForUpdate()->firstOrFail();
+
+            if ($amount > $this->availableBalance($locked)) {
+                throw ValidationException::withMessages([
+                    'amount' => 'Insufficient wallet balance for this transaction.',
+                ]);
+            }
+
+            $entry = WalletLedgerEntry::create([
+                'member_id' => $locked->id,
+                'entry_type' => 'debit',
+                'category' => $category,
+                'source_type' => $source?->getMorphClass(),
+                'source_id' => $source?->getKey(),
+                'amount' => $amount,
+                'status' => 'confirmed',
+                'description' => $description,
+                'processed_at' => now(),
+            ]);
+
+            $locked->decrement('wallet_balance', $amount);
 
             return $entry;
         });

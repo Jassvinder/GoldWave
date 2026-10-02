@@ -94,6 +94,7 @@ export default function GoldWaveLogin({ status }: Props) {
                                 }
                                 placeholder="GWL01"
                                 autoFocus
+                                tabIndex={1}
                                 required
                             />
                             <InputError
@@ -106,6 +107,7 @@ export default function GoldWaveLogin({ status }: Props) {
                                 <TextLink
                                     href={passwordResetRoute.url()}
                                     className="text-sm"
+                                    tabIndex={4}
                                 >
                                     Forgot password?
                                 </TextLink>
@@ -119,6 +121,7 @@ export default function GoldWaveLogin({ status }: Props) {
                                         e.target.value,
                                     )
                                 }
+                                tabIndex={2}
                                 required
                             />
                             <InputError
@@ -127,6 +130,7 @@ export default function GoldWaveLogin({ status }: Props) {
                         </div>
                         <Button
                             type="submit"
+                            tabIndex={3}
                             disabled={passwordForm.processing}
                         >
                             {passwordForm.processing && <Spinner />}

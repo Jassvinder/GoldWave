@@ -4,6 +4,7 @@ namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
 use App\Models\BoosterPayoutSchedule;
+use App\Models\CurrentRateBookingRequest;
 use App\Models\DrawExecution;
 use App\Models\DrawGroup;
 use App\Models\EmiInstallment;
@@ -28,11 +29,13 @@ class DashboardController extends Controller
 
     public function index(Request $request): Response
     {
+        // Same definitions as Member Management's summary strip, so "Total Members" is one number on both pages —
+        // company dummy entries are counted separately below (`dummy_entries`), never as members.
         $members = [
-            'total' => Member::count(),
-            'active' => Member::where('status', 'active')->count(),
-            'pending' => Member::whereIn('status', ['draft', 'payment_pending', 'payment_confirmed'])->count(),
-            'today' => Member::whereDate('created_at', today())->count(),
+            'total' => Member::where('is_company_dummy', false)->count(),
+            'active' => Member::where('is_company_dummy', false)->where('status', 'active')->count(),
+            'pending' => Member::where('is_company_dummy', false)->whereIn('status', ['payment_pending', 'payment_confirmed'])->count(),
+            'today' => Member::where('is_company_dummy', false)->whereDate('created_at', today())->count(),
         ];
 
         $payments = [
@@ -89,6 +92,13 @@ class DashboardController extends Controller
 
         $largePayoutCount = PayoutRequest::where('status', 'pending')->where('requested_amount', '>=', $largePayoutThreshold)->count();
 
+        // T-166 — the Super Admin must buy the metal promptly once a member asks to lock today's rate.
+        $pendingRateBookings = CurrentRateBookingRequest::where('status', 'pending')->count();
+
+        if ($pendingRateBookings > 0) {
+            $alerts[] = "{$pendingRateBookings} Current Rate booking request(s) awaiting approval.";
+        }
+
         if ($largePayoutCount > 0) {
             $alerts[] = "{$largePayoutCount} large-value payout request(s) (₹{$largePayoutThreshold}+) awaiting processing.";
         }
@@ -99,6 +109,7 @@ class DashboardController extends Controller
             'emi' => $emi,
             'income' => $income,
             'payouts' => $payouts,
+            'rate_booking_requests' => ['pending' => $pendingRateBookings],
             'draw' => [
                 'active_groups' => $upcomingDrawGroupCount,
                 'last_winner_customer_id' => $lastDraw?->winner?->customer_id,

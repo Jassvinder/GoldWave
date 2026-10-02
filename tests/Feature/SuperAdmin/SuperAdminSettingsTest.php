@@ -18,6 +18,7 @@ use App\Models\RuleVersion;
 use App\Models\StoreActivityLog;
 use App\Models\User;
 use App\Services\RuleVersionService;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -87,7 +88,7 @@ test('promoting a member to admin flips their existing user role, no new account
 
     $user = app(CreateAdminUser::class)($member);
 
-    expect($user->role)->toBe('admin');
+    expect($user->role)->toBe('store_admin');
     expect($user->id)->toBe($member->user_id);
     expect($user->fresh()->password)->toBe($originalPasswordHash);
     expect($member->fresh()->status)->toBe('active'); // Member row itself is untouched.
@@ -101,26 +102,30 @@ test('promoting an ineligible member (dummy, inactive, or already admin) is reje
         ->toThrow(ValidationException::class);
 
     $alreadyAdmin = saSettingsMember('SA-ALREADY-ADMIN');
-    $alreadyAdmin->user->update(['role' => 'admin']);
+    $alreadyAdmin->user->update(['role' => 'store_admin']);
 
     expect(fn () => app(CreateAdminUser::class)($alreadyAdmin))
         ->toThrow(ValidationException::class);
 });
 
-test('reassigning a store owner updates ownership and logs an activity entry', function () {
-    $originalOwner = User::factory()->create(['role' => 'admin']);
-    $newOwner = User::factory()->create(['role' => 'admin']);
-    $store = app(CreateStore::class)('Reassign Test Store', $originalOwner, null, null, 100000, 0, saSuperAdmin());
+test('reassigning a store owner updates ownership, force-resets the password, and logs an activity entry (T-117)', function () {
+    $originalOwner = User::factory()->create(['role' => 'store_admin']);
+    $newOwner = User::factory()->create(['role' => 'store_admin']);
+    $store = app(CreateStore::class)('Reassign Test Store', $originalOwner, null, null, 100000, 0, saSuperAdmin(), 'OriginalPass123!');
 
-    app(ReassignStoreOwner::class)($store, $newOwner, saSuperAdmin());
+    app(ReassignStoreOwner::class)($store, $newOwner, saSuperAdmin(), 'BrandNewPass456!');
 
-    expect($store->fresh()->owner_user_id)->toBe($newOwner->id);
+    $fresh = $store->fresh();
+    expect($fresh->owner_user_id)->toBe($newOwner->id);
+    expect(Hash::check('BrandNewPass456!', $fresh->password))->toBeTrue();
+    expect(Hash::check('OriginalPass123!', $fresh->password))->toBeFalse();
     expect(StoreActivityLog::where('store_id', $store->id)->where('action_type', 'store_owner_reassigned')->exists())->toBeTrue();
 });
 
 test('setting a metal rate creates a new effective-dated row without touching prior rates', function () {
-    $first = app(SetMetalRate::class)('gold', 6000, now()->subDay()->toDateString(), saSuperAdmin());
-    $second = app(SetMetalRate::class)('gold', 6200, now()->toDateString(), saSuperAdmin());
+    // T-165 — entered per 10 gm, stored per gram.
+    $first = app(SetMetalRate::class)('gold', 60000, 0, now()->subDay()->toDateString(), saSuperAdmin());
+    $second = app(SetMetalRate::class)('gold', 62000, 0, now()->toDateString(), saSuperAdmin());
 
     expect($first->fresh()->rate_per_gram)->toBe('6000.00');
     expect($second->rate_per_gram)->toBe('6200.00');

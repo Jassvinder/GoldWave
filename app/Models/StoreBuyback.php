@@ -6,11 +6,15 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * DOMAIN_LOGIC.md §16.7/§16.9 — the store buying an item back from the
- * member who owns it, at a versioned percentage of the item's current market
- * rate. Deliberately never linked to `store_profit_distributions` or
+ * DOMAIN_LOGIC.md §16.7/§16.9 — the store buying an item back from whoever
+ * owns it, at a versioned percentage of the item's current market rate.
+ * Deliberately never linked to `store_profit_distributions` or
  * `income_ledger_calculations` — a Buyback is the reverse of a sale and is
- * outside both rules' scope.
+ * outside both rules' scope. **Revised 23-09-2026 (user decision):** the
+ * seller is primarily a non-member walk-in — `member_id` is nullable, and
+ * `walk_in_name`/`walk_in_mobile` capture the seller's identity when there
+ * is no Member row; a member seller is still linked via `member_id` when
+ * one exists (exactly one of the two identity paths is set, never neither).
  *
  * @property-read Store|null $store
  * @property-read Member|null $member
@@ -23,6 +27,8 @@ class StoreBuyback extends Model
     protected $fillable = [
         'store_id',
         'member_id',
+        'walk_in_name',
+        'walk_in_mobile',
         'item_name',
         'metal',
         'weight',

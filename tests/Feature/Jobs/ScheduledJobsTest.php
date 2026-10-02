@@ -7,6 +7,7 @@ use App\Jobs\ProcessEmiDueStatuses;
 use App\Jobs\RunDailyDummyEntryGeneration;
 use App\Jobs\RunDrawGroupGeneration;
 use App\Jobs\RunMonthlyDrawExecution;
+use App\Jobs\SendEmiReminders;
 use Illuminate\Console\Scheduling\Schedule;
 
 /**
@@ -42,8 +43,8 @@ function scheduledEvent(Schedule $schedule, string $jobClass)
     return collect($schedule->events())->first(fn ($event) => $event->getSummaryForDisplay() === $jobClass);
 }
 
-test('exactly the 6 recurring §19 jobs are registered, none more', function () {
-    expect(registeredSchedule()->events())->toHaveCount(6);
+test('exactly the 7 recurring jobs (§19 plus the T-142 EMI reminders) are registered, none more', function () {
+    expect(registeredSchedule()->events())->toHaveCount(7);
 });
 
 test('every scheduled job runs with an explicit Asia/Kolkata timezone and withoutOverlapping', function () {
@@ -56,6 +57,7 @@ test('every scheduled job runs with an explicit Asia/Kolkata timezone and withou
         ProcessEmiDueStatuses::class,
         EvaluateMonthlyPairMilestones::class,
         ProcessBoosterPayouts::class,
+        SendEmiReminders::class,
     ];
 
     foreach ($jobs as $jobClass) {

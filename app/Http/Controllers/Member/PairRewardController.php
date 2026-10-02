@@ -3,17 +3,22 @@
 namespace App\Http\Controllers\Member;
 
 use App\Http\Controllers\Controller;
-use App\Models\PairRewardTransaction;
+use App\Services\PairPoolBreakdown;
+use App\Services\PairQualifiedDirects;
 use App\Services\RuleVersionService;
 use App\Support\Dates;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
-/** INSTRUCTIONS.md M11 — progress, milestones, consumed/available business, reward history (DOMAIN_LOGIC.md §7). */
+/** INSTRUCTIONS.md M11 — progress, milestones (with each achieved milestone's reward and date), consumed/available business (DOMAIN_LOGIC.md §7). */
 class PairRewardController extends Controller
 {
-    public function __construct(private readonly RuleVersionService $rules) {}
+    public function __construct(
+        private readonly RuleVersionService $rules,
+        private readonly PairPoolBreakdown $pairPool,
+        private readonly PairQualifiedDirects $qualifiedDirects,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -21,51 +26,51 @@ class PairRewardController extends Controller
 
         abort_if($member === null, 404);
 
-        $unusedLeft = $member->pairEntries()->where('side', 'left')->where('status', 'unused')->count();
-        $unusedRight = $member->pairEntries()->where('side', 'right')->where('status', 'unused')->count();
-        $consumedLeft = $member->pairEntries()->where('side', 'left')->where('status', 'consumed')->count();
-        $consumedRight = $member->pairEntries()->where('side', 'right')->where('status', 'consumed')->count();
+        $pool = $this->pairPool->forMember($member);
 
-        /** @var list<array{milestone_no: int, min_directs: int, left: int, right: int}> $milestones */
-        $milestones = $this->rules->value('pair_milestones', []);
-        $achievedMilestoneNos = PairRewardTransaction::where('member_id', $member->id)->pluck('milestone_no')->all();
+        /** @var list<array{milestone_no: int, name?: string, min_directs: int, left: int, right: int}> $milestoneRules */
+        $milestoneRules = $this->rules->value('pair_milestones', []);
 
-        $nextMilestone = null;
+        // T-125 — one row per milestone, with this member's Reward/Date filled in once that milestone is actually achieved
+        // (there is no separate Reward History list any more).
+        $rewardsByMilestone = $member->pairRewardTransactions()->get()->keyBy('milestone_no');
 
-        foreach ($milestones as $milestone) {
-            if (! in_array($milestone['milestone_no'], $achievedMilestoneNos, true)) {
-                $nextMilestone = $milestone;
-                break;
-            }
-        }
+        $milestones = array_map(function (array $milestone) use ($rewardsByMilestone, $pool): array {
+            $reward = $rewardsByMilestone->get($milestone['milestone_no']);
+            $used = $pool['consumed_by_milestone'][$milestone['milestone_no']] ?? null;
 
-        $rewards = $member->pairRewardTransactions()
-            ->orderByDesc('id')
-            ->get()
-            ->map($this->mapReward(...));
+            return [
+                // How many of this member's entries each achieved milestone actually consumed.
+                'used_left' => $used['left'] ?? null,
+                'used_right' => $used['right'] ?? null,
+                'milestone_no' => $milestone['milestone_no'],
+                'name' => $milestone['name'] ?? "Milestone #{$milestone['milestone_no']}",
+                'min_directs' => $milestone['min_directs'],
+                'left' => $milestone['left'],
+                'right' => $milestone['right'],
+                'reward_amount' => $reward?->reward_amount,
+                'achieved_on' => $reward !== null ? Dates::date($reward->calculated_for_month) : null,
+            ];
+        }, $milestoneRules);
+
+        $nextMilestone = collect($milestones)->first(fn (array $milestone): bool => $milestone['reward_amount'] === null);
 
         return Inertia::render('member/pair-reward', [
             'progress' => [
-                'unused_left' => $unusedLeft,
-                'unused_right' => $unusedRight,
-                'consumed_left' => $consumedLeft,
-                'consumed_right' => $consumedRight,
+                'unused_left' => $pool['left']['unused'],
+                'unused_right' => $pool['right']['unused'],
+                'consumed_left' => $pool['left']['consumed'],
+                'consumed_right' => $pool['right']['consumed'],
+                // T-178 — counted against each milestone's total Min Directs (DOMAIN_LOGIC.md §7.3).
+                'qualified_directs' => $this->qualifiedDirects->count($member),
+            ],
+            'pool' => [
+                'left' => $pool['left'],
+                'right' => $pool['right'],
+                'awaiting_by_plan' => $pool['awaiting_by_plan'],
             ],
             'milestones' => $milestones,
             'next_milestone' => $nextMilestone,
-            'rewards' => $rewards,
         ]);
-    }
-
-    /** @return array<string, mixed> */
-    private function mapReward(PairRewardTransaction $reward): array
-    {
-        return [
-            'milestone_no' => $reward->milestone_no,
-            'left_consumed_count' => $reward->left_consumed_count,
-            'right_consumed_count' => $reward->right_consumed_count,
-            'reward_amount' => $reward->reward_amount,
-            'calculated_for_month' => Dates::date($reward->calculated_for_month),
-        ];
     }
 }

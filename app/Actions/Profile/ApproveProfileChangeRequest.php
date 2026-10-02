@@ -6,6 +6,7 @@ use App\Models\MemberBankDetail;
 use App\Models\ProfileChangeRequest;
 use App\Models\User;
 use App\Notifications\ProfileChangeRequestReviewed;
+use App\Services\Notifier;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -49,7 +50,7 @@ class ApproveProfileChangeRequest
             return $locked->fresh();
         });
 
-        $reviewed->member()->firstOrFail()->notify(new ProfileChangeRequestReviewed($reviewed));
+        Notifier::toUser($reviewed->member()->firstOrFail()->user, new ProfileChangeRequestReviewed($reviewed));
 
         return $reviewed;
     }

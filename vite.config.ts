@@ -16,6 +16,10 @@ export default defineConfig({
                 bunny('Instrument Sans', {
                     weights: [400, 500, 600],
                 }),
+                // Display font for the public landing page headings (02-10-2026).
+                bunny('Poppins', {
+                    weights: [600, 700, 800],
+                }),
             ],
         }),
         inertia(),

@@ -26,9 +26,16 @@ class StoreSale extends Model
         'store_inventory_item_id',
         'transaction_type',
         'item_name',
+        'metal',
         'item_weight',
         'quantity',
         'rate',
+        'metal_rate_id',
+        'metal_value',
+        'making_charge_percent',
+        'making_charges',
+        'hallmark_charges',
+        'gst_percent',
         'sale_amount',
         'gst_amount',
         'total_invoice_amount',
@@ -36,6 +43,9 @@ class StoreSale extends Model
         'store_wallet_deduction_id',
         'distribution_status',
         'status',
+        // T-185c — a Repurchase on EMI handover: its booking, and how much of the bill the EMIs already paid.
+        'store_emi_booking_id',
+        'prepaid_amount',
     ];
 
     protected function casts(): array
@@ -43,10 +53,32 @@ class StoreSale extends Model
         return [
             'item_weight' => 'decimal:3',
             'rate' => 'decimal:2',
+            'metal_value' => 'decimal:2',
+            'making_charge_percent' => 'decimal:2',
+            'making_charges' => 'decimal:2',
+            'hallmark_charges' => 'decimal:2',
+            'gst_percent' => 'decimal:2',
             'sale_amount' => 'decimal:2',
             'gst_amount' => 'decimal:2',
             'total_invoice_amount' => 'decimal:2',
+            'prepaid_amount' => 'decimal:2',
         ];
+    }
+
+    /**
+     * T-169 (28-09-2026, user decision) — Store Profit Distribution and Purchase/Repurchase income are
+     * calculated on the metal value only (not making, hallmark or GST). A sale recorded before automatic
+     * pricing has no `metal_value`, so its typed `sale_amount` stays its base.
+     */
+    /** T-185c — a Repurchase on EMI handover never generates income (DOMAIN_LOGIC.md §16.13 point 4). */
+    public function isStoreEmiDelivery(): bool
+    {
+        return $this->store_emi_booking_id !== null;
+    }
+
+    public function incomeBase(): float
+    {
+        return (float) ($this->metal_value ?? $this->sale_amount);
     }
 
     /** @return BelongsTo<Store, $this> */
@@ -77,6 +109,12 @@ class StoreSale extends Model
     public function invoice(): HasOne
     {
         return $this->hasOne(Invoice::class);
+    }
+
+    /** @return HasMany<HallmarkEntry, $this> */
+    public function hallmarks(): HasMany
+    {
+        return $this->hasMany(HallmarkEntry::class)->orderBy('piece_no');
     }
 
     /** @return HasMany<StoreProfitDistribution, $this> */

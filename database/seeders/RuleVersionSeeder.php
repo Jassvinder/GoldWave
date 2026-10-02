@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\RuleVersion;
 use App\Models\User;
+use App\Services\DrawPrizeResolver;
 use Illuminate\Database\Seeder;
 
 /**
@@ -53,11 +54,59 @@ class RuleVersionSeeder extends Seeder
         // DOMAIN_LOGIC.md §6 — Level Income rates per Sponsor/Direct level
         // (1-12). Stored as a flat level=>percent map (not "4-8"/"9-12"
         // range keys) so CalculateLevelIncome (T-006) can look up each level
-        // directly without parsing a range string.
+        // directly without parsing a range string. Level 3 is 1% since
+        // 29-09-2026 (Super Admin's rule version 5, user request).
         $this->seedValue($version, 'level_income_rates', [
-            '1' => 5, '2' => 2, '3' => 2,
-            '4' => 1, '5' => 1, '6' => 1, '7' => 1, '8' => 1,
-            '9' => 0.5, '10' => 0.5, '11' => 0.5, '12' => 0.5,
+            '1' => 5,
+            '2' => 2,
+            '3' => 1,
+            '4' => 1,
+            '5' => 1,
+            '6' => 1,
+            '7' => 1,
+            '8' => 1,
+            '9' => 0.5,
+            '10' => 0.5,
+            '11' => 0.5,
+            '12' => 0.5,
+        ]);
+
+        // T-110 (19-09-2026) — user-requested Gold/Silver split for every
+        // rate that pays members: the unsuffixed key above is now the
+        // Silver rate (left as-is, per the user's own instruction), this
+        // `_gold` sibling is the Gold rate. Seeded identical to Silver as a
+        // starting point — Super Admin tunes them apart via the new "Gold"
+        // tab on Rule Versions once real numbers are decided.
+        $this->seedValue($version, 'level_income_rates_gold', [
+            '1' => 2,
+            '2' => 1,
+            '3' => 1,
+            '4' => 1,
+            '5' => 1,
+            '6' => 1,
+            '7' => 1,
+            '8' => 1,
+            '9' => 0.5,
+            '10' => 0.5,
+            '11' => 0.5,
+            '12' => 0.5,
+        ]);
+
+        // DOMAIN_LOGIC.md §6 (T-179, 29-09-2026) — qualified directs a beneficiary needs to earn each Level Income
+        // level: 2 × level no. One set for Silver and Gold alike. A version without this key has no directs condition.
+        $this->seedValue($version, 'level_income_min_directs', [
+            '1' => 2,
+            '2' => 4,
+            '3' => 6,
+            '4' => 8,
+            '5' => 10,
+            '6' => 12,
+            '7' => 14,
+            '8' => 16,
+            '9' => 18,
+            '10' => 20,
+            '11' => 22,
+            '12' => 24,
         ]);
 
         // DOMAIN_LOGIC.md §7.3 — minimum completed EMIs before an EMI-plan
@@ -73,26 +122,43 @@ class RuleVersionSeeder extends Seeder
         // table — e.g. milestone 1: (5+5)*50 = ₹500).
         $this->seedValue($version, 'pair_value_per_entry', 50);
 
+        // T-110 (19-09-2026) — per the user's explicit design: milestone
+        // thresholds (below) stay unified/mixed regardless of metal, only
+        // the ₹-per-entry reward value differs — applied per entry at
+        // consumption time based on that entry's own `metal` flag
+        // (EvaluatePairMilestones), never a flat count × one value once a
+        // milestone's consumed entries are a mix of both metals.
+        $this->seedValue($version, 'pair_value_per_entry_gold', 50);
+
         // DOMAIN_LOGIC.md §7.1 — the 15 milestones' thresholds and per-milestone
-        // minimum Direct Members gate (default 2 for every milestone, §7.3).
+        // minimum Direct Members gate — a total of qualified directs, 2 × milestone no. (T-178, 29-09-2026, §7.3).
+        // `name` is the display name (T-124, 20-09-2026) — Super-Admin-editable on the Rule Versions page like every other field here.
         // Reward amounts are intentionally omitted — derived from `left`/`right`
         // × pair_value_per_entry above.
+        // T-154 (25-09-2026, user decision) — replaced the original gemstone-themed
+        // names (Pearl...GoldWave Legend) with a rank-ladder naming scheme; the `#`
+        // (milestone_no) stays shown alongside the name everywhere in the UI, since
+        // 15 names alone don't make relative ranking obvious the way a small set
+        // (e.g. the 6 plan names) does. #7 was "Elite" in the user's own first
+        // draft — renamed to "Master" to avoid colliding with the Plan D marketing
+        // name "Gold Elite" (two different systems, same prestige word, real
+        // member confusion risk).
         $this->seedValue($version, 'pair_milestones', [
-            ['milestone_no' => 1, 'min_directs' => 2, 'left' => 5, 'right' => 5],
-            ['milestone_no' => 2, 'min_directs' => 2, 'left' => 50, 'right' => 50],
-            ['milestone_no' => 3, 'min_directs' => 2, 'left' => 250, 'right' => 250],
-            ['milestone_no' => 4, 'min_directs' => 2, 'left' => 500, 'right' => 500],
-            ['milestone_no' => 5, 'min_directs' => 2, 'left' => 1000, 'right' => 1000],
-            ['milestone_no' => 6, 'min_directs' => 2, 'left' => 2000, 'right' => 2000],
-            ['milestone_no' => 7, 'min_directs' => 2, 'left' => 5000, 'right' => 5000],
-            ['milestone_no' => 8, 'min_directs' => 2, 'left' => 10000, 'right' => 10000],
-            ['milestone_no' => 9, 'min_directs' => 2, 'left' => 20000, 'right' => 20000],
-            ['milestone_no' => 10, 'min_directs' => 2, 'left' => 40000, 'right' => 40000],
-            ['milestone_no' => 11, 'min_directs' => 2, 'left' => 80000, 'right' => 80000],
-            ['milestone_no' => 12, 'min_directs' => 2, 'left' => 160000, 'right' => 160000],
-            ['milestone_no' => 13, 'min_directs' => 2, 'left' => 320000, 'right' => 320000],
-            ['milestone_no' => 14, 'min_directs' => 2, 'left' => 640000, 'right' => 640000],
-            ['milestone_no' => 15, 'min_directs' => 2, 'left' => 1280000, 'right' => 1280000],
+            ['milestone_no' => 1, 'name' => 'Starter', 'min_directs' => 2, 'left' => 5, 'right' => 5],
+            ['milestone_no' => 2, 'name' => 'Builder', 'min_directs' => 4, 'left' => 50, 'right' => 50],
+            ['milestone_no' => 3, 'name' => 'Achiever', 'min_directs' => 6, 'left' => 250, 'right' => 250],
+            ['milestone_no' => 4, 'name' => 'Performer', 'min_directs' => 8, 'left' => 500, 'right' => 500],
+            ['milestone_no' => 5, 'name' => 'Leader', 'min_directs' => 10, 'left' => 1000, 'right' => 1000],
+            ['milestone_no' => 6, 'name' => 'Champion', 'min_directs' => 12, 'left' => 2000, 'right' => 2000],
+            ['milestone_no' => 7, 'name' => 'Master', 'min_directs' => 14, 'left' => 5000, 'right' => 5000],
+            ['milestone_no' => 8, 'name' => 'Premium', 'min_directs' => 16, 'left' => 10000, 'right' => 10000],
+            ['milestone_no' => 9, 'name' => 'Platinum', 'min_directs' => 18, 'left' => 20000, 'right' => 20000],
+            ['milestone_no' => 10, 'name' => 'Diamond', 'min_directs' => 20, 'left' => 40000, 'right' => 40000],
+            ['milestone_no' => 11, 'name' => 'Crown', 'min_directs' => 22, 'left' => 80000, 'right' => 80000],
+            ['milestone_no' => 12, 'name' => 'Royal', 'min_directs' => 24, 'left' => 160000, 'right' => 160000],
+            ['milestone_no' => 13, 'name' => 'Imperial', 'min_directs' => 26, 'left' => 320000, 'right' => 320000],
+            ['milestone_no' => 14, 'name' => 'Supreme', 'min_directs' => 28, 'left' => 640000, 'right' => 640000],
+            ['milestone_no' => 15, 'name' => 'Maharaja', 'min_directs' => 30, 'left' => 1280000, 'right' => 1280000],
         ]);
 
         // DOMAIN_LOGIC.md §11.1/§11.2 — Payout minimum request amount, TDS
@@ -109,12 +175,16 @@ class RuleVersionSeeder extends Seeder
         // pair_qualification_emis even where the numbers happen to match.
         $this->seedValue($version, 'draw_group_size', 200);
         $this->seedValue($version, 'draw_eligibility_emis', ['A' => 6, 'B' => 2, 'C' => 2, 'D' => 1]);
+        // §8.3 default prizes (user decision 30-09-2026): months 1–15 Silver, 16–20 Gold, unless a group-month sets its own.
+        foreach (DrawPrizeResolver::DEFAULTS as $key => $value) {
+            $this->seedValue($version, $key, $value);
+        }
 
         // DOMAIN_LOGIC.md §9 — Income Booster levels. Left/Right split
         // thresholds are enforced independently, not just their sum
         // (DOMAIN_LOGIC.md §21 T-011 pre-coding pass, user-confirmed).
         $this->seedValue($version, 'booster_levels', [
-            ['level_no' => 1, 'min_directs' => 10, 'team_split_left' => 250, 'team_split_right' => 250, 'monthly_benefit' => 5000, 'duration_months' => 6],
+            ['level_no' => 1, 'min_directs' => 10, 'team_split_left' => 250, 'team_split_right' => 250, 'monthly_benefit' => 5000, 'duration_months' => 12],
             ['level_no' => 2, 'min_directs' => 20, 'team_split_left' => 750, 'team_split_right' => 750, 'monthly_benefit' => 20000, 'duration_months' => 6],
             ['level_no' => 3, 'min_directs' => 30, 'team_split_left' => 1500, 'team_split_right' => 1500, 'monthly_benefit' => 60000, 'duration_months' => 6],
         ]);
@@ -126,16 +196,46 @@ class RuleVersionSeeder extends Seeder
         $this->seedValue($version, 'dummy_entry_enabled', false);
         $this->seedValue($version, 'dummy_entry_daily_count', 0);
 
-        // DOMAIN_LOGIC.md §15 — Purchase/Repurchase Upline Income: self 2%,
-        // direct Sponsor (Level 1) 1%, Levels 2-6 0.5% each, Levels 7-12
-        // 0.25% each. Level 1 is deliberately 1%, not the 0.5% a plain
-        // "Level 2" rate might imply — the direct Sponsor's rate is its own
-        // distinct tier (§15's duplicate-beneficiary rule).
+        // T-149 (22-09-2026, user decision) — every dummy entry is created on this EMI plan (installment #1 only,
+        // paid/cash, no compensation triggered — see EMI Schedule note below). Plan A is the entry-level default;
+        // Super Admin can change it any time on the Dummy Entry Settings page (S04).
+        $this->seedValue($version, 'dummy_entry_plan_code', 'A');
+
+        // DOMAIN_LOGIC.md §15 — Purchase/Repurchase Upline Income. The direct Sponsor's (Level 1) rate is its own
+        // tier (§15's duplicate-beneficiary rule). Defaults since 29-09-2026 = Super Admin's rule version 5 (user
+        // request): Silver self 5%, Level 1 2%, Levels 2-6 1%, Levels 7-12 0.5%.
         $this->seedValue($version, 'purchase_repurchase_income_rates', [
+            'self' => 5,
+            '1' => 2,
+            '2' => 1,
+            '3' => 1,
+            '4' => 1,
+            '5' => 1,
+            '6' => 1,
+            '7' => 0.5,
+            '8' => 0.5,
+            '9' => 0.5,
+            '10' => 0.5,
+            '11' => 0.5,
+            '12' => 0.5,
+        ]);
+
+        // T-110 (19-09-2026) — Gold rate, same shape as Silver above. Since 29-09-2026: self 2%, Levels 1-2 1%,
+        // Levels 3-6 0.5%, Levels 7-12 0.25%.
+        $this->seedValue($version, 'purchase_repurchase_income_rates_gold', [
             'self' => 2,
             '1' => 1,
-            '2' => 0.5, '3' => 0.5, '4' => 0.5, '5' => 0.5, '6' => 0.5,
-            '7' => 0.25, '8' => 0.25, '9' => 0.25, '10' => 0.25, '11' => 0.25, '12' => 0.25,
+            '2' => 1,
+            '3' => 0.5,
+            '4' => 0.5,
+            '5' => 0.5,
+            '6' => 0.5,
+            '7' => 0.25,
+            '8' => 0.25,
+            '9' => 0.25,
+            '10' => 0.25,
+            '11' => 0.25,
+            '12' => 0.25,
         ]);
 
         // DOMAIN_LOGIC.md §16.4 — Store Profit Distribution: Owner 2%,
@@ -148,16 +248,46 @@ class RuleVersionSeeder extends Seeder
             'sponsor_level_3' => 0.25,
         ]);
 
+        // T-110 (19-09-2026) — Gold rate, same shape as Silver above.
+        $this->seedValue($version, 'store_profit_distribution_rates_gold', [
+            'store_owner' => 2,
+            'sponsor_level_1' => 0.5,
+            'sponsor_level_2' => 0.25,
+            'sponsor_level_3' => 0.25,
+        ]);
+
         // DOMAIN_LOGIC.md §16.7 — Item Buyback percentage of the item's
         // current-market-rate metal value. Client-stated default 60%,
         // explicitly expected to be tuned post-launch (§21 "Still open").
         $this->seedValue($version, 'item_buyback_percent', 60);
+
+        // T-110 (19-09-2026) — Gold buyback %, same starting value as
+        // Silver above (the user's own explicit example used different
+        // Gold/Silver buyback numbers, but confirmed they're illustrative —
+        // Super Admin sets the real split apart).
+        $this->seedValue($version, 'item_buyback_percent_gold', 60);
 
         // DOMAIN_LOGIC.md §16.2 — Store sale GST/tax percentage. No source
         // document ever states the actual statutory rate to seed; default 0
         // (inert) until Super Admin confirms the real value, matching this
         // project's "default 0 until confirmed" pattern (§21 "Still open").
         $this->seedValue($version, 'store_gst_percent', 0);
+
+        // DOMAIN_LOGIC.md §15 (T-183, 30-09-2026) — qualified directs a member needs before earning the upline parts of
+        // store income (Purchase/Repurchase L1–12, Store Profit Sponsor L1–3); once reached, unlocked for life.
+        $this->seedValue($version, 'store_income_min_directs', 10);
+
+        // DOMAIN_LOGIC.md §16.13 point 3 (T-185b, 30-09-2026) — a Repurchase on EMI breaks automatically at this many
+        // overdue EMIs; the member is then owed silver for the principal paid.
+        $this->seedValue($version, 'store_emi_break_overdue_count', 3);
+
+        // T-115 (19-09-2026) — public landing page's Super-Admin-editable
+        // hero copy, matching T-104's original static text as the seeded
+        // starting point.
+        $this->seedValue($version, 'landing_hero_headline', 'Own real gold & silver jewellery, one easy instalment at a time.');
+        $this->seedValue($version, 'landing_hero_subtext', 'GoldWave is a jewellery membership program — pick a plan, pay in convenient monthly instalments, and receive genuine gold or silver jewellery, while your own network builds rewards alongside you.');
+        $this->seedValue($version, 'landing_hero_cta_primary_label', 'Join Now');
+        $this->seedValue($version, 'landing_hero_cta_secondary_label', 'Member Login');
     }
 
     private function seedValue(RuleVersion $version, string $key, mixed $value): void

@@ -26,7 +26,10 @@ return new class extends Migration
         Schema::create('store_buybacks', function (Blueprint $table) {
             $table->id();
             $table->foreignId('store_id')->constrained('stores');
-            $table->foreignId('member_id')->constrained('members');
+            // A seller is a member (Customer ID) or a walk-in (name required, mobile optional) — exactly one (§16.7).
+            $table->foreignId('member_id')->nullable()->constrained('members');
+            $table->string('walk_in_name')->nullable();
+            $table->string('walk_in_mobile', 20)->nullable();
             $table->string('item_name');
             $table->enum('metal', ['gold', 'silver']);
             $table->decimal('weight', 10, 3);

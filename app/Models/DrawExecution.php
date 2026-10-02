@@ -19,6 +19,7 @@ class DrawExecution extends Model
     protected $fillable = [
         'draw_group_id',
         'cycle_month_no',
+        'winner_no',
         'executed_at',
         'winner_member_id',
         'rng_proof',
@@ -58,6 +59,14 @@ class DrawExecution extends Model
     public function reconciledBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reconciled_by');
+    }
+
+    /** The prize this draw was held for — frozen on the group's month row when it was drawn (DrawPrizeResolver::snapshot()). */
+    public function prizeConfig(): ?DrawGroupMonthConfig
+    {
+        return DrawGroupMonthConfig::where('draw_group_id', $this->draw_group_id)
+            ->where('cycle_month_no', $this->cycle_month_no)
+            ->first();
     }
 
     /** @return HasMany<DrawExecutionCorrection, $this> */

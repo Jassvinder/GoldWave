@@ -2,6 +2,7 @@
 
 namespace App\Actions\Settings;
 
+use App\Actions\Compensation\ReleaseHeldLevelIncome;
 use App\Models\RuleValue;
 use App\Models\RuleVersion;
 use App\Models\User;
@@ -22,6 +23,8 @@ use Illuminate\Support\Facades\DB;
  */
 class PublishRuleVersion
 {
+    public function __construct(private readonly ReleaseHeldLevelIncome $releaseHeldLevelIncome) {}
+
     /** @param array<string, mixed> $overrideValues */
     public function __invoke(
         array $overrideValues,
@@ -29,7 +32,7 @@ class PublishRuleVersion
         ?string $notes = null,
         ?string $effectiveFrom = null,
     ): RuleVersion {
-        return DB::transaction(function () use ($overrideValues, $operator, $notes, $effectiveFrom) {
+        $published = DB::transaction(function () use ($overrideValues, $operator, $notes, $effectiveFrom) {
             $effectiveFrom ??= Dates::date(now());
 
             $previous = RuleVersion::where('is_active', true)->first();
@@ -66,5 +69,10 @@ class PublishRuleVersion
 
             return $version;
         });
+
+        // T-186 — a changed `level_income_min_directs` can make held Level Income payable now (DOMAIN_LOGIC.md §6).
+        $this->releaseHeldLevelIncome->forAll();
+
+        return $published;
     }
 }

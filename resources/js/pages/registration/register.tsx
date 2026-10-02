@@ -1,6 +1,12 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
+import {
+    PaymentModePicker,
+    type PaymentMode,
+    type PaymentOptions,
+} from '@/components/payment-mode-picker';
+import { PublicLogoLink } from '@/components/public-logo-link';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -26,6 +32,13 @@ type Plan = {
 
 type Props = {
     plans: Plan[];
+    /** T-162 — set when the page was opened from a member's registration link. */
+    referral: {
+        sponsor_customer_id: string;
+        sponsor_name: string | null;
+    } | null;
+    referral_invalid: boolean;
+    payment_options: PaymentOptions;
 };
 
 type SponsorState =
@@ -34,24 +47,34 @@ type SponsorState =
     | { status: 'valid'; name: string | null; customerId: string }
     | { status: 'invalid'; message: string };
 
-export default function Register({ plans }: Props) {
-    const [sponsor, setSponsor] = useState<SponsorState>({ status: 'idle' });
+export default function Register({
+    plans,
+    referral,
+    referral_invalid,
+    payment_options,
+}: Props) {
+    const [sponsor, setSponsor] = useState<SponsorState>(
+        referral
+            ? {
+                  status: 'valid',
+                  name: referral.sponsor_name,
+                  customerId: referral.sponsor_customer_id,
+              }
+            : { status: 'idle' },
+    );
 
     const form = useForm({
-        sponsor_code: '',
+        sponsor_code: referral?.sponsor_customer_id ?? '',
         placement_side: 'left' as 'left' | 'right',
         name: '',
+        gender: '' as 'male' | 'female' | 'other' | '',
         email: '',
         mobile: '',
         membership_plan_id: '' as number | '',
-        rate_booking_method: '' as 'current_rate' | 'future_rate' | '',
-        payment_mode: 'online' as 'online' | 'cash',
+        payment_mode: 'cash' as PaymentMode,
+        upi_reference: '',
+        upi_screenshot: null as File | null,
     });
-
-    const selectedPlan =
-        plans.find((plan) => plan.id === form.data.membership_plan_id) ?? null;
-    const isEmiPlan =
-        selectedPlan !== null && selectedPlan.installment_count !== null;
 
     async function checkSponsorCode(code: string) {
         if (!code) {
@@ -101,14 +124,17 @@ export default function Register({ plans }: Props) {
             <Head title="Join GoldWave" />
 
             <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-6 px-4 py-10">
+                <PublicLogoLink />
+
                 <Card>
                     <CardHeader>
                         <CardTitle className="text-2xl">
                             Join GoldWave
                         </CardTitle>
                         <CardDescription>
-                            Enter your sponsor&apos;s code to begin
-                            registration.
+                            {referral
+                                ? `You were invited by ${referral.sponsor_name ?? referral.sponsor_customer_id}. Fill in your details to join.`
+                                : "Enter your sponsor's code to begin registration."}
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -132,7 +158,18 @@ export default function Register({ plans }: Props) {
                                     }
                                     placeholder="GWL01"
                                     required
+                                    // A registration link fixes the sponsor — the link belongs to that member.
+                                    readOnly={referral !== null}
+                                    className={
+                                        referral ? 'bg-muted' : undefined
+                                    }
                                 />
+                                {referral_invalid && (
+                                    <p className="text-muted-foreground text-sm">
+                                        This invitation link is not valid —
+                                        please enter your sponsor&apos;s code.
+                                    </p>
+                                )}
                                 {sponsor.status === 'checking' && (
                                     <p className="text-muted-foreground text-sm">
                                         Checking…
@@ -201,6 +238,32 @@ export default function Register({ plans }: Props) {
                                 <InputError message={form.errors.name} />
                             </div>
 
+                            <div className="grid gap-2">
+                                <Label htmlFor="gender">Gender</Label>
+                                <select
+                                    id="gender"
+                                    className="border-input bg-background rounded-md border px-3 py-2 text-sm"
+                                    value={form.data.gender}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            'gender',
+                                            e.target.value as
+                                                | 'male'
+                                                | 'female'
+                                                | 'other'
+                                                | '',
+                                        )
+                                    }
+                                    required
+                                >
+                                    <option value="">Select gender</option>
+                                    <option value="male">Male</option>
+                                    <option value="female">Female</option>
+                                    <option value="other">Other</option>
+                                </select>
+                                <InputError message={form.errors.gender} />
+                            </div>
+
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <div className="grid gap-2">
                                     <Label htmlFor="email">Email</Label>
@@ -255,10 +318,6 @@ export default function Register({ plans }: Props) {
                                                     'membership_plan_id',
                                                     plan.id,
                                                 );
-                                                form.setData(
-                                                    'rate_booking_method',
-                                                    '',
-                                                );
                                             }}
                                             className={`rounded-md border p-3 text-left text-sm ${
                                                 form.data.membership_plan_id ===
@@ -288,87 +347,29 @@ export default function Register({ plans }: Props) {
                                 />
                             </div>
 
-                            {/* Rate booking method — EMI plans only */}
-                            {isEmiPlan && (
-                                <div className="grid gap-2">
-                                    <Label>Rate Booking</Label>
-                                    <div className="flex gap-2">
-                                        {(
-                                            [
-                                                {
-                                                    value: 'current_rate',
-                                                    label: 'Current Rate Booking',
-                                                },
-                                                {
-                                                    value: 'future_rate',
-                                                    label: 'Future Rate Booking',
-                                                },
-                                            ] as const
-                                        ).map((option) => (
-                                            <button
-                                                key={option.value}
-                                                type="button"
-                                                onClick={() =>
-                                                    form.setData(
-                                                        'rate_booking_method',
-                                                        option.value,
-                                                    )
-                                                }
-                                                className={`flex-1 rounded-md border px-3 py-2 text-sm ${
-                                                    form.data
-                                                        .rate_booking_method ===
-                                                    option.value
-                                                        ? 'border-primary bg-primary text-primary-foreground'
-                                                        : 'border-input bg-transparent'
-                                                }`}
-                                            >
-                                                {option.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    <InputError
-                                        message={
-                                            form.errors.rate_booking_method
-                                        }
-                                    />
-                                </div>
-                            )}
-
                             {/* Payment mode */}
                             <div className="grid gap-2">
                                 <Label>Payment Mode</Label>
-                                <div className="flex gap-2">
-                                    {(
-                                        [
-                                            {
-                                                value: 'online',
-                                                label: 'Online',
-                                            },
-                                            { value: 'cash', label: 'Cash' },
-                                        ] as const
-                                    ).map((option) => (
-                                        <button
-                                            key={option.value}
-                                            type="button"
-                                            onClick={() =>
-                                                form.setData(
-                                                    'payment_mode',
-                                                    option.value,
-                                                )
-                                            }
-                                            className={`flex-1 rounded-md border px-3 py-2 text-sm ${
-                                                form.data.payment_mode ===
-                                                option.value
-                                                    ? 'border-primary bg-primary text-primary-foreground'
-                                                    : 'border-input bg-transparent'
-                                            }`}
-                                        >
-                                            {option.label}
-                                        </button>
-                                    ))}
-                                </div>
-                                <InputError
-                                    message={form.errors.payment_mode}
+                                <PaymentModePicker
+                                    options={payment_options}
+                                    mode={form.data.payment_mode}
+                                    onModeChange={(mode) =>
+                                        form.setData('payment_mode', mode)
+                                    }
+                                    upiReference={form.data.upi_reference}
+                                    onUpiReferenceChange={(value) =>
+                                        form.setData('upi_reference', value)
+                                    }
+                                    onUpiScreenshotChange={(file) =>
+                                        form.setData('upi_screenshot', file)
+                                    }
+                                    errors={{
+                                        mode: form.errors.payment_mode,
+                                        upi_reference:
+                                            form.errors.upi_reference,
+                                        upi_screenshot:
+                                            form.errors.upi_screenshot,
+                                    }}
                                 />
                             </div>
 

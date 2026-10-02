@@ -14,12 +14,20 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * DOMAIN_LOGIC.md §16.7 — the store buying back a previously-sold item from
- * the member who owns it, at a versioned percentage of the item's *current*
- * market rate (never the original sale price). The bought-back item returns
- * to the store's inventory as new stock (§16.5). Deliberately never touches
+ * whoever owns it, at a versioned percentage of the item's *current* market
+ * rate (never the original sale price). The bought-back item returns to the
+ * store's inventory as new stock (§16.5). Deliberately never touches
  * `store_profit_distributions`/`income_ledger_calculations` (§16.9) — this
  * is the reverse of a sale, outside both rules' scope. Payment happens
  * outside the app (§17.4); only the transaction itself is recorded here.
+ *
+ * **Revised 23-09-2026 (user decision):** a Buyback seller is primarily a
+ * non-member walk-in, so `$member` is optional; when absent, `$walkInName`
+ * (required) and `$walkInMobile` (optional) capture the seller's identity
+ * instead, for the same §16.3 audit-log purpose a member's Customer ID
+ * already serves. Exactly one identity path must be given — the caller
+ * (`SalesController::storeBuyback`) resolves a Customer ID to a Member
+ * first and only falls back to the walk-in fields when none was given.
  */
 class RecordItemBuyback
 {
@@ -30,7 +38,7 @@ class RecordItemBuyback
 
     public function __invoke(
         Store $store,
-        Member $member,
+        ?Member $member,
         string $itemName,
         string $metal,
         float $weight,
@@ -38,7 +46,15 @@ class RecordItemBuyback
         ?string $description,
         MetalRate $currentMetalRate,
         User $operator,
+        ?string $walkInName = null,
+        ?string $walkInMobile = null,
     ): StoreBuyback {
+        if (! $member && ! $walkInName) {
+            throw ValidationException::withMessages([
+                'walk_in_name' => 'A member Customer ID or a walk-in seller name is required.',
+            ]);
+        }
+
         $ruleVersion = $this->rules->activeVersion();
 
         if (! $ruleVersion) {
@@ -47,7 +63,7 @@ class RecordItemBuyback
             ]);
         }
 
-        $buybackPercent = (float) $this->rules->value('item_buyback_percent', 60);
+        $buybackPercent = (float) $this->rules->metalValue('item_buyback_percent', $metal, 60);
         $ratePerGram = (float) $currentMetalRate->rate_per_gram;
         $metalValue = round($weight * $quantity * $ratePerGram, 2);
         $pricePaid = round($metalValue * $buybackPercent / 100, 2);
@@ -55,6 +71,7 @@ class RecordItemBuyback
         return DB::transaction(function () use (
             $store, $member, $itemName, $metal, $weight, $quantity, $description,
             $currentMetalRate, $ratePerGram, $buybackPercent, $pricePaid, $ruleVersion, $operator,
+            $walkInName, $walkInMobile,
         ) {
             $inventoryItem = $store->inventoryItems()->create([
                 'item_name' => $itemName,
@@ -67,7 +84,9 @@ class RecordItemBuyback
 
             $buyback = StoreBuyback::create([
                 'store_id' => $store->id,
-                'member_id' => $member->id,
+                'member_id' => $member?->id,
+                'walk_in_name' => $member ? null : $walkInName,
+                'walk_in_mobile' => $member ? null : $walkInMobile,
                 'item_name' => $itemName,
                 'metal' => $metal,
                 'weight' => $weight,

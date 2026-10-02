@@ -58,9 +58,11 @@ return new class extends Migration
             $table->unsignedTinyInteger('cycle_month_no');
             $table->timestamp('executed_at');
             $table->foreignId('winner_member_id')->constrained('members');
-            $table->string('rng_proof')->nullable();
+            $table->text('rng_proof')->nullable();
             $table->foreignId('upline_benefit_member_id')->nullable()->constrained('members');
             $table->enum('status', ['scheduled', 'executed', 'reconciled'])->default('scheduled');
+            $table->timestamp('reconciled_at')->nullable();
+            $table->foreignId('reconciled_by')->nullable()->constrained('users');
             $table->timestamps();
 
             $table->unique(['draw_group_id', 'cycle_month_no']);

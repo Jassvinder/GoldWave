@@ -6,7 +6,7 @@ export default function AppLogo() {
     return (
         <>
             <img
-                src="/Images/Logo.png"
+                src="/Images/Logo.webp"
                 alt={String(name)}
                 className="size-9 shrink-0 rounded-full object-cover"
             />

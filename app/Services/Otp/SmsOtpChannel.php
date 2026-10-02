@@ -3,19 +3,18 @@
 namespace App\Services\Otp;
 
 use App\Contracts\OtpChannelContract;
-use Illuminate\Support\Facades\Log;
+use App\Contracts\SmsGatewayContract;
 
 /**
- * No SMS gateway vendor has been chosen yet (a cost/vendor decision, same
- * category as the payment gateway in ARCHITECTURE.md) — this stub logs the
- * OTP so it stays usable for local dev/testing/manual QA. Swap this binding
- * in AppServiceProvider for a real SMS provider once one is selected; no
- * other code (OtpService, Auth Actions) changes.
+ * OTP by SMS (DOMAIN_LOGIC.md §2.2) — goes through the same `SmsGatewayContract` as every other SMS (T-139), so a real
+ * provider is added in exactly one place. With the default `log` driver the code is only written to the log.
  */
 class SmsOtpChannel implements OtpChannelContract
 {
+    public function __construct(private readonly SmsGatewayContract $sms) {}
+
     public function send(string $identifier, string $code): void
     {
-        Log::info("[SMS OTP - no provider configured] to {$identifier}: {$code}");
+        $this->sms->send($identifier, "Your GoldWave verification code is {$code}. It is valid for 10 minutes. Do not share it with anyone.", 'otp');
     }
 }

@@ -22,6 +22,7 @@ class SubmitProfileChangeRequestRequest extends FormRequest
         return [
             'field_name' => ['required', 'in:pan_card,aadhaar_card,address,profile_photo_path,bank_details'],
             'reason' => ['nullable', 'string', 'max:500'],
+            'return_to' => ['nullable', 'in:profile'],
             'new_value' => ['required_if:field_name,pan_card,aadhaar_card,address', 'nullable', 'string', 'max:1000'],
             'new_photo' => ['required_if:field_name,profile_photo_path', 'nullable', 'image', 'max:5120'],
             'bank_account_holder_name' => ['required_if:field_name,bank_details', 'nullable', 'string', 'max:255'],

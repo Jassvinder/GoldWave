@@ -8,6 +8,7 @@ use App\Jobs\ProcessEmiDueStatuses;
 use App\Jobs\RunDailyDummyEntryGeneration;
 use App\Jobs\RunDrawGroupGeneration;
 use App\Jobs\RunMonthlyDrawExecution;
+use App\Jobs\SendEmiReminders;
 use Illuminate\Console\Scheduling\Schedule;
 
 /**
@@ -60,6 +61,13 @@ class Scheduling
         // so today's due-date transitions land promptly.
         $schedule->job(new ProcessEmiDueStatuses)
             ->dailyAt('00:05')
+            ->timezone($timezone)
+            ->withoutOverlapping();
+
+        // T-142 "EMI due reminders" — daily at 09:00 (a sensible hour to reach a member), after the 00:05 due-status
+        // processor above has already moved today's installments to `due`/`overdue`. Idempotent (`emi_reminder_logs`).
+        $schedule->job(new SendEmiReminders)
+            ->dailyAt('09:00')
             ->timezone($timezone)
             ->withoutOverlapping();
 

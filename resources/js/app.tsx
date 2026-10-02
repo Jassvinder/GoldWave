@@ -21,6 +21,8 @@ void createInertiaApp({
             // logs in, so they must not get the authenticated AppLayout sidebar shell.
             case name.startsWith('registration/'):
             case name.startsWith('payments/'):
+            // Printable documents (T-160) — no portal chrome, so Print / Save as PDF is clean.
+            case name.startsWith('invoices/'):
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;

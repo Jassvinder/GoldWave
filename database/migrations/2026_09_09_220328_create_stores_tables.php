@@ -20,6 +20,9 @@ return new class extends Migration
         Schema::create('stores', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            // Store login (T-131): GWLST0001… code, plus its own password once an owner is assigned.
+            $table->string('store_code')->nullable()->unique();
+            $table->string('password')->nullable();
             $table->foreignId('owner_user_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('contact')->nullable();
             $table->string('location')->nullable();
@@ -50,6 +53,23 @@ return new class extends Migration
 
             $table->index(['store_wallet_id', 'occurred_at']);
         });
+
+        // DOMAIN_LOGIC.md §16.5: each store's stock is tracked item-wise. `weight`/`price` are per unit (10 identical
+        // 5 g rings = one row with quantity 10). Stock enters via Super Admin's allocation or an Item Buyback; a
+        // confirmed sale decrements it.
+        Schema::create('store_inventory_items', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('store_id')->constrained('stores')->cascadeOnDelete();
+            $table->string('item_name');
+            $table->enum('metal', ['gold', 'silver']);
+            $table->decimal('weight', 10, 3);
+            $table->unsignedInteger('quantity')->default(0);
+            $table->decimal('price', 14, 2);
+            $table->text('description')->nullable();
+            $table->timestamps();
+
+            $table->index(['store_id', 'metal']);
+        });
     }
 
     /**
@@ -57,6 +77,7 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::dropIfExists('store_inventory_items');
         Schema::dropIfExists('store_wallet_ledger_entries');
         Schema::dropIfExists('store_wallets');
         Schema::dropIfExists('stores');

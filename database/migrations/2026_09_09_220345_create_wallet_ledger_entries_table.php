@@ -22,7 +22,13 @@ return new class extends Migration
             $table->id();
             $table->foreignId('member_id')->constrained('members')->cascadeOnDelete();
             $table->enum('entry_type', ['credit', 'debit']);
-            $table->enum('category', ['level_income', 'pair_reward', 'booster', 'draw_benefit', 'store_distribution', 'payout']);
+            $table->enum('category', [
+                'level_income', 'pair_reward', 'booster', 'draw_benefit', 'store_distribution', 'payout',
+                // §15 Purchase/Repurchase income, kept apart from Level Income.
+                'purchase_repurchase_income',
+                // §12.2(b) — a member's own wallet debit when funding someone else's registration.
+                'assisted_registration',
+            ]);
             $table->nullableMorphs('source');
             $table->decimal('amount', 14, 2);
             $table->enum('status', ['pending', 'confirmed', 'reversed'])->default('confirmed');

@@ -9,7 +9,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * INSTRUCTIONS.md S02 (Admin Users & Permissions), T-017 pre-coding pass
  * (`DOMAIN_LOGIC.md` §21) — promotes an existing, already-active Member's
- * *own* `users` row to `role=admin` (Store Owner). Fixed 17-09-2026, user-
+ * *own* `users` row to `role=store_admin` (Store Owner). Fixed 17-09-2026, user-
  * reported: every real Store Owner is already a company Member first, so
  * this must never create a standalone `users` row disconnected from a
  * `members` row — doing so silently broke `Store::ownerMember()`
@@ -28,11 +28,12 @@ class CreateAdminUser
 
         if ($member->is_company_dummy || $member->status !== 'active' || ! $user || $user->role !== 'member') {
             throw ValidationException::withMessages([
-                'customer_id' => 'Only an active, non-dummy Member who is not already an Admin or Super Admin can be promoted.',
+                'customer_id' => 'Only an active, non-dummy Member who is not already a Store Admin, Admin or Super Admin can be promoted.',
             ]);
         }
 
-        $user->update(['role' => 'admin']);
+        // The Store Owner role is `store_admin` since 29-09-2026 (DOMAIN_LOGIC.md §2).
+        $user->update(['role' => 'store_admin']);
 
         return $user->fresh();
     }

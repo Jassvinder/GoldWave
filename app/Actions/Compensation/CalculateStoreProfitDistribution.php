@@ -7,6 +7,7 @@ use App\Models\StoreProfitDistribution;
 use App\Models\StoreSale;
 use App\Services\RuleVersionService;
 use App\Services\SponsorChainResolver;
+use App\Services\StoreIncomeUnlock;
 use App\Services\WalletLedgerService;
 use Illuminate\Support\Facades\DB;
 
@@ -32,10 +33,16 @@ class CalculateStoreProfitDistribution
         private readonly SponsorChainResolver $sponsorChain,
         private readonly RuleVersionService $rules,
         private readonly WalletLedgerService $wallet,
+        private readonly StoreIncomeUnlock $storeIncome,
     ) {}
 
     public function __invoke(StoreSale $storeSale): void
     {
+        // T-185c — handing over a Repurchase on EMI gives the store nothing (§16.13: "store ko kuchh nahi milega").
+        if ($storeSale->isStoreEmiDelivery()) {
+            return;
+        }
+
         if (StoreProfitDistribution::where('store_sale_id', $storeSale->id)->exists()) {
             return;
         }
@@ -53,8 +60,9 @@ class CalculateStoreProfitDistribution
             return;
         }
 
-        $rates = $this->rules->value('store_profit_distribution_rates', []);
-        $baseAmount = (float) $storeSale->sale_amount;
+        $metal = $storeSale->metal;
+        $rates = $this->rules->metalValue('store_profit_distribution_rates', $metal, []);
+        $baseAmount = $storeSale->incomeBase();
         $chain = $this->sponsorChain->ancestors($ownerMember, self::SPONSOR_LEVELS);
 
         DB::transaction(function () use ($storeSale, $ownerMember, $ruleVersion, $rates, $baseAmount, $chain) {
@@ -64,6 +72,18 @@ class CalculateStoreProfitDistribution
                 $beneficiary = $chain[$level - 1] ?? null;
 
                 if (! $beneficiary) {
+                    continue;
+                }
+
+                // T-149 — an unassigned dummy (or the seeded company root, never assignable) must never itself become a
+                // paid compensation beneficiary, matching the same guard already applied to Pair entries/Booster.
+                // T-174 — nor an entry inserted under the root (Pair/Reward and Booster only).
+                if ($beneficiary->isExcludedFromGeneralIncome()) {
+                    continue;
+                }
+
+                // T-183 — a sponsor level is paid only after 10 qualified directs (then for life); before that it lapses.
+                if (! $this->storeIncome->isUnlocked($beneficiary)) {
                     continue;
                 }
 
@@ -96,7 +116,7 @@ class CalculateStoreProfitDistribution
             'rule_version_id' => $ruleVersionId,
         ]);
 
-        $this->wallet->credit(
+        $this->wallet->creditEarning(
             $beneficiary,
             'store_distribution',
             $amount,

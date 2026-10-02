@@ -32,6 +32,7 @@ class UpdateMemberDetailsRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', Rule::unique('users', 'email')->ignore($userId)],
             'mobile' => ['nullable', 'string', 'max:20'],
+            'gender' => ['nullable', 'in:male,female,other'],
             'pan_card' => ['nullable', 'string', 'regex:/^[A-Z]{5}[0-9]{4}[A-Z]$/'],
             'aadhaar_card' => ['nullable', 'string', 'regex:/^[0-9]{12}$/'],
             'address' => ['nullable', 'string', 'max:1000'],

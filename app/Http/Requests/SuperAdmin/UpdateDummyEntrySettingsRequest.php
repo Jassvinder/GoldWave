@@ -17,6 +17,7 @@ class UpdateDummyEntrySettingsRequest extends FormRequest
         return [
             'enabled' => ['required', 'boolean'],
             'daily_count' => ['required', 'integer', 'min:0'],
+            'plan_code' => ['required', 'in:A,B,C,D'],
         ];
     }
 }

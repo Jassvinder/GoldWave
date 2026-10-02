@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\Store\MarkRestockShipmentReceived;
 use App\Http\Controllers\Controller;
 use App\Models\Store;
 use App\Models\StoreBuyback;
 use App\Models\StoreInventoryItem;
+use App\Models\StoreRestockShipment;
 use App\Support\Dates;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -54,9 +57,38 @@ class InventoryController extends Controller
                 'occurred_at' => Dates::date($buyback->occurred_at),
             ]);
 
+        $pendingRestocks = StoreRestockShipment::where('store_id', $store->id)
+            ->whereIn('status', ['owed', 'sent'])
+            ->orderBy('id')
+            ->get()
+            ->map(fn (StoreRestockShipment $shipment): array => [
+                'id' => $shipment->id,
+                'item_name' => $shipment->item_name,
+                'metal' => $shipment->metal,
+                'weight' => $shipment->weight,
+                'value' => $shipment->value,
+                'status' => $shipment->status,
+            ]);
+
         return Inertia::render('admin/inventory', [
             'items' => $items,
             'buybacks' => $buybacks,
+            'pending_restocks' => $pendingRestocks,
         ]);
+    }
+
+    /** DOMAIN_LOGIC.md §16.12 — T-152. The store confirms a sent restock shipment has arrived. */
+    public function markRestockReceived(StoreRestockShipment $shipment, Request $request, MarkRestockShipmentReceived $action): RedirectResponse
+    {
+        /** @var Store $store */
+        $store = $request->attributes->get('store');
+
+        if ($shipment->store_id !== $store->id) {
+            abort(403);
+        }
+
+        $action($shipment, $request->user());
+
+        return redirect()->route('admin.inventory.index')->with('status', 'Restock confirmed received and added to your inventory.');
     }
 }

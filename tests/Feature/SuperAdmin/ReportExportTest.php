@@ -187,7 +187,7 @@ test('Store Distribution report exposes the beneficiary level via beneficiary_ty
 
 test('a member and an admin are both forbidden from every reports route, including downloading another user\'s export', function () {
     $member = reMember('RE-ROLE-MEMBER');
-    $admin = User::factory()->create(['role' => 'admin']);
+    $admin = User::factory()->create(['role' => 'store_admin']);
     $export = reRunExport(app(RequestReportExport::class)('membership', 'csv', [], reSuperAdmin()));
 
     $this->actingAs($member->user)->get('/super-admin/reports')->assertForbidden();

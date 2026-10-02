@@ -62,7 +62,7 @@ class GenerateDrawGroups
     }
 
     /** @return array<int, int> */
-    private function eligibleUngroupedMemberIds(): array
+    public function eligibleUngroupedMemberIds(): array
     {
         $emiThresholds = $this->rules->value('draw_eligibility_emis', []);
 
@@ -71,6 +71,8 @@ class GenerateDrawGroups
             ->where(function ($query) {
                 $query->where('is_company_dummy', false)->orWhere('dummy_status', 'assigned');
             })
+            // T-174 — an entry inserted under the root earns Pair/Reward and Booster only, never the Draw.
+            ->where('benefits_limited', false)
             ->whereDoesntHave('drawGroupMemberships')
             ->with(['membershipPlan', 'emiSchedule.installments'])
             ->orderBy('id')

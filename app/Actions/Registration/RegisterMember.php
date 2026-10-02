@@ -7,7 +7,10 @@ use App\Models\Member;
 use App\Models\MembershipPlan;
 use App\Models\Payment;
 use App\Models\User;
+use App\Notifications\CashPaymentAwaitingApproval;
 use App\Services\BinaryPlacementResolver;
+use App\Services\Notifier;
+use App\Services\Payments\PaymentModes;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -43,7 +46,7 @@ class RegisterMember
     /**
      * @param  array<string, mixed>  $data  Validated RegisterMemberRequest input: sponsor_code,
      *                                      placement_side, mobile, email, name, membership_plan_id,
-     *                                      rate_booking_method (EMI plans only), payment_mode.
+     *                                      payment_mode. (EMI plans always start on Future Rate, T-116.)
      */
     public function __invoke(array $data): Member
     {
@@ -51,7 +54,11 @@ class RegisterMember
 
         while (true) {
             try {
-                return $this->attempt($data);
+                $member = $this->attempt($data);
+
+                $this->announceCashPayment($member);
+
+                return $member;
             } catch (QueryException $e) {
                 $isUniqueViolation = str_contains($e->getMessage(), 'members_placement_unique');
                 if (! $isUniqueViolation || ++$attempt >= self::MAX_PLACEMENT_RETRIES) {
@@ -59,6 +66,16 @@ class RegisterMember
                 }
                 // Concurrent registration took the same placement slot — resolve again and retry.
             }
+        }
+    }
+
+    /** T-141 — a cash registration waits for the Super Admin's approval, so the Super Admin is told (bell + Notifications page). */
+    private function announceCashPayment(Member $member): void
+    {
+        $payment = $member->payments->firstWhere('type', 'registration');
+
+        if ($payment !== null && PaymentModes::needsApproval($payment->mode)) {
+            Notifier::toSuperAdmins(new CashPaymentAwaitingApproval($payment));
         }
     }
 
@@ -77,10 +94,9 @@ class RegisterMember
             default => throw ValidationException::withMessages(['placement_side' => 'Select Left or Right.']),
         };
         $membershipPlanId = (int) $data['membership_plan_id'];
-        $rateBookingMethod = isset($data['rate_booking_method']) ? (string) $data['rate_booking_method'] : null;
         $paymentMode = (string) $data['payment_mode'];
 
-        return DB::transaction(function () use ($data, $sponsorCode, $placementSide, $membershipPlanId, $rateBookingMethod, $paymentMode) {
+        return DB::transaction(function () use ($data, $sponsorCode, $placementSide, $membershipPlanId, $paymentMode) {
             $sponsor = ($this->validateSponsorCode)($sponsorCode);
 
             $plan = MembershipPlan::where('id', $membershipPlanId)->where('is_active', true)->firstOrFail();
@@ -98,6 +114,7 @@ class RegisterMember
             $member = Member::create([
                 'user_id' => $user->id,
                 'customer_id' => null,
+                'gender' => $data['gender'] ?? null, // Required by RegisterMemberRequest (T-122); Actions called directly (seeders/tests) may omit it.
                 'sponsor_id' => $sponsor->id,
                 'placement_parent_id' => $placement['parent_id'],
                 'placement_side' => $placement['side'],
@@ -106,19 +123,15 @@ class RegisterMember
             ]);
 
             if ($plan->isEmiPlan()) {
-                if (! in_array($rateBookingMethod, ['current_rate', 'future_rate'], true)) {
-                    throw ValidationException::withMessages([
-                        'rate_booking_method' => 'Select Current Rate Booking or Future Rate Booking for this plan.',
-                    ]);
-                }
-
-                $rateBooking = ($this->calculateEmiRateBooking)($plan, $rateBookingMethod);
+                // T-116 (20-09-2026): no rate-booking choice at registration — every EMI plan starts on Future Rate
+                // (plain plan amount); the member may book at the Current Rate later (Actions/Emi/BookCurrentRate).
+                $rateBooking = ($this->calculateEmiRateBooking)($plan, 'future_rate');
 
                 EmiSchedule::create([
                     'member_id' => $member->id,
                     'membership_plan_id' => $plan->id,
                     'total_installments' => $plan->installment_count,
-                    'rate_booking_method' => $rateBookingMethod,
+                    'rate_booking_method' => 'future_rate',
                     'installment_amount' => $rateBooking['installment_amount'],
                     'metal_rate_id' => $rateBooking['metal_rate_id'],
                     'rate_per_gram_at_booking' => $rateBooking['rate_per_gram'],
@@ -142,7 +155,7 @@ class RegisterMember
                 'mode' => $paymentMode,
                 'status' => 'pending',
                 'idempotency_key' => (string) Str::uuid(),
-                'cash_status' => $paymentMode === 'cash' ? 'pending_verification' : null,
+                'cash_status' => PaymentModes::initialApprovalStatus($paymentMode),
             ]);
 
             $member->load(['payments', 'emiSchedule']);

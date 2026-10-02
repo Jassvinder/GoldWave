@@ -19,6 +19,7 @@ class PairEntry extends Model
     protected $fillable = [
         'member_id',
         'side',
+        'metal',
         'source_payment_id',
         'status',
         'consumed_for_milestone_no',

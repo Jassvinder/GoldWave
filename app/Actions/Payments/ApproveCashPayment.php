@@ -6,6 +6,9 @@ use App\Actions\Registration\ActivateMembershipOnPaymentConfirmed;
 use App\Events\PaymentConfirmed;
 use App\Models\Payment;
 use App\Models\User;
+use App\Notifications\CashPaymentDecided;
+use App\Services\Notifier;
+use App\Services\Payments\PaymentModes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -27,8 +30,8 @@ class ApproveCashPayment
         $wasAlreadyPaid = DB::transaction(function () use ($payment, $operator) {
             $locked = Payment::whereKey($payment->id)->lockForUpdate()->firstOrFail();
 
-            if ($locked->mode !== 'cash') {
-                throw ValidationException::withMessages(['payment' => 'This payment is not a cash payment.']);
+            if (! PaymentModes::needsApproval($locked->mode)) {
+                throw ValidationException::withMessages(['payment' => 'This payment does not need a manual approval.']);
             }
 
             if ($locked->status === 'paid') {
@@ -54,6 +57,9 @@ class ApproveCashPayment
 
         if (! $wasAlreadyPaid) {
             event(new PaymentConfirmed($payment->refresh()));
+
+            // T-141 — tell the member (bell if they can log in yet, plus email + SMS).
+            Notifier::toUser($payment->member->user, new CashPaymentDecided($payment, true));
         }
     }
 }

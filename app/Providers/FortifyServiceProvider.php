@@ -4,13 +4,18 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Models\User;
+use App\Support\Portal;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
+use Laravel\Fortify\Contracts\LogoutResponse;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
 
@@ -21,7 +26,20 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // T-198 — a member who logs out lands on the Member login; staff keep going to the home page.
+        $this->app->singleton(LogoutResponse::class, fn () => new class implements LogoutResponse
+        {
+            public function toResponse($request)
+            {
+                if ($request->wantsJson()) {
+                    return new JsonResponse('', 204);
+                }
+
+                return Portal::lastUsed($request) === Portal::MEMBER
+                    ? redirect()->route('member.login')
+                    : redirect(Fortify::redirects('logout', '/'));
+            }
+        });
     }
 
     /**
@@ -41,6 +59,31 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
         Fortify::createUsersUsing(CreateNewUser::class);
+
+        // T-117 (19-09-2026) — user's own explicit split: an Admin (Store
+        // Owner) must log in with the store's Store ID + password (Admin/
+        // Store Login, `StoreLoginController`), never their email here.
+        // Rejecting the attempt for a `role=admin` user (rather than simply
+        // leaving the generic form open to them too) is what actually keeps
+        // the two login types "not merged or mixed together" — Super Admin
+        // is untouched, still plain email+password.
+        Fortify::authenticateUsing(function (Request $request) {
+            $user = User::where('email', $request->email)->first();
+
+            // Store Admins use the Store Login; Super Admin and the company Admin (29-09-2026) use this form.
+            if (! $user || $user->isStoreAdmin()) {
+                return null;
+            }
+
+            if (Hash::check($request->password, $user->password)) {
+                // T-198 — remembered so a later expired session goes back to this (staff) login.
+                Portal::stamp(Portal::STAFF);
+
+                return $user;
+            }
+
+            return null;
+        });
     }
 
     /**
@@ -65,10 +108,6 @@ class FortifyServiceProvider extends ServiceProvider
 
         Fortify::verifyEmailView(fn (Request $request) => Inertia::render('auth/verify-email', [
             'status' => $request->session()->get('status'),
-        ]));
-
-        Fortify::registerView(fn () => Inertia::render('auth/register', [
-            'passwordRules' => Password::defaults()->toPasswordRulesString(),
         ]));
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/two-factor-challenge'));
