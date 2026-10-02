@@ -142,7 +142,7 @@ const settingsItems: NavItem[] = [
         superAdminOnly: true,
     },
     {
-        title: 'Landing Page Hero',
+        title: 'Landing Page',
         href: landingHeroIndex(),
         icon: LayoutTemplate,
     },

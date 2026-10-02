@@ -362,6 +362,39 @@ test('publishing only the Gold tab leaves Silver values untouched (T-110)', func
     expect((float) $active->values()->where('key', 'item_buyback_percent')->value('value'))->toBe(60.0);
 });
 
+test('a super admin can update the landing page contact details, and the home page shows them with the plans (02-10-2026)', function () {
+    $this->actingAs(spSuperAdmin())
+        ->post('/super-admin/landing-hero', [
+            'headline' => 'Headline',
+            'subtext' => 'Subtext',
+            'cta_primary_label' => 'Join Now',
+            'cta_secondary_label' => 'Member Login',
+            'contact_phone' => '+91 98100 00001',
+            'contact_whatsapp' => '',
+            'contact_email' => 'help@example.com',
+            'contact_address' => 'Shop 1, Main Road',
+        ])
+        ->assertRedirect('/super-admin/landing-hero');
+
+    $this->get('/')->assertInertia(fn ($page) => $page
+        ->component('welcome')
+        ->where('contact.phone', '+91 98100 00001')
+        ->where('contact.whatsapp', '')
+        ->where('contact.email', 'help@example.com')
+        ->has('plans')
+        ->has('stores'));
+
+    $this->actingAs(spSuperAdmin())
+        ->post('/super-admin/landing-hero', [
+            'headline' => 'Headline',
+            'subtext' => 'Subtext',
+            'cta_primary_label' => 'Join Now',
+            'cta_secondary_label' => 'Member Login',
+            'contact_email' => 'not-an-email',
+        ])
+        ->assertSessionHasErrors('contact_email');
+});
+
 test('a super admin can update the public landing page hero copy (T-115)', function () {
     $this->actingAs(spSuperAdmin())
         ->post('/super-admin/landing-hero', [

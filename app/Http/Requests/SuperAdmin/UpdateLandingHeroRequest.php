@@ -20,6 +20,11 @@ class UpdateLandingHeroRequest extends FormRequest
             'subtext' => ['required', 'string', 'max:1000'],
             'cta_primary_label' => ['required', 'string', 'max:50'],
             'cta_secondary_label' => ['required', 'string', 'max:50'],
+            // Contact details on the landing page footer (02-10-2026) — a blank one is simply hidden there.
+            'contact_phone' => ['nullable', 'string', 'max:30'],
+            'contact_whatsapp' => ['nullable', 'string', 'max:30'],
+            'contact_email' => ['nullable', 'email', 'max:255'],
+            'contact_address' => ['nullable', 'string', 'max:500'],
         ];
     }
 }

@@ -52,6 +52,10 @@ class RuleVersionDiff
         'landing_hero_subtext' => 'Landing Page Subtext',
         'landing_hero_cta_primary_label' => 'Landing Page Primary CTA Label',
         'landing_hero_cta_secondary_label' => 'Landing Page Secondary CTA Label',
+        'landing_contact_phone' => 'Landing Page Contact Phone',
+        'landing_contact_whatsapp' => 'Landing Page Contact WhatsApp',
+        'landing_contact_email' => 'Landing Page Contact Email',
+        'landing_contact_address' => 'Landing Page Contact Address',
     ];
 
     /**

@@ -105,7 +105,13 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
 - **Online payment (T-137, 22-09-2026 — switched off 30-09-2026 by T-196):** choosing Online sends the member to our signed checkout page, which opens Razorpay Checkout automatically (UPI/cards/netbanking/wallets); a failed or closed payment leaves a "Pay now" button on the Registration Status page (and the EMI page's Pay button) to retry. Cash is unchanged.
 - `/join` and the Registration Status page (after submitting) show the GoldWave logo and name above the card, linking to the home page (T-135, 20-09-2026; status page 21-09-2026). One shared component: `components/public-logo-link.tsx`.
 - **Visual weight (21-09-2026, user feedback on Member Management):** the default Badge is now a soft amber tint instead of a solid amber block; an Active status uses the new soft-green `success` Badge variant (Member Management, Registration Status); the shared FilterBar's Search button is the quiet `secondary` button, not the solid primary one.
-- Home page `/` hero is a full-width auto-advancing image slider (5 s, pauses on hover, previous/next arrows, **no dots**, first slide eager and the rest lazy-loaded) with the Super-Admin-editable headline/subtext/CTAs (T-115) overlaid. The 5 slides are placeholder gradient images in `public/Images/hero/slide-1.webp`…`slide-5.webp` — replace those files with real jewellery photos (WebP) to change them.
+- **Home page `/` (T-203, 02-10-2026 — replaces the T-130 photo slider; client wanted it more colourful):** a bright, colourful page with no photos (none supplied yet). Sections in order:
+  1. Sticky header (logo, section links on large screens, Member Login + Join Now).
+  2. Gradient hero with the Super-Admin-editable headline/subtext/CTAs (T-115), three trust points, decorative plan cards and a wave edge.
+  3. Why GoldWave, Plans (active `membership_plans`, marketing names, amount × months or one-time, jewellery entitlement, "Join with …"), How it works (4 steps), Member Rewards (ends with "No income is guaranteed").
+  4. Stores (active stores, name + location; hidden when there are none), FAQ, Contact + Join band, footer (Member Login and Staff / Store Login).
+  - Contact details (phone, WhatsApp, email, address) are edited by the Super Admin on the **Landing Page** screen (same screen as the hero copy). A blank field is hidden; phone, WhatsApp and email are clickable.
+  - When real jewellery photos arrive, the hero's decorative cards (`HeroVisual` in `welcome.tsx`) are the place to put them.
 
 ### Registration page
 
