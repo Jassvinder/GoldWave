@@ -2,6 +2,7 @@
 
 use App\Models\Member;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 /**
  * DOMAIN_LOGIC.md §4.1 (Directs View — Sponsor/Direct only) and §4.2
@@ -211,4 +212,36 @@ test('Tree and Directs cards carry gender, sponsor name, photo and status for th
         ->where('directs.0.status', 'cancelled')
         ->where('directs.0.sponsor_name', $root->user->name)
     );
+});
+
+test('every Tree and Directs card carries its own Left/Right team size, fetched in one batched query (T-208)', function () {
+    // root: left a, right b. a: left a1, right a2. a2: left a2x.
+    $root = createNetworkMember('GWL300');
+    $a = createNetworkMember('GWL301', sponsorId: $root->id, placementParentId: $root->id, placementSide: 'left');
+    $b = createNetworkMember('GWL302', sponsorId: $root->id, placementParentId: $root->id, placementSide: 'right');
+    createNetworkMember('GWL303', sponsorId: $a->id, placementParentId: $a->id, placementSide: 'left');
+    $a2 = createNetworkMember('GWL304', sponsorId: $a->id, placementParentId: $a->id, placementSide: 'right');
+    createNetworkMember('GWL305', sponsorId: $a->id, placementParentId: $a2->id, placementSide: 'left');
+
+    DB::enableQueryLog();
+    $this->actingAs($root->user)->get('/member/tree')->assertOk()->assertInertia(fn ($page) => $page
+        ->where('root.left_count', 4)
+        ->where('root.right_count', 1)
+        ->where('root.left.left_count', 1)
+        ->where('root.left.right_count', 2)
+        ->where('root.left.right.left_count', 1)
+        ->where('root.left.right.right_count', 0)
+        ->where('root.right.left_count', 0));
+    $recursiveQueries = collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'WITH RECURSIVE'))->count();
+    DB::disableQueryLog();
+    // One for the cards, one for the Team strip â€” never one per card.
+    expect($recursiveQueries)->toBe(2);
+
+    $this->actingAs($root->user)->get('/member/directs')->assertOk()->assertInertia(fn ($page) => $page
+        ->where('selectedMember.left_count', 4)
+        ->where('selectedMember.right_count', 1)
+        ->where('directs.0.customer_id', 'GWL301')
+        ->where('directs.0.left_count', 1)
+        ->where('directs.0.right_count', 2)
+        ->where('directs.1.left_count', 0));
 });

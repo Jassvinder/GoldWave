@@ -42,7 +42,7 @@ class TreeController extends Controller
                 'name' => $loggedInMember->user?->name,
                 'customer_id' => $loggedInMember->customer_id,
             ] : null,
-            'root' => $this->buildNode($root, self::DEPTH),
+            'root' => $this->buildTree($root, $network),
             'team' => $network->teamCounts($root),
         ]);
     }
@@ -66,26 +66,64 @@ class TreeController extends Controller
     }
 
     /**
+     * T-208 (02-10-2026) — two passes: walk the visible levels first (one query per node for both children), then
+     * build every card with its Left/Right counts from a single batched query.
+     *
+     * @return array<string, mixed>
+     */
+    private function buildTree(Member $root, MemberNetworkSummary $network): array
+    {
+        $members = [];
+        $shape = $this->walk($root, self::DEPTH, $members);
+
+        return $this->buildNode($shape, NetworkNodeCard::forMany($members, $network));
+    }
+
+    /**
+     * @param  list<Member>  $members  collects every visited member
+     * @return array{member: Member, left: array<string, mixed>|null, right: array<string, mixed>|null}
+     */
+    private function walk(Member $member, int $depth, array &$members): array
+    {
+        $members[] = $member;
+        $shape = ['member' => $member, 'left' => null, 'right' => null];
+
+        if ($depth <= 0) {
+            return $shape;
+        }
+
+        $children = Member::with(['user', 'sponsor.user'])
+            ->where('placement_parent_id', $member->id)
+            ->whereIn('placement_side', ['left', 'right'])
+            ->get()
+            ->keyBy('placement_side');
+
+        foreach (['left', 'right'] as $side) {
+            $child = $children->get($side);
+            $shape[$side] = $child ? $this->walk($child, $depth - 1, $members) : null;
+        }
+
+        return $shape;
+    }
+
+    /**
      * Recursive node shape: NetworkNodeCard fields + {left, right} where
      * left/right are either null or another node of this same shape — not
      * expressible as a finite PHPDoc array shape, hence the loose value type.
      *
+     * @param  array<string, mixed>  $shape
+     * @param  array<int, array<string, mixed>>  $cards
      * @return array<string, mixed>
      */
-    private function buildNode(Member $member, int $depth): array
+    private function buildNode(array $shape, array $cards): array
     {
-        $node = [...NetworkNodeCard::from($member), 'left' => null, 'right' => null];
+        /** @var Member $member */
+        $member = $shape['member'];
 
-        if ($depth <= 0) {
-            return $node;
-        }
-
-        $left = Member::where('placement_parent_id', $member->id)->where('placement_side', 'left')->first();
-        $right = Member::where('placement_parent_id', $member->id)->where('placement_side', 'right')->first();
-
-        $node['left'] = $left ? $this->buildNode($left, $depth - 1) : null;
-        $node['right'] = $right ? $this->buildNode($right, $depth - 1) : null;
-
-        return $node;
+        return [
+            ...$cards[$member->id],
+            'left' => is_array($shape['left']) ? $this->buildNode($shape['left'], $cards) : null,
+            'right' => is_array($shape['right']) ? $this->buildNode($shape['right'], $cards) : null,
+        ];
     }
 }

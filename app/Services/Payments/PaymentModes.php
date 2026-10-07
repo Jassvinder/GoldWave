@@ -80,8 +80,21 @@ class PaymentModes
         return [
             'modes' => self::offered($withWallet),
             'upi_id' => $rules->value('company_upi_id') ?: null,
-            'upi_qr_url' => is_string($qrPath) && $qrPath !== '' ? Storage::disk('public')->url($qrPath) : null,
+            'upi_qr_url' => self::qrUrl($qrPath),
         ];
+    }
+
+    /**
+     * T-212 (06-10-2026) — the company QR is either a file the Super Admin uploaded (a `public` disk path such as
+     * `payment-qr/…webp`) or the seeded default, a site asset given as an absolute path (`/Images/QRcode.webp`).
+     */
+    private static function qrUrl(mixed $path): ?string
+    {
+        if (! is_string($path) || $path === '') {
+            return null;
+        }
+
+        return str_starts_with($path, '/') ? asset(ltrim($path, '/')) : Storage::disk('public')->url($path);
     }
 
     /** Stores the Ref ID and screenshot on a `upi` payment (no-op for other modes). */
@@ -92,8 +105,8 @@ class PaymentModes
         }
 
         $screenshot = $request->file('upi_screenshot');
-        // Same storage as bank proof documents.
-        $path = $screenshot instanceof UploadedFile ? WebpImageStore::store($screenshot, 'payment-proofs') : false;
+        // Private disk, like bank proof documents — viewed only through PrivateDocumentController (02-10-2026).
+        $path = $screenshot instanceof UploadedFile ? WebpImageStore::store($screenshot, 'payment-proofs', 'local') : false;
 
         $payment->update([
             'upi_reference' => trim((string) $request->input('upi_reference')),

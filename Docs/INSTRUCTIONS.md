@@ -98,7 +98,20 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
 - **Member login keyboard order (30-09-2026):** on `/member/login` (Customer ID + Password), Tab from Customer ID goes straight to Password, then the Log in button, and only then the "Forgot password?" link — same explicit `tabIndex` order as `/login`.
 - **Payment step (T-196, 30-09-2026, user decision; rule `DOMAIN_LOGIC.md` §10.0):** one shared chooser (`components/payment-mode-picker.tsx`) on `/join`, both assisted registrations and the EMI page. It offers **Cash** and **GPay / UPI** (plus **Store Wallet** / **My Wallet** on assisted registration). Online appears only when switched on.
   - **GPay / UPI** shows the company QR and UPI ID, with the amount on EMI payments. It asks for the **Transaction / UTR Ref ID** and a **Payment screenshot** (both required).
+  - **Layout (T-212, 06-10-2026, `Docs/Screenshots/19.png`):** everything is stacked so it fits the EMI dialog:
+    1. the QR centred on top (the client's Google Pay card);
+    2. a "UPI ID … Copy" row;
+    3. "Amount to pay ₹X";
+    4. a one-line instruction;
+    5. full-width Ref ID and screenshot inputs.
+  - The earlier side-by-side layout squeezed the inputs into a narrow column.
+  - No payment gateway is used for this mode.
   - On the EMI page, each Pay and "Pay All Remaining EMIs" opens a dialog (`components/emi-pay-dialog.tsx`) with the same chooser. The confirm button reads "Submit ₹X for approval".
+  - **After submitting (T-213, 06-10-2026, user-reported).** The installment stays `due` until approval.
+    - **While a Cash or GPay/UPI payment waits for approval:** its Status shows an amber **"Awaiting approval"** badge. The Pay button is replaced by "GPay/UPI submitted on DD-MM-YYYY · Waiting for the company to confirm".
+    - **If the company rejects it:** the Pay button returns, with "Last payment was rejected — please pay again" under it.
+    - The Paid column names the mode (Cash, GPay/UPI, Online, Wallet) instead of the raw code.
+    - Before this, the Pay button stayed visible after submitting.
   - The Registration Status page and Payment History show "GPay/UPI".
   - **Payment Approvals** (sidebar, Super Admin + Admin; the old Cash Payments page) lists Cash and GPay/UPI together. A "Paid by" column shows the Ref ID and a "View screenshot" link, and the strip counts Cash vs GPay/UPI.
   - **Payment Settings (UPI)** (Super Admin only) sets the UPI ID and uploads the QR image, and shows whether Online is on.
@@ -108,17 +121,31 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
 - **Home page `/` (T-203, 02-10-2026 — replaces the T-130 photo slider; client wanted it more colourful):** a bright, colourful page with no photos (none supplied yet). Sections in order:
   1. Sticky header (logo, section links on large screens, Member Login + Join Now).
   2. Gradient hero with the Super-Admin-editable headline/subtext/CTAs (T-115), three trust points, decorative plan cards and a wave edge.
-  3. Why GoldWave, Plans (active `membership_plans`, marketing names, amount × months or one-time, jewellery entitlement, "Join with …"), How it works (4 steps), Member Rewards (ends with "No income is guaranteed").
-  4. Stores (active stores, name + location; hidden when there are none), FAQ, Contact + Join band, footer (Member Login and Staff / Store Login).
+  3. **Jewellery slider (T-210, 03-10-2026, user request):** gold-jewellery banners with **no text over them**.
+     - Rounded and inside the page width, right below the hero: 5:2 on desktop, 16:9 on phones (anchored right, where the jewellery is).
+     - Auto-advances every 5 s and pauses on hover or focus. Previous/next arrows, no dots.
+     - Images: `public/Images/slider/slide-1…3.webp`, made from the old `Images/hero` PNGs at 1920px (about 400 KB in total). To change them, replace the files and update `JEWELLERY_SLIDES` in `welcome.tsx`.
+  4. Why GoldWave, Plans (active `membership_plans`, marketing names, amount × months or one-time, jewellery entitlement, "Join with …"), How it works (4 steps), Member Rewards (ends with "No income is guaranteed").
+  5. Stores (active stores, name + location; hidden when there are none), FAQ, Contact + Join band, footer (Member Login and Staff / Store Login).
   - Contact details (phone, WhatsApp, email, address) are edited by the Super Admin on the **Landing Page** screen (same screen as the hero copy). A blank field is hidden; phone, WhatsApp and email are clickable.
   - When real jewellery photos arrive, the hero's decorative cards (`HeroVisual` in `welcome.tsx`) are the place to put them.
+- **Legal pages (T-207, 02-10-2026):** public, no login. There are three: `/terms` (Terms & Conditions), `/privacy` (Privacy Policy) and `/refund-policy` (Refund & Cancellation).
+  - They share one layout (`components/legal-layout.tsx`): logo header with "Back to home", a gradient title band with "Last updated", tabs between the three pages, and a Contact us block. That block uses the Super Admin Landing Page contact details.
+  - The text is fixed in the page components and is not editable in Super Admin. It is a draft written from `DOMAIN_LOGIC.md` and needs a legal review.
+  - The refund page states in a red box: **no refunds, no returns, no cancellation for a refund** for plans, EMIs, store purchases or payouts (§0, §16.7). It also explains that a buyback is not a refund.
+  - Links: a **Legal** column in the home page footer, and a line under "Continue to Payment" on `/join` ("By continuing you agree to the Terms & Conditions, Privacy Policy and No-Refund Policy", each opening in a new tab).
 
 ### Registration page
 
 - Invitation/Sponsor Code input; validated sponsor name displayed directly under the code input.
 - Left / Right placement selection.
 - Mobile number, email, name, **gender (required — Male / Female / Other, T-122 19-09-2026)**.
-- Plan cards, one per plan: marketing name first (Silver Start/Prime, Gold Rise/Elite, Silver/Gold Direct, T-154 25-09-2026 — the A-F letter code is never shown), then amount/schedule (₹1,000×20, ₹3,000×10, ₹5,000×10, ₹10,000×10, ₹20,000 one-time, ₹50,000 one-time — see `DOMAIN_LOGIC.md` §3 for plan details).
+- **Plan choice: two dropdowns, Silver plans and Gold plans (T-211, 06-10-2026, client request; replaces the six plan cards).** The shared `components/plan-picker.tsx` is used on `/join` and on both assisted registration pages (member and admin).
+  - Each option shows the marketing name (Silver Start/Prime/Direct, Gold Rise/Elite/Direct; T-154 — the A–F code is never shown) and "₹amount × N months" or "₹amount one-time".
+  - A member joins on one plan, so choosing in one dropdown clears the other. The chosen dropdown gets a silver or gold highlight.
+  - Inside the open list, the highlighted and selected options use a light indigo (Silver) or amber (Gold) tint with dark text (06-10-2026, `Docs/Screenshots/18.png`). The theme's teal accent used to make the price line unreadable.
+  - Below the dropdowns, a **summary card** for the chosen plan shows: Monthly EMI or Amount, Duration, Total, and You get (fixed weight, or "jewellery of your choice at the current rate" for Direct plans). It is built from a list of rows (`PlanSummary`), so more plan information can be added there later without changing the dropdowns.
+  - Plan details: `DOMAIN_LOGIC.md` §3.
 - Order/payment summary.
 - Payment mode: Online or Cash (cash registrations stay inactive until Super Admin confirms and activates — `DOMAIN_LOGIC.md` §3.1, §10.2).
 - Terms/consent area (if the company later requires it).
@@ -223,11 +250,17 @@ Full behavioral rule: `DOMAIN_LOGIC.md` §4.1. (Back button and search added 13-
 - Logged-in member starts as Root; Left/Right placement branches shown below, connected by the same trunk-line pattern as Directs View (vertical stub from parent → horizontal line spanning Left/Right centers → vertical stub into each child/Empty slot).
 - Clicking any node makes it the Selected Member; that member becomes the new Root with its own branches (recursive) — implemented as a full re-root page visit rather than a separate in-place-expand interaction (see `TreeController`'s docblock for why one interaction satisfies both "becomes the new Root" and "each child can be expanded").
 - **Depth (T-118, 19-09-2026):** the Root and 3 generations below it are loaded per view (up to 15 cards; raised 2 → 5 on 19-09-2026, then set to 3 the same day because 5 made the tree too wide/unreadable); deeper members are reached by clicking a node to re-root.
-- Zoom (+/−/Reset buttons; zoom-out down to 20%, lowered from 50% on 19-09-2026 so the wider tree fits), pan (click-drag) supported on the diagram. Cards are compact (w-48) and sibling columns tightly spaced for the same reason (Tree View got too wide after the T-119 card redesign).
+- Zoom (+/−/Reset buttons; zoom-out down to 20%, lowered from 50% on 19-09-2026 so the wider tree fits), pan (click-drag) supported on the diagram. Cards are compact (w-40 since T-208; w-48 before) and sibling columns tightly spaced for the same reason (Tree View got too wide after the T-119 card redesign).
 - **Back button** and **Customer ID search** — same behavior and downline-only restriction as Directs View above.
 - **Go to Root button (T-123, 19-09-2026):** same button/behavior as Directs View, landing on the logged-in member's own Tree View root.
 - **Node cards (T-119, 19-09-2026, per `Docs/Screenshots/TreeView.png`):** circular avatar — own uploaded photo, else gender placeholder (male blue / female pink), else the male/default placeholder for "other" or unset gender (never a bare icon — 20-09-2026) — plus bold full name, Customer ID, and "Sponsored by : <name>". A small red dot at the card's top-right corner = inactive member (status not `active`). The identical card is used in Directs View (one shared `MemberNodeCard` component, data from `AppSupportNetworkNodeCard`).
 - **Cards are rectangular; only the avatar inside is a circle (T-119, 19-09-2026) — no circular nodes.**
+- **Compact card redesign (T-208, 02-10-2026; supersedes the T-119 layout above, per `Docs/Screenshots/MemberCard.png`).** The client found the old card too big, so size had to be as small as possible. Changes:
+  - **Size:** about 160 × 60 px (was 192 × ~72).
+  - **Layout:** white card with a gold border and rounded corners. Left side: the round, gold-ringed avatar, with the **Customer ID in a small gold chip under the avatar** (the user's change to the mockup). Right side: the name (one line, full name on hover), "👤 Sp: <sponsor name>", and the member's **Left / Right Binary team size** as two small badges, "L n" and "R n".
+  - **Kept from before:** the avatar rules and the inactive red dot.
+  - **Where:** the same card in Tree View and Directs View. Tree View's Empty slot was shrunk to the same size.
+  - **Data:** the L/R numbers are the same leg totals as the Team strip. They come for every card on the page from **one** batched query (`NetworkNodeCard::forMany` → `MemberNetworkSummary::forMany`), never one query per card. Tree View also now loads both children of a node in one query, instead of one query per side.
 - Binary Position/Placement only — never Sponsor/Direct.
 - Super Admin can open this view for any member.
 
@@ -315,6 +348,7 @@ Balance + transaction ledger (see `DOMAIN_LOGIC.md` §12 for ledger fields). **T
 - **Member Payout page:** while the bank details are unverified, an amber box explains that payout requests open after verification. It also says the member will be notified, and gives the ₹min–balance range. Once verified, the form shows **Amount (₹min to ₹available)** with a free amount input (min/max set on the field), a **Full balance** button, and a line saying the amount is held until processed and TDS/fee come off at payment. The server refuses below the minimum or above the available balance, with a clear message.
 - **Super Admin/Admin Payout Requests:** a **Bank details waiting for verification (n)** section above the queue lists Member, Bank ···last4, Submitted date, Wallet and an **Open member** button. Verification itself stays on Member Detail.
 - **Verifying bank details notifies the member** ("Bank details verified" → links to Payout).
+- **Bank Proof on Member Detail (T-206, 02-10-2026):** next to Bank Verified, a **View proof** link opens the member's latest uploaded passbook/cheque in a new tab, so the Super Admin/Admin can check it before pressing Verify. It shows "—" when no proof was uploaded. Like the Payment Approvals "View screenshot" link, the file is private and opens only for a logged-in Super Admin/Admin.
 
 - Available balance, withdrawable/eligible balance, withdrawal amount input.
 - Minimum payout request enforcement (default ₹500, Super Admin configurable).
@@ -357,6 +391,10 @@ Add/manage member (where permitted), review cash payment, review profile-change 
 ## Admin Member Management
 
 ### Member list
+
+**Who is listed (T-209, 02-10-2026, user-reported):** every real member, **including a company dummy entry once it is assigned to a leader** (from the daily dummies or a Maintenance insert). The company root and still-unassigned dummies are left out.
+- Before this fix, an assigned leader could log in but was missing from this list, its counts and the CSV export, because the filter checked only `is_company_dummy`.
+- The same rule (the `Member::realMembers()` scope) drives this page's list, stat cards and export, and the Super Admin Dashboard's Members card.
 
 Customer ID, name, mobile/email, plan, sponsor, placement, status, join date. **Rows are not clickable (T-134, 20-09-2026):** each row has an "Actions" column with an Eye (view) icon that opens the member detail — the same applies to the Store Management and Store Wallet Management lists. Search by Customer ID/name/mobile. Filter by plan/status/date/sponsor. Pagination/export.
 

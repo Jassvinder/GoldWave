@@ -1,11 +1,17 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\LegalPageController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\WelcomeController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [WelcomeController::class, 'index'])->name('home');
+
+// T-207 — public legal pages, linked from the home page footer and the Join page.
+Route::get('terms', [LegalPageController::class, 'terms'])->name('legal.terms');
+Route::get('privacy', [LegalPageController::class, 'privacy'])->name('legal.privacy');
+Route::get('refund-policy', [LegalPageController::class, 'refund'])->name('legal.refund');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');

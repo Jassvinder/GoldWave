@@ -124,3 +124,23 @@ test('only a Super Admin can open or use the page', function () {
         ->assertRedirect('/super-admin/maintenance');
     expect(Member::where('benefits_limited', true)->count())->toBe(1);
 });
+
+test('an inserted entry shows in Member Management once it is assigned to a leader, never while unassigned (T-209)', function () {
+    $entry = app(InsertEntryUnderRoot::class)('left');
+    $superAdmin = mtSuperAdmin();
+
+    $this->actingAs($superAdmin)->get('/super-admin/members?search='.$entry->customer_id)
+        ->assertInertia(fn ($page) => $page->where('members.total', 0));
+
+    app(AssignDummyEntryToLeader::class)($entry, 'Leader One', 'leader-one@example.test', null, $superAdmin);
+
+    $this->actingAs($superAdmin)->get('/super-admin/members?search='.$entry->customer_id)
+        ->assertInertia(fn ($page) => $page
+            ->where('members.total', 1)
+            ->where('members.data.0.customer_id', $entry->customer_id));
+
+    // The company root itself never appears.
+    $root = Member::where('is_company_root', true)->firstOrFail();
+    $this->actingAs($superAdmin)->get('/super-admin/members?search='.$root->customer_id)
+        ->assertInertia(fn ($page) => $page->where('members.total', 0));
+});

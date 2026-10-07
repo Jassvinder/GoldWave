@@ -42,6 +42,7 @@ function upiJoinPayload(array $overrides = []): array
 beforeEach(function () {
     $this->seed();
     Storage::fake('public');
+    Storage::fake('local');
     upiSponsor();
 });
 
@@ -64,13 +65,20 @@ test('a GPay/UPI registration waits for approval with its proof, and an Admin ca
         ->and($payment->status)->toBe('pending')
         ->and($payment->cash_status)->toBe('pending_verification')
         ->and($payment->upi_screenshot_path)->not->toBeNull();
-    Storage::disk('public')->assertExists($payment->upi_screenshot_path);
+    // T-206 — the screenshot is private and opens only through the company portal's route.
+    Storage::disk('local')->assertExists($payment->upi_screenshot_path);
+    Storage::disk('public')->assertMissing($payment->upi_screenshot_path);
+    $this->get("/super-admin/payments/{$payment->id}/screenshot")->assertRedirect();
 
     $admin = User::factory()->create(['role' => 'admin']);
     $this->actingAs($admin)->get('/super-admin/cash-payments')
         ->assertInertia(fn ($page) => $page
             ->where('pending.0.mode', 'upi')
-            ->where('pending.0.upi_reference', 'UTR123456789'));
+            ->where('pending.0.upi_reference', 'UTR123456789')
+            ->where('pending.0.upi_screenshot_url', route('super-admin.payments.screenshot', $payment)));
+    $this->actingAs($admin)->get("/super-admin/payments/{$payment->id}/screenshot")->assertOk();
+    $this->actingAs(User::factory()->create(['role' => 'member']))
+        ->get("/super-admin/payments/{$payment->id}/screenshot")->assertForbidden();
 
     $this->actingAs($admin)->post("/super-admin/cash-payments/{$payment->id}/approve")->assertRedirect();
 
@@ -102,4 +110,23 @@ test('only Super Admin sets the company UPI ID and QR, which then show on the pa
     $this->get('/join')->assertInertia(fn ($page) => $page
         ->where('payment_options.upi_id', 'goldwave@okaxis')
         ->where('payment_options.upi_qr_url', fn ($url) => is_string($url) && $url !== ''));
+});
+
+test('a fresh install already shows the company GPay/UPI QR and UPI ID on the payment step (T-212)', function () {
+    $this->get('/join')->assertInertia(fn ($page) => $page
+        ->where('payment_options.upi_id', '8814900944@okbizaxis')
+        ->where('payment_options.upi_qr_url', fn ($url) => str_ends_with((string) $url, '/Images/QRcode.webp')));
+
+    expect(file_exists(public_path('Images/QRcode.webp')))->toBeTrue();
+});
+
+test('a pending GPay/UPI payment alerts the company and shows in the Super Admin dashboard alerts (T-212)', function () {
+    $this->post('/join', upiJoinPayload(['upi_reference' => 'UTR555666777']))->assertRedirect();
+
+    $superAdmin = User::where('role', 'super_admin')->firstOrFail();
+    expect($superAdmin->notifications()->first()?->data['title'] ?? null)->toBe('GPay/UPI payment awaiting approval');
+
+    $this->actingAs($superAdmin)->get('/dashboard')->assertInertia(fn ($page) => $page
+        ->component('super-admin/dashboard')
+        ->where('alerts', fn ($alerts) => collect($alerts)->contains('1 cash / GPay-UPI payment(s) awaiting approval.')));
 });

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -96,6 +98,19 @@ class Member extends Model
     public function isExcludedFromGeneralIncome(): bool
     {
         return ($this->is_company_dummy && $this->dummy_status !== 'assigned') || $this->benefits_limited;
+    }
+
+    /**
+     * T-209 (02-10-2026) — real members for Super Admin lists and counts: everyone except the company root and the
+     * still-unassigned company dummies. An assigned dummy is a real leader (DOMAIN_LOGIC.md §14.3) and is included;
+     * it keeps `is_company_dummy = true` after assignment, so filtering on that flag alone hid it.
+     *
+     * @param  Builder<Member>  $query
+     */
+    #[Scope]
+    protected function realMembers(Builder $query): void
+    {
+        $query->where(fn (Builder $q) => $q->where('is_company_dummy', false)->orWhere('dummy_status', 'assigned'));
     }
 
     /**

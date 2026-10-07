@@ -23,9 +23,12 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { JewellerySlider } from '@/components/jewellery-slider';
+import type { Slide } from '@/components/jewellery-slider';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { dashboard, login as staffLogin } from '@/routes';
+import { privacy, refund, terms } from '@/routes/legal';
 import { login as memberLogin } from '@/routes/member';
 import { show as registerShow } from '@/routes/registration';
 
@@ -60,6 +63,12 @@ type Props = {
     plans: Plan[];
     stores: PublicStore[];
 };
+
+/** T-210 — gold jewellery banners in `public/Images/slider/` (WebP, 1920px wide). Add or replace files and list them here. */
+const JEWELLERY_SLIDES: Slide[] = [1, 2, 3].map((n) => ({
+    src: `/Images/slider/slide-${n}.webp`,
+    alt: 'GoldWave gold jewellery',
+}));
 
 const NAV = [
     { href: '#plans', label: 'Plans' },
@@ -361,6 +370,11 @@ export default function Welcome({ hero, contact, plans, stores }: Props) {
                     </svg>
                 </section>
 
+                {/* Jewellery slider — images only, no text (T-210) */}
+                <div className="mx-auto w-full max-w-6xl px-4 pt-10">
+                    <JewellerySlider slides={JEWELLERY_SLIDES} />
+                </div>
+
                 {/* Why GoldWave */}
                 <section className="mx-auto w-full max-w-6xl px-4 py-16">
                     <SectionHeading
@@ -607,7 +621,7 @@ export default function Welcome({ hero, contact, plans, stores }: Props) {
 
                 {/* Footer */}
                 <footer className="bg-slate-950 text-slate-300">
-                    <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:grid-cols-2 lg:grid-cols-5">
                         <div className="flex flex-col gap-3 lg:col-span-2">
                             <div className="flex items-center gap-2">
                                 <img
@@ -664,6 +678,32 @@ export default function Welcome({ hero, contact, plans, stores }: Props) {
                                     className="hover:text-white"
                                 >
                                     Staff / Store Login
+                                </Link>,
+                            ]}
+                        />
+                        <FooterLinks
+                            title="Legal"
+                            links={[
+                                <Link
+                                    key="terms"
+                                    href={terms()}
+                                    className="hover:text-white"
+                                >
+                                    Terms & Conditions
+                                </Link>,
+                                <Link
+                                    key="privacy"
+                                    href={privacy()}
+                                    className="hover:text-white"
+                                >
+                                    Privacy Policy
+                                </Link>,
+                                <Link
+                                    key="refund"
+                                    href={refund()}
+                                    className="hover:text-white"
+                                >
+                                    Refund & Cancellation
                                 </Link>,
                             ]}
                         />

@@ -9,7 +9,6 @@ use App\Models\Payment;
 use App\Services\Payments\PaymentModes;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -33,7 +32,8 @@ class CashPaymentApprovalController extends Controller
             ->get()
             ->each(fn (Payment $payment) => $payment->setAttribute(
                 'upi_screenshot_url',
-                $payment->upi_screenshot_path ? Storage::disk('public')->url($payment->upi_screenshot_path) : null,
+                // T-206 — served from the private disk through an authorised route, never a public URL.
+                $payment->upi_screenshot_path ? route('super-admin.payments.screenshot', $payment) : null,
             ));
 
         return Inertia::render('super-admin/cash-payments', [

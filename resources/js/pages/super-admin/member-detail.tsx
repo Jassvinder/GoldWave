@@ -8,6 +8,7 @@ import { ResetMemberPasswordDialog } from '@/components/reset-member-password-di
 import { formatDate, formatGender, formatRatePer10g } from '@/lib/utils';
 import { show as showDirects } from '@/routes/member/directs';
 import {
+    bankProof,
     show as showMember,
     verifyBankDetail,
 } from '@/routes/super-admin/members';
@@ -62,6 +63,7 @@ type BankDetails = {
     ifsc_code: string | null;
     bank_name: string | null;
     verified_at: string | null;
+    has_proof: boolean;
 } | null;
 
 type Props = {
@@ -227,6 +229,23 @@ export default function SuperAdminMemberDetail({
                                         </Button>
                                     </div>
                                 )
+                            ) : (
+                                <div className="font-medium">—</div>
+                            )}
+                        </div>
+                        <div>
+                            <div className="text-muted-foreground text-xs">
+                                Bank Proof
+                            </div>
+                            {bank_details?.has_proof ? (
+                                <a
+                                    href={bankProof.url(member.id)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-primary text-sm font-medium underline"
+                                >
+                                    View proof
+                                </a>
                             ) : (
                                 <div className="font-medium">—</div>
                             )}

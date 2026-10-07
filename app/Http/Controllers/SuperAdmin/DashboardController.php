@@ -16,6 +16,7 @@ use App\Models\PayoutRequest;
 use App\Models\ProfileChangeRequest;
 use App\Models\StoreProfitDistribution;
 use App\Models\StoreSale;
+use App\Services\Payments\PaymentModes;
 use App\Services\RuleVersionService;
 use App\Support\Dates;
 use Illuminate\Http\Request;
@@ -32,10 +33,10 @@ class DashboardController extends Controller
         // Same definitions as Member Management's summary strip, so "Total Members" is one number on both pages —
         // company dummy entries are counted separately below (`dummy_entries`), never as members.
         $members = [
-            'total' => Member::where('is_company_dummy', false)->count(),
-            'active' => Member::where('is_company_dummy', false)->where('status', 'active')->count(),
-            'pending' => Member::where('is_company_dummy', false)->whereIn('status', ['payment_pending', 'payment_confirmed'])->count(),
-            'today' => Member::where('is_company_dummy', false)->whereDate('created_at', today())->count(),
+            'total' => Member::realMembers()->count(),
+            'active' => Member::realMembers()->where('status', 'active')->count(),
+            'pending' => Member::realMembers()->whereIn('status', ['payment_pending', 'payment_confirmed'])->count(),
+            'today' => Member::realMembers()->whereDate('created_at', today())->count(),
         ];
 
         $payments = [
@@ -78,10 +79,11 @@ class DashboardController extends Controller
         $largePayoutThreshold = (float) $this->rules->value('large_payout_threshold', 50000);
 
         $alerts = [];
-        $pendingCashPayments = Payment::where('mode', 'cash')->where('cash_status', 'pending_verification')->count();
+        // T-212 — GPay/UPI payments wait in the same Payment Approvals queue as cash, so they count here too.
+        $pendingApprovals = Payment::whereIn('mode', PaymentModes::NEEDS_APPROVAL)->where('cash_status', 'pending_verification')->count();
 
-        if ($pendingCashPayments > 0) {
-            $alerts[] = "{$pendingCashPayments} cash payment(s) awaiting verification.";
+        if ($pendingApprovals > 0) {
+            $alerts[] = "{$pendingApprovals} cash / GPay-UPI payment(s) awaiting approval.";
         }
 
         $pendingChangeRequests = ProfileChangeRequest::where('status', 'pending')->count();

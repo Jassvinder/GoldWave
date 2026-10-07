@@ -34,7 +34,7 @@ class MemberManagementController extends Controller
         $query = Member::query()
             ->with(['user.store', 'membershipPlan', 'sponsor', 'placementParent'])
             ->withCount('directs')
-            ->where('is_company_dummy', false);
+            ->realMembers();
 
         if ($request->filled('search')) {
             $search = $request->string('search')->toString();
@@ -77,10 +77,10 @@ class MemberManagementController extends Controller
             'plan_options' => MembershipPlan::orderBy('code')->get(['code', 'name']),
             'status_options' => ['draft', 'payment_pending', 'payment_confirmed', 'active', 'cancelled'],
             'stats' => [
-                'total' => Member::where('is_company_dummy', false)->count(),
-                'active' => Member::where('is_company_dummy', false)->where('status', 'active')->count(),
-                'pending' => Member::where('is_company_dummy', false)->whereIn('status', ['payment_pending', 'payment_confirmed'])->count(),
-                'inactive' => Member::where('is_company_dummy', false)->whereIn('status', ['draft', 'cancelled'])->count(),
+                'total' => Member::realMembers()->count(),
+                'active' => Member::realMembers()->where('status', 'active')->count(),
+                'pending' => Member::realMembers()->whereIn('status', ['payment_pending', 'payment_confirmed'])->count(),
+                'inactive' => Member::realMembers()->whereIn('status', ['draft', 'cancelled'])->count(),
             ],
         ]);
     }
@@ -88,7 +88,7 @@ class MemberManagementController extends Controller
     public function export(Request $request): HttpResponse
     {
         $rows = Member::with(['user', 'membershipPlan', 'sponsor'])
-            ->where('is_company_dummy', false)
+            ->realMembers()
             ->orderBy('id')
             ->get()
             ->map(fn (Member $member) => [
@@ -170,6 +170,8 @@ class MemberManagementController extends Controller
                     'ifsc_code' => $bankDetail->ifsc_code,
                     'bank_name' => $bankDetail->bank_name,
                     'verified_at' => Dates::date($bankDetail->verified_at),
+                    // T-206 — the proof opens through the private `members.bank-proof` route.
+                    'has_proof' => $bankDetail->proof_document_path !== null,
                 ] : null;
             })(),
             'product_benefits' => $member->productBenefits->map(fn ($b) => [
@@ -239,7 +241,7 @@ class MemberManagementController extends Controller
         $proofPath = null;
 
         if ($request->hasFile('bank_proof_document')) {
-            $proofPath = WebpImageStore::store($request->file('bank_proof_document'), 'bank-proofs');
+            $proofPath = WebpImageStore::store($request->file('bank_proof_document'), 'bank-proofs', 'local');
 
             if ($proofPath === false) {
                 throw ValidationException::withMessages(['bank_proof_document' => 'The uploaded file could not be stored.']);

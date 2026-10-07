@@ -1,6 +1,8 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
+import { PlanPicker } from '@/components/plan-picker';
+import type { Plan } from '@/components/plan-picker';
 import {
     PaymentModePicker,
     type PaymentMode,
@@ -18,17 +20,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { privacy, refund, terms } from '@/routes/legal';
 import { store, validateSponsor } from '@/routes/registration';
-
-type Plan = {
-    id: number;
-    code: string;
-    name: string;
-    amount: string;
-    installment_count: number | null;
-    product_category: 'gold' | 'silver';
-    fixed_weight_grams: string | null;
-};
 
 type Props = {
     plans: Plan[];
@@ -305,47 +298,15 @@ export default function Register({
                                 </div>
                             </div>
 
-                            {/* Plan selection */}
-                            <div className="grid gap-2">
-                                <Label>Membership Plan</Label>
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                    {plans.map((plan) => (
-                                        <button
-                                            key={plan.id}
-                                            type="button"
-                                            onClick={() => {
-                                                form.setData(
-                                                    'membership_plan_id',
-                                                    plan.id,
-                                                );
-                                            }}
-                                            className={`rounded-md border p-3 text-left text-sm ${
-                                                form.data.membership_plan_id ===
-                                                plan.id
-                                                    ? 'border-primary bg-primary/5'
-                                                    : 'border-input'
-                                            }`}
-                                        >
-                                            <div className="font-medium">
-                                                {plan.name}
-                                            </div>
-                                            <div className="text-muted-foreground">
-                                                {plan.installment_count
-                                                    ? `₹${plan.amount}/month × ${plan.installment_count}`
-                                                    : `₹${plan.amount} one-time`}
-                                                {' — '}
-                                                {plan.fixed_weight_grams
-                                                    ? `${plan.fixed_weight_grams}g `
-                                                    : ''}
-                                                {plan.product_category}
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                                <InputError
-                                    message={form.errors.membership_plan_id}
-                                />
-                            </div>
+                            {/* Plan selection — T-211: Silver and Gold dropdowns */}
+                            <PlanPicker
+                                plans={plans}
+                                value={form.data.membership_plan_id}
+                                onChange={(id) =>
+                                    form.setData('membership_plan_id', id)
+                                }
+                                error={form.errors.membership_plan_id}
+                            />
 
                             {/* Payment mode */}
                             <div className="grid gap-2">
@@ -383,6 +344,36 @@ export default function Register({
                                 {form.processing && <Spinner />}
                                 Continue to Payment
                             </Button>
+                            <p className="text-muted-foreground -mt-3 text-center text-xs">
+                                By continuing you agree to the{' '}
+                                <a
+                                    href={terms.url()}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="underline underline-offset-2"
+                                >
+                                    Terms & Conditions
+                                </a>
+                                ,{' '}
+                                <a
+                                    href={privacy.url()}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="underline underline-offset-2"
+                                >
+                                    Privacy Policy
+                                </a>{' '}
+                                and{' '}
+                                <a
+                                    href={refund.url()}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="underline underline-offset-2"
+                                >
+                                    No-Refund Policy
+                                </a>
+                                .
+                            </p>
                         </form>
                     </CardContent>
                 </Card>

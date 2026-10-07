@@ -27,6 +27,16 @@ type Installment = {
     paid_at: string | null;
     payment_reference: string | null;
     payment_mode: 'online' | 'cash' | 'upi' | 'wallet' | null;
+    /** T-213 — set while a Cash / GPay-UPI payment waits for approval, or after it was rejected. */
+    payment_state: 'awaiting_approval' | 'rejected' | null;
+    submitted_at: string | null;
+};
+
+const MODE_LABEL: Record<NonNullable<Installment['payment_mode']>, string> = {
+    online: 'Online',
+    cash: 'Cash',
+    upi: 'GPay/UPI',
+    wallet: 'Wallet',
 };
 
 type PairEligibility = {
@@ -373,7 +383,8 @@ function InstallmentTable({ installments }: { installments: Installment[] }) {
             render: (row) =>
                 row.paid_at ? (
                     <span>
-                        {formatDate(row.paid_at)} via {row.payment_mode}
+                        {formatDate(row.paid_at)} via{' '}
+                        {row.payment_mode ? MODE_LABEL[row.payment_mode] : '—'}
                         {row.payment_reference
                             ? ` · Ref ${row.payment_reference}`
                             : ''}
@@ -385,14 +396,22 @@ function InstallmentTable({ installments }: { installments: Installment[] }) {
         {
             key: 'status',
             header: 'Status',
-            render: (row) => (
-                <Badge
-                    variant={STATUS_VARIANT[row.status]}
-                    className="capitalize"
-                >
-                    {row.status}
-                </Badge>
-            ),
+            render: (row) =>
+                row.payment_state === 'awaiting_approval' ? (
+                    <Badge
+                        variant="outline"
+                        className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+                    >
+                        Awaiting approval
+                    </Badge>
+                ) : (
+                    <Badge
+                        variant={STATUS_VARIANT[row.status]}
+                        className="capitalize"
+                    >
+                        {row.status}
+                    </Badge>
+                ),
         },
     ];
 
@@ -402,9 +421,30 @@ function InstallmentTable({ installments }: { installments: Installment[] }) {
             rows={installments}
             rowKey={(row) => row.id}
             emptyMessage="No installments to show."
-            renderActions={(row) =>
-                nextPayable?.id === row.id ? (
-                    <div className="flex items-center justify-end">
+            renderActions={(row) => {
+                if (nextPayable?.id !== row.id) {
+                    return null;
+                }
+
+                // T-213 — a submitted Cash / GPay-UPI payment waits for the company; no second Pay button meanwhile.
+                if (row.payment_state === 'awaiting_approval') {
+                    return (
+                        <p className="text-muted-foreground text-right text-xs">
+                            {row.payment_mode
+                                ? MODE_LABEL[row.payment_mode]
+                                : 'Payment'}{' '}
+                            submitted
+                            {row.submitted_at
+                                ? ` on ${formatDate(row.submitted_at)}`
+                                : ''}
+                            <br />
+                            Waiting for the company to confirm
+                        </p>
+                    );
+                }
+
+                return (
+                    <div className="flex flex-col items-end gap-1">
                         <EmiPayDialog
                             url={payInstallment.url(row.id)}
                             amount={row.amount}
@@ -412,9 +452,14 @@ function InstallmentTable({ installments }: { installments: Installment[] }) {
                             description={`Due ${formatDate(row.due_date)}. Cash and GPay/UPI payments are confirmed by the company first.`}
                             trigger={<Button size="sm">Pay</Button>}
                         />
+                        {row.payment_state === 'rejected' && (
+                            <span className="text-destructive text-xs">
+                                Last payment was rejected — please pay again
+                            </span>
+                        )}
                     </div>
-                ) : null
-            }
+                );
+            }}
         />
     );
 }

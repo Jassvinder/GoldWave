@@ -425,7 +425,7 @@ Razorpay takes about 2.36% of every payment, so **Online (Razorpay) is switched 
 | Mode | Where it is offered | How it is confirmed |
 | --- | --- | --- |
 | **Cash** | Everywhere (registration, assisted registration, EMI / Pay All) | Super Admin **or Admin** approves (§10.2) |
-| **GPay / UPI** (`upi`) | Everywhere | The member pays the company UPI (the UPI ID and QR image are set by Super Admin in **Payment Settings**), then enters the **Transaction/UTR Ref ID and uploads a payment screenshot — both required**. A Ref ID can be used only once (unique). Super Admin or Admin approves it in the same queue as cash (**Payment Approvals**), after matching it with the bank statement. |
+| **GPay / UPI** (`upi`) | Everywhere | The member pays the company UPI (the UPI ID and QR image are set by Super Admin in **Payment Settings**; seeded default since T-212, 06-10-2026: `8814900944@okbizaxis` and the client's QR at `public/Images/QRcode.webp`), then enters the **Transaction/UTR Ref ID and uploads a payment screenshot — both required**. A Ref ID can be used only once (unique). Super Admin or Admin approves it in the same queue as cash (**Payment Approvals**), after matching it with the bank statement. |
 | **Wallet** | Only when a Store Admin (Store Wallet) or a logged-in member (own wallet) registers someone | Immediate, no approval (§12.2) |
 | Online (Razorpay) | Only when `PAYMENT_ONLINE_ENABLED=true` | §10.1 |
 

@@ -1,5 +1,7 @@
 import { Link } from '@inertiajs/react';
+import { UserRound } from 'lucide-react';
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 
 export type NodeMember = {
     id: number;
@@ -9,6 +11,8 @@ export type NodeMember = {
     gender: string | null;
     photo_url: string | null;
     sponsor_name: string | null;
+    left_count: number;
+    right_count: number;
 };
 
 type Props = {
@@ -19,43 +23,77 @@ type Props = {
 };
 
 /**
- * T-119 (19-09-2026) — the one member card shared by Tree View and Directs
- * View (per `Docs/Screenshots/TreeView.png`): circular avatar, bold full
- * name, muted Customer ID, "Sponsored by". The card itself stays
- * rectangular; only the avatar inside is a circle (the earlier "no circular
- * node designs" rule applied to whole nodes, superseded for the avatar by
- * the user's own mockup).
+ * The one member card shared by Tree View and Directs View.
  *
- * Avatar: the member's uploaded photo when there is one and it loads,
- * otherwise a gender placeholder image — female = pink, everything else
- * (male, "other", or gender not recorded) = the male/default one; there is
- * never a bare icon (20-09-2026, user-reported). A small red
- * dot at the card's top-right corner marks a member who is not active.
+ * T-208 (02-10-2026) — compact redesign from `Docs/Screenshots/MemberCard.png`; the client found the T-119 card too
+ * big. 160px wide (was 192px): a gold-bordered card with a round gold-ringed avatar (kept inside the card to save space), the Customer ID in
+ * a small chip **under the avatar** (the user's change to the mockup), then the name, "Sp: <sponsor>" and the member's
+ * Left/Right Binary team size.
+ *
+ * Avatar: the uploaded photo when it loads, otherwise the gender placeholder (female = pink, everything else = the
+ * male/default one); never a bare icon (20-09-2026). A small red dot at the top-right marks a member who is not active.
  */
 export function MemberNodeCard({ member, href, className = '' }: Props) {
     const inactive = member.status !== 'active';
-    const base =
-        'bg-card relative flex w-48 items-center gap-2.5 rounded-md border p-2.5 text-left shadow-sm';
-    const classes = `${base} ${href ? 'hover:border-primary transition-colors' : ''} ${className}`;
+    const classes = cn(
+        'dark:bg-card relative flex items-stretch gap-1.5 rounded-xl border border-amber-400 bg-white py-1 pr-2 pl-1.5 text-left shadow-sm',
+        'w-40', // keep in step with Tree View's Empty slot
+        href &&
+            'transition-shadow hover:shadow-md hover:ring-2 hover:ring-amber-200',
+        className,
+    );
 
     const body = (
         <>
-            <Avatar member={member} />
-            <div className="min-w-0 flex-1">
-                <div className="text-sm leading-tight font-semibold break-words">
+            <div className="flex w-11 shrink-0 flex-col items-center">
+                <Avatar member={member} />
+                <span
+                    title={member.customer_id ?? undefined}
+                    className="max-w-full truncate rounded bg-amber-100 px-1 text-[10px] leading-4 font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                >
+                    {member.customer_id ?? '—'}
+                </span>
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
+                <div
+                    className="truncate text-xs leading-tight font-semibold text-slate-900 dark:text-slate-100"
+                    title={member.name ?? undefined}
+                >
                     {member.name ?? 'Unnamed member'}
                 </div>
-                <div className="text-muted-foreground text-xs">
-                    {member.customer_id ?? '—'}
+                <div
+                    className="text-muted-foreground flex items-center gap-0.5 truncate text-[10px] leading-tight"
+                    title={
+                        member.sponsor_name
+                            ? `Sponsor: ${member.sponsor_name}`
+                            : undefined
+                    }
+                >
+                    <UserRound className="size-2.5 shrink-0" />
+                    <span className="truncate">
+                        <span className="font-semibold">Sp:</span>{' '}
+                        {member.sponsor_name ?? '—'}
+                    </span>
                 </div>
-                <div className="text-muted-foreground text-xs">
-                    Sponsored by : {member.sponsor_name ?? '-'}
+                <div className="flex gap-1 text-[10px] leading-tight font-medium">
+                    <span
+                        className="rounded bg-sky-50 px-1 text-sky-700 dark:bg-sky-950 dark:text-sky-300"
+                        title="Left team"
+                    >
+                        L {member.left_count}
+                    </span>
+                    <span
+                        className="rounded bg-fuchsia-50 px-1 text-fuchsia-700 dark:bg-fuchsia-950 dark:text-fuchsia-300"
+                        title="Right team"
+                    >
+                        R {member.right_count}
+                    </span>
                 </div>
             </div>
             {inactive && (
                 <span
                     title="Inactive"
-                    className="absolute top-2 right-2 size-3 rounded-full bg-red-500"
+                    className="absolute top-1.5 right-1.5 size-2 rounded-full bg-red-500"
                 />
             )}
         </>
@@ -84,7 +122,7 @@ function Avatar({ member }: { member: NodeMember }) {
             src={src}
             alt=""
             onError={() => setPhotoFailed(true)}
-            className="size-12 shrink-0 rounded-full object-cover"
+            className="size-9 rounded-full border-2 border-amber-400 bg-white object-cover"
         />
     );
 }

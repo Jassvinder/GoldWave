@@ -242,3 +242,22 @@ test('the EMI page offers the full payment (or says why not), and the member can
             ->where('full_payment.amount', null)
             ->where('full_payment.blocked_reason', 'A payment is still waiting for confirmation. Pay all remaining EMIs once it is confirmed or rejected.'));
 });
+
+test('a submitted EMI payment shows as awaiting approval with no second Pay, and a rejected one asks to pay again (T-213)', function () {
+    $member = fepMember('GWL-T213', 'A', 1);
+    $installment = $member->emiSchedule->installments()->where('installment_no', 2)->firstOrFail();
+
+    $payment = app(InitiateEmiInstallmentPayment::class)($member, $installment, 'upi');
+
+    $this->actingAs($member->user)->get('/member/emi')->assertInertia(fn ($page) => $page
+        ->where('installments.1.installment_no', 2)
+        ->where('installments.1.status', 'due')
+        ->where('installments.1.payment_state', 'awaiting_approval')
+        ->where('installments.1.payment_mode', 'upi')
+        ->where('installments.2.payment_state', null));
+
+    app(RejectCashPayment::class)($payment, fepOperator());
+
+    $this->actingAs($member->user)->get('/member/emi')->assertInertia(fn ($page) => $page
+        ->where('installments.1.payment_state', 'rejected'));
+});

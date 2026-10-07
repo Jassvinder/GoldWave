@@ -19,6 +19,7 @@ use App\Http\Controllers\SuperAdmin\MetalRateController;
 use App\Http\Controllers\SuperAdmin\PaymentSettingsController;
 use App\Http\Controllers\SuperAdmin\PayoutRequestController;
 use App\Http\Controllers\SuperAdmin\PayoutTdsSettingsController;
+use App\Http\Controllers\SuperAdmin\PrivateDocumentController;
 use App\Http\Controllers\SuperAdmin\ProfileChangeRequestController;
 use App\Http\Controllers\SuperAdmin\RateBookingRequestController;
 use App\Http\Controllers\SuperAdmin\ReportsController;
@@ -35,6 +36,10 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
     Route::get('cash-payments', [CashPaymentApprovalController::class, 'index'])->name('cash-payments.index');
     Route::post('cash-payments/{payment}/approve', [CashPaymentApprovalController::class, 'approve'])->name('cash-payments.approve');
     Route::post('cash-payments/{payment}/reject', [CashPaymentApprovalController::class, 'reject'])->name('cash-payments.reject');
+
+    // T-206 — private proof files (GPay/UPI screenshot, bank proof), never on the public disk.
+    Route::get('payments/{payment}/screenshot', [PrivateDocumentController::class, 'paymentScreenshot'])->name('payments.screenshot');
+    Route::get('members/{member}/bank-proof', [PrivateDocumentController::class, 'bankProof'])->name('members.bank-proof');
 
     // T-140 — Notifications page (cash payments awaiting approval, requests, ...).
     Route::get('notifications', [NotificationController::class, 'index'])->defaults('portal', 'super-admin')->name('notifications.index');

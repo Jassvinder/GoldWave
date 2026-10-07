@@ -46,6 +46,7 @@
 ## Security Decisions and Risks
 
 - **Accepted risk (by design, not a gap):** no payment refund/reversal capability exists anywhere in the app — this is an explicit business decision, not a missing feature. Do not add one without an explicit, documented client decision.
+- **Private proof files (T-206, 02-10-2026):** bank proof documents and GPay/UPI payment screenshots are stored on the private `local` disk (`storage/app/private`). They are opened only through `PrivateDocumentController` routes inside the company portal (`role:super_admin,admin`), and are sent with `Cache-Control: private, no-store`. Store any new sensitive upload the same way (`WebpImageStore::store(..., 'local')`). Profile photos and the company UPI QR stay on the public disk on purpose: they are meant to be displayed.
 - **Open risk:** production launch requires legal/tax/KYC-AML/payout/product-valuation/regulatory review that has not yet happened — do not treat this document as a compliance sign-off.
 
 Never place secrets, security bypass instructions, or exploit details in this file.

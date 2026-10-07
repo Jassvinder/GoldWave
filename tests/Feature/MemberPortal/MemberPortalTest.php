@@ -37,6 +37,7 @@ function portalMember(string $customerId, ?MembershipPlan $plan = null): Member
 beforeEach(function () {
     $this->seed();
     Storage::fake('public');
+    Storage::fake('local');
 });
 
 test('a guest is redirected to the Member login for any member portal route (T-198)', function () {
@@ -167,8 +168,19 @@ test('a member can submit Pending Profile fields exactly once, with real file up
     expect($fresh->pan_card)->toBe('ABCDE1234F');
     Storage::disk('public')->assertExists($fresh->profile_photo_path);
 
+    // T-206 — the bank proof is private: on the `local` disk, never the public one.
     $bankDetail = $fresh->bankDetails()->latest('id')->first();
-    Storage::disk('public')->assertExists($bankDetail->proof_document_path);
+    Storage::disk('local')->assertExists($bankDetail->proof_document_path);
+    Storage::disk('public')->assertMissing($bankDetail->proof_document_path);
+
+    // Only the company portal can open it — not the member, not a guest.
+    $this->actingAs(User::factory()->create(['role' => 'admin']))
+        ->get("/super-admin/members/{$member->id}/bank-proof")
+        ->assertOk()
+        ->assertHeader('Cache-Control', 'no-store, private');
+    $this->actingAs($member->user)->get("/super-admin/members/{$member->id}/bank-proof")->assertForbidden();
+    auth()->logout();
+    $this->get("/super-admin/members/{$member->id}/bank-proof")->assertRedirect();
 
     // A second submission is rejected — fields lock after the first.
     $this->actingAs($member->user)

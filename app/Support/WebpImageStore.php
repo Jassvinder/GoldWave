@@ -17,7 +17,7 @@ class WebpImageStore
 
     private const QUALITY = 82;
 
-    /** Returns the stored path on `$disk`, or `false` when nothing could be stored. */
+    /** Returns the stored path on `$disk`, or `false` when nothing could be stored. Pass `local` (private) for anything sensitive — bank proofs, payment screenshots. */
     public static function store(UploadedFile $file, string $directory, string $disk = 'public'): string|false
     {
         $webp = self::convert($file);

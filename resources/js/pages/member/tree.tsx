@@ -114,7 +114,7 @@ function BranchColumn({
 
 function EmptySlot() {
     return (
-        <div className="text-muted-foreground flex h-[4.5rem] w-48 items-center justify-center rounded-md border border-dashed p-2 text-xs">
+        <div className="text-muted-foreground flex h-[3.75rem] w-40 items-center justify-center rounded-xl border border-dashed p-2 text-xs">
             Empty
         </div>
     );

@@ -288,6 +288,11 @@ class RuleVersionSeeder extends Seeder
         $this->seedValue($version, 'landing_hero_subtext', 'GoldWave is a jewellery membership program — pick a plan, pay in convenient monthly instalments, and receive genuine gold or silver jewellery, while your own network builds rewards alongside you.');
         $this->seedValue($version, 'landing_hero_cta_primary_label', 'Join Now');
         $this->seedValue($version, 'landing_hero_cta_secondary_label', 'Member Login');
+
+        // T-212 (06-10-2026) — the company's GPay/UPI details (client's QR in `public/Images/QRcode.webp`). Super Admin
+        // can replace both on Payment Settings; an uploaded QR is stored on the public disk instead.
+        $this->seedValue($version, 'company_upi_id', '8814900944@okbizaxis');
+        $this->seedValue($version, 'company_upi_qr_path', '/Images/QRcode.webp');
     }
 
     private function seedValue(RuleVersion $version, string $key, mixed $value): void

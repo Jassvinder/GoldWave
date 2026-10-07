@@ -187,7 +187,31 @@ class EmiController extends Controller
             'paid_at' => Dates::date($installment->payment?->paid_at),
             'payment_reference' => $installment->payment?->provider_reference,
             'payment_mode' => $installment->payment?->mode,
+            'payment_state' => self::paymentState($installment),
+            'submitted_at' => Dates::date($installment->payment?->created_at),
         ];
+    }
+
+    /**
+     * T-213 (06-10-2026, user-reported) — the installment stays `due` while its Cash or GPay/UPI payment waits for
+     * approval, so the page needs the payment's own state to show "Awaiting approval" instead of a second Pay button.
+     * `rejected` lets the page say the last attempt was refused (the Pay button returns).
+     *
+     * @return 'awaiting_approval'|'rejected'|null
+     */
+    private static function paymentState(EmiInstallment $installment): ?string
+    {
+        $payment = $installment->payment;
+
+        if ($payment === null || $installment->status === 'paid') {
+            return null;
+        }
+
+        if ($payment->status === 'pending' && PaymentModes::needsApproval($payment->mode)) {
+            return 'awaiting_approval';
+        }
+
+        return $payment->cash_status === 'rejected' ? 'rejected' : null;
     }
 
     public function pay(

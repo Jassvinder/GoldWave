@@ -1,3 +1,5 @@
+import { Check, Copy } from 'lucide-react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
@@ -45,6 +47,8 @@ const LABELS: Record<PaymentMode, string> = {
  * T-196 (DOMAIN_LOGIC.md §10) — the one payment-mode chooser for registration, assisted registration and EMI
  * payments. GPay/UPI shows the company QR + UPI ID and asks for the Transaction/UTR Ref ID and a payment screenshot
  * (both required); Cash and GPay/UPI wait for Super Admin / Admin approval, Wallet is confirmed at once.
+ * T-212 (06-10-2026): the GPay/UPI panel is stacked — QR centred on top, UPI ID with a Copy button, the amount, then
+ * full-width Ref ID and screenshot inputs (the side-by-side layout squeezed the inputs inside the EMI dialog).
  */
 export function PaymentModePicker({
     options,
@@ -93,21 +97,28 @@ export function PaymentModePicker({
             {mode === 'wallet' && walletNote}
 
             {mode === 'upi' && (
-                <div className="flex flex-col gap-4 rounded-md border p-3 sm:flex-row">
+                <div className="flex flex-col gap-4 rounded-md border p-3">
                     {upiReady ? (
-                        <div className="flex shrink-0 flex-col items-center gap-2">
+                        <div className="flex flex-col items-center gap-3">
                             {options.upi_qr_url && (
                                 <img
                                     src={options.upi_qr_url}
-                                    alt="Company UPI QR code"
-                                    className="size-44 rounded-md border bg-white object-contain p-1"
+                                    alt="Company GPay / UPI QR code"
+                                    className="w-56 max-w-full rounded-lg border bg-white object-contain shadow-sm"
                                 />
                             )}
                             {options.upi_id && (
-                                <span className="font-mono text-sm">
-                                    {options.upi_id}
-                                </span>
+                                <UpiIdRow upiId={options.upi_id} />
                             )}
+                            {amount ? (
+                                <p className="text-sm">
+                                    Amount to pay:{' '}
+                                    <span className="text-base font-semibold">
+                                        ₹
+                                        {Number(amount).toLocaleString('en-IN')}
+                                    </span>
+                                </p>
+                            ) : null}
                         </div>
                     ) : (
                         <p className="text-destructive text-sm">
@@ -116,22 +127,12 @@ export function PaymentModePicker({
                         </p>
                     )}
 
-                    <div className="grid flex-1 content-start gap-3">
-                        <p className="text-sm">
-                            Scan the QR with GPay / any UPI app
-                            {amount ? (
-                                <>
-                                    {' '}
-                                    and pay{' '}
-                                    <span className="font-semibold">
-                                        ₹
-                                        {Number(amount).toLocaleString('en-IN')}
-                                    </span>
-                                </>
-                            ) : null}
-                            . Then enter the payment's Ref ID and upload its
-                            screenshot. It is confirmed once the company checks
-                            it.
+                    <div className="grid gap-3">
+                        <p className="text-muted-foreground text-sm">
+                            Scan the QR with GPay or any UPI app (or pay to the
+                            UPI ID), then enter the payment&apos;s Ref ID and
+                            upload its screenshot. It is confirmed once the
+                            company checks it.
                         </p>
                         <div className="grid gap-1.5">
                             <Label htmlFor={`${idPrefix}-upi-ref`}>
@@ -168,6 +169,44 @@ export function PaymentModePicker({
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+/** T-212 — the company UPI ID with a Copy button, for paying from a UPI app without scanning. */
+function UpiIdRow({ upiId }: { upiId: string }) {
+    const [copied, setCopied] = useState(false);
+
+    const copy = () => {
+        navigator.clipboard
+            ?.writeText(upiId)
+            .then(() => {
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 2000);
+            })
+            .catch(() => setCopied(false));
+    };
+
+    return (
+        <div className="flex items-center gap-2 rounded-md border bg-white px-3 py-1.5 dark:bg-transparent">
+            <span className="text-muted-foreground text-xs">UPI ID</span>
+            <span className="font-mono text-sm font-medium">{upiId}</span>
+            <button
+                type="button"
+                onClick={copy}
+                className="text-primary flex items-center gap-1 text-xs font-medium hover:underline"
+                aria-label="Copy UPI ID"
+            >
+                {copied ? (
+                    <>
+                        <Check className="size-3.5" /> Copied
+                    </>
+                ) : (
+                    <>
+                        <Copy className="size-3.5" /> Copy
+                    </>
+                )}
+            </button>
         </div>
     );
 }

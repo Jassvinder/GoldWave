@@ -2,11 +2,18 @@
 
 Keep only information needed to continue current work. Move durable decisions to their canonical document; remove stale entries when the task closes.
 
-## LATEST (30-09-2026): feedback batches T-192…T-196 and T-198…T-200 done — only T-197 open (Blocked)
+## LATEST (02-10-2026): pre-go-live — home page (T-203), plan guide deck (T-204), go-live guide (T-205) done
+
+- Client reviews the new home page by 03-10-2026.
+- **Before going live, work through `Docs/DEPLOYMENT.md` §2.** Private proof files (T-206) and legal page drafts (T-207) are done. Still open: real contact details, a legal review of the pages, and changing the seeded passwords.
+- Hosting is not bought yet. The recommendation is a Hostinger KVM 2 VPS in Mumbai.
+- Plan-guide figures await client confirmation: Pair M15 amount, Booster L1 12 months, and the Gold level rates (see T-204).
+
+## Earlier (30-09-2026): feedback batches T-192…T-196 and T-198…T-200 done — only T-197 open (Blocked)
 
 - T-192…T-196 and T-198…T-200 are complete (see TASKS.md). Full suite 437/437, and the build is fresh.
 - **Before real use on the dev DB:**
-  - Super Admin → **Payment Settings (UPI)** must get the company UPI ID + QR image, otherwise GPay/UPI shows "not set up".
+  - Company GPay/UPI is set on the dev DB since 06-10-2026 (T-212: `8814900944@okbizaxis` + `/Images/QRcode.webp`, rule version 3), and it is seeded for fresh installs.
   - GWL01's bank details still need **Verify** (Member Detail) before its payout request can be made.
 - Razorpay is off (`PAYMENT_ONLINE_ENABLED` unset = false). Set it to true to bring Online back.
 - **T-197** (live draw screen) waits for the user's flow description.

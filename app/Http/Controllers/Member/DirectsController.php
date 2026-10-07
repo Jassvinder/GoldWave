@@ -28,14 +28,18 @@ class DirectsController extends Controller
         abort_if($selected === null, 404);
         $this->authorize('viewDirects', $selected);
 
+        $directs = $selected->directs()->with(['user', 'sponsor.user'])->get();
+        // T-208 — one batched Left/Right count query for the selected member and every direct.
+        $cards = NetworkNodeCard::forMany([$selected, ...$directs], $network);
+
         return Inertia::render('member/directs', [
             'loggedInMember' => $loggedInMember ? [
                 'name' => $loggedInMember->user?->name,
                 'customer_id' => $loggedInMember->customer_id,
             ] : null,
-            'selectedMember' => NetworkNodeCard::from($selected),
+            'selectedMember' => $cards[$selected->id],
             'team' => $network->teamCounts($selected),
-            'directs' => $selected->directs()->with(['user', 'sponsor.user'])->get()->map(fn (Member $direct) => NetworkNodeCard::from($direct)),
+            'directs' => $directs->map(fn (Member $direct) => $cards[$direct->id])->values(),
         ]);
     }
 

@@ -6,6 +6,8 @@ import {
 } from '@/components/payment-mode-picker';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
+import { PlanPicker } from '@/components/plan-picker';
+import type { Plan } from '@/components/plan-picker';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -19,16 +21,6 @@ import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { store } from '@/routes/admin/assisted-registration';
 import { validateSponsor } from '@/routes/registration';
-
-type Plan = {
-    id: number;
-    code: string;
-    name: string;
-    amount: string;
-    installment_count: number | null;
-    product_category: 'gold' | 'silver';
-    fixed_weight_grams: string | null;
-};
 
 type Props = {
     plans: Plan[];
@@ -287,46 +279,14 @@ export default function AdminAssistedRegistration({
                                 </div>
                             </div>
 
-                            <div className="grid gap-2">
-                                <Label>Membership Plan</Label>
-                                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                                    {plans.map((plan) => (
-                                        <button
-                                            key={plan.id}
-                                            type="button"
-                                            onClick={() => {
-                                                form.setData(
-                                                    'membership_plan_id',
-                                                    plan.id,
-                                                );
-                                            }}
-                                            className={`rounded-md border p-3 text-left text-sm ${
-                                                form.data.membership_plan_id ===
-                                                plan.id
-                                                    ? 'border-primary bg-primary/5'
-                                                    : 'border-input'
-                                            }`}
-                                        >
-                                            <div className="font-medium">
-                                                {plan.name}
-                                            </div>
-                                            <div className="text-muted-foreground">
-                                                {plan.installment_count
-                                                    ? `₹${plan.amount}/month × ${plan.installment_count}`
-                                                    : `₹${plan.amount} one-time`}
-                                                {' — '}
-                                                {plan.fixed_weight_grams
-                                                    ? `${plan.fixed_weight_grams}g `
-                                                    : ''}
-                                                {plan.product_category}
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                                <InputError
-                                    message={form.errors.membership_plan_id}
-                                />
-                            </div>
+                            <PlanPicker
+                                plans={plans}
+                                value={form.data.membership_plan_id}
+                                onChange={(id) =>
+                                    form.setData('membership_plan_id', id)
+                                }
+                                error={form.errors.membership_plan_id}
+                            />
 
                             <div className="grid gap-2">
                                 <Label>Payment Mode</Label>
