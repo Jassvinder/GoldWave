@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Member;
 
 use App\Actions\Registration\ConfirmWalletFundedRegistration;
 use App\Actions\Registration\RegisterMember;
+use App\Actions\Registration\SendWalletPaymentOtp;
+use App\Actions\Registration\VerifyWalletPaymentOtp;
 use App\Contracts\PaymentGatewayContract;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Registration\RegistrationController;
@@ -11,6 +13,7 @@ use App\Http\Requests\Registration\AssistedRegisterMemberRequest;
 use App\Models\MembershipPlan;
 use App\Services\Payments\PaymentModes;
 use App\Services\WalletLedgerService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -44,13 +47,38 @@ class AssistedRegistrationController extends Controller
             'wallet_balance' => $this->wallet->availableBalance($member),
             // T-162 — this member's permanent link to the public join page with them as sponsor.
             'referral_link' => route('registration.show', ['ref' => $member->referralCode()]),
+            // T-215 — the wallet-payment code goes here; a recent email/mobile change holds wallet payments for 48 h.
+            'wallet_otp_email' => SendWalletPaymentOtp::maskEmail($request->user()->email),
+            'wallet_hold_message' => ($holdUntil = $request->user()->walletPaymentHoldUntil())
+                ? SendWalletPaymentOtp::holdMessage($holdUntil->format('d-m-Y h:i A'))
+                : null,
         ]);
+    }
+
+    /** T-215 — sends the code that approves this member's wallet payment (DOMAIN_LOGIC.md §12.2(d)). */
+    public function sendWalletOtp(Request $request, SendWalletPaymentOtp $send): JsonResponse
+    {
+        abort_if($request->user()->member === null, 404);
+
+        $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:255'],
+            'membership_plan_id' => ['nullable', 'integer'],
+        ]);
+
+        $planName = isset($data['membership_plan_id'])
+            ? MembershipPlan::whereKey($data['membership_plan_id'])->value('name')
+            : null;
+
+        $sentTo = $send($request->user(), $data['name'] ?? null, $planName);
+
+        return response()->json(['sent_to' => $sentTo]);
     }
 
     public function store(
         AssistedRegisterMemberRequest $request,
         RegisterMember $registerMember,
         ConfirmWalletFundedRegistration $confirmWallet,
+        VerifyWalletPaymentOtp $verifyWalletOtp,
         PaymentGatewayContract $gateway,
     ): RedirectResponse {
         $payer = $request->user()->member;
@@ -61,6 +89,11 @@ class AssistedRegistrationController extends Controller
         // model — that attribute's Larastan-inferred type still trails the `wallet` value added
         // to the CHECK constraint by raw SQL (see ConfirmWalletFundedRegistration's comment).
         $paymentMode = $request->string('payment_mode')->toString();
+
+        // T-215 — checked before anything is created, so a wrong code leaves no pending member behind.
+        if ($paymentMode === 'wallet') {
+            $verifyWalletOtp($request->user(), $request->string('wallet_otp')->toString());
+        }
 
         $newMember = $registerMember($request->validated());
 

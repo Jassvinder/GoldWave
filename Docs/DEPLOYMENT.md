@@ -123,6 +123,7 @@ sudo chown -R <deploy-user>:www-data storage bootstrap/cache && sudo chmod -R 77
 | `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME` | your SMTP provider's values |
 | `PAYMENT_ONLINE_ENABLED` | `false` (Cash + GPay/UPI only — see Razorpay below) |
 | `NOTIFY_MAIL_ENABLED` / `NOTIFY_SMS_ENABLED` / `SMS_DRIVER` | `true` / `true` / `log` |
+| `WALLET_OTP_SMS_ENABLED` | `false` until an SMS pack is bought (T-215: the wallet-payment code always goes by email; `true` also sends it by SMS) |
 
 ### Nginx site (`/etc/nginx/sites-available/goldwave`)
 
@@ -252,5 +253,6 @@ Razorpay Dashboard setup: (1) Settings → API Keys → generate a Test key firs
 | `NOTIFY_MAIL_ENABLED` | `true` (default) — send the email channel of notifications; needs a working `MAIL_*` configuration (locally `MAIL_MAILER=log` just writes the mail to `storage/logs`)                                     |
 | `NOTIFY_SMS_ENABLED`  | `true` (default) — send the SMS channel of notifications                                                                                                                                                  |
 | `SMS_DRIVER`          | `log` (default and the only driver so far) — SMS is written to the log, nothing is sent. A real provider (MSG91 / Twilio / Fast2SMS …, DLT template ids for India) is added as another driver once chosen |
+| `WALLET_OTP_SMS_ENABLED` | `false` (default) — the code a member enters to pay from their wallet (T-215, `config/otp.php`) goes by email only. Set `true` once a real SMS driver works, to also send it by SMS |
 
 The **EMI reminder job** (`SendEmiReminders`, 09:00 Asia/Kolkata) and every other scheduled job need the Laravel scheduler running (`* * * * * php artisan schedule:run` in cron) **and** a queue worker (`php artisan queue:work` — `QUEUE_CONNECTION=database`), because scheduled jobs are queued. Without them no reminder goes out. Which notification goes to which channel is set in `config/notifications.php`.

@@ -22,6 +22,8 @@ class ProfileController extends Controller
         return Inertia::render('settings/profile', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
+            // T-215 — a Member's / Store Admin's email is changed only by the office (DOMAIN_LOGIC.md §12.2(d)).
+            'canChangeEmail' => $request->user()->isCompanyStaff(),
         ]);
     }
 

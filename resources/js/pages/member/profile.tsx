@@ -160,6 +160,12 @@ export default function Profile({
                             }
                         />
                     </div>
+
+                    {/* T-215 — email/mobile are changed only by the office (DOMAIN_LOGIC.md §12.2(d)), never by request. */}
+                    <p className="text-muted-foreground mt-4 text-xs">
+                        To change your email or mobile number, please visit the
+                        GoldWave office.
+                    </p>
                 </FormSection>
 
                 <FormSection

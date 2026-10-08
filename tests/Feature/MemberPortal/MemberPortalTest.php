@@ -1,5 +1,8 @@
 <?php
 
+use App\Actions\Admin\UpdateMemberDetails;
+use App\Contracts\SmsGatewayContract;
+use App\Mail\WalletPaymentOtpMail;
 use App\Models\BoosterPayoutSchedule;
 use App\Models\BoosterQualification;
 use App\Models\CompanyWallet;
@@ -13,6 +16,7 @@ use App\Notifications\BankDetailsVerified;
 use App\Services\WalletLedgerService;
 use App\Support\Portal;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -21,6 +25,25 @@ use Illuminate\Support\Facades\Storage;
  * before this task (their Actions were built backend-only in earlier tasks,
  * exercised only by directly invoking the Action in tests).
  */
+/** T-215 — asks for a wallet-payment code the way the page does and returns the code from the email. */
+function walletOtpFor(User $user): string
+{
+    Mail::fake();
+
+    test()->actingAs($user)
+        ->postJson('/member/register-new/wallet-otp')
+        ->assertOk();
+
+    $code = null;
+    Mail::assertSent(WalletPaymentOtpMail::class, function (WalletPaymentOtpMail $mail) use ($user, &$code) {
+        $code = $mail->code;
+
+        return $mail->hasTo($user->email);
+    });
+
+    return (string) $code;
+}
+
 function portalMember(string $customerId, ?MembershipPlan $plan = null): Member
 {
     $user = User::factory()->create(['role' => 'member']);
@@ -453,6 +476,7 @@ test('a member can register a different, new member and pay from their own walle
             'mobile' => '9876511111',
             'membership_plan_id' => $plan->id,
             'payment_mode' => 'wallet',
+            'wallet_otp' => walletOtpFor($payer->user),
         ])
         ->assertRedirect();
 
@@ -489,6 +513,7 @@ test('assisted registration via wallet is blocked when the payer\'s wallet balan
             'mobile' => '9876522222',
             'membership_plan_id' => $plan->id,
             'payment_mode' => 'wallet',
+            'wallet_otp' => walletOtpFor($payer->user),
         ])
         ->assertSessionHasErrors('amount');
 
@@ -523,4 +548,158 @@ test('assisted registration still supports cash, unaffected by the wallet option
     expect($payment->status)->toBe('pending');
     expect($payment->mode)->toBe('cash');
     expect($payment->paying_member_id)->toBeNull();
+});
+
+// ---------------------------------------------------------------- T-215: wallet payment code, locked contact, 48-hour hold
+
+function walletRegistrationPayload(Member $sponsor, string $suffix, array $extra = []): array
+{
+    return [
+        'sponsor_code' => $sponsor->customer_id,
+        'placement_side' => 'left',
+        'gender' => 'male',
+        'name' => "OTP New Member {$suffix}",
+        'email' => "otp-new-{$suffix}@example.test",
+        'mobile' => '98765'.str_pad($suffix, 5, '0', STR_PAD_LEFT),
+        'membership_plan_id' => MembershipPlan::where('code', 'F')->firstOrFail()->id,
+        'payment_mode' => 'wallet',
+        ...$extra,
+    ];
+}
+
+test('a wallet registration needs the code from the payer\'s own email; a wrong or reused code creates nothing (T-215)', function () {
+    $sponsor = portalMember('OTP-SPONSOR');
+    $payer = portalMember('OTP-PAYER');
+    $payer->update(['wallet_balance' => 120000]);
+    $payer->user->update(['email' => 'jassi.payer@example.test']);
+
+    $this->actingAs($payer->user)
+        ->get('/member/register-new')
+        ->assertInertia(fn ($page) => $page
+            ->where('wallet_otp_email', 'ja***@example.test')
+            ->where('wallet_hold_message', null));
+
+    // No code at all → refused before anything is created.
+    $this->actingAs($payer->user)
+        ->post('/member/register-new', walletRegistrationPayload($sponsor, '1'))
+        ->assertSessionHasErrors(['wallet_otp' => 'Enter the 6-digit code sent to your email.']);
+
+    Mail::fake();
+    $this->actingAs($payer->user)
+        ->postJson('/member/register-new/wallet-otp', ['name' => 'OTP New Member 1', 'membership_plan_id' => MembershipPlan::where('code', 'F')->value('id')])
+        ->assertOk()
+        ->assertJson(['sent_to' => 'ja***@example.test']);
+
+    $code = null;
+    Mail::assertSent(WalletPaymentOtpMail::class, function (WalletPaymentOtpMail $mail) use (&$code) {
+        $code = $mail->code;
+
+        return $mail->hasTo('jassi.payer@example.test') && $mail->newMemberName === 'OTP New Member 1';
+    });
+
+    $wrong = $code === '000000' ? '111111' : '000000';
+    $this->actingAs($payer->user)
+        ->post('/member/register-new', walletRegistrationPayload($sponsor, '1', ['wallet_otp' => $wrong]))
+        ->assertSessionHasErrors(['wallet_otp' => 'This code is wrong or has expired. Check it, or send a new code.']);
+
+    expect(Member::where('sponsor_id', $sponsor->id)->exists())->toBeFalse();
+    expect((float) $payer->fresh()->wallet_balance)->toBe(120000.0);
+
+    $this->actingAs($payer->user)
+        ->post('/member/register-new', walletRegistrationPayload($sponsor, '1', ['wallet_otp' => $code]))
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect((float) $payer->fresh()->wallet_balance)->toBe(70000.0);
+
+    // The same code cannot pay for a second registration.
+    $this->actingAs($payer->user)
+        ->post('/member/register-new', walletRegistrationPayload($sponsor, '2', ['placement_side' => 'right', 'wallet_otp' => $code]))
+        ->assertSessionHasErrors('wallet_otp');
+
+    expect(Member::where('sponsor_id', $sponsor->id)->count())->toBe(1);
+    expect((float) $payer->fresh()->wallet_balance)->toBe(70000.0);
+});
+
+test('a new wallet code can be asked for only after 60 seconds, and goes by SMS only when switched on (T-215)', function () {
+    $sms = new ArrayObject;
+    app()->bind(SmsGatewayContract::class, fn () => new class($sms) implements SmsGatewayContract
+    {
+        public function __construct(private ArrayObject $sent) {}
+
+        public function send(string $mobile, string $message, string $templateKey): void
+        {
+            $this->sent[] = [$mobile, $message, $templateKey];
+        }
+    });
+
+    $payer = portalMember('OTP-RESEND');
+    $payer->user->update(['mobile' => '9123456780']);
+    Mail::fake();
+
+    $this->actingAs($payer->user)->postJson('/member/register-new/wallet-otp')->assertOk();
+    expect($sms)->toHaveCount(0); // SMS is off by default (no SMS pack yet).
+
+    $this->actingAs($payer->user)
+        ->postJson('/member/register-new/wallet-otp')
+        ->assertStatus(422)
+        ->assertJsonValidationErrors('wallet_otp');
+
+    $this->travel(61)->seconds();
+    config(['otp.wallet_payment.sms_enabled' => true]);
+
+    $this->actingAs($payer->user)->postJson('/member/register-new/wallet-otp')->assertOk();
+
+    Mail::assertSent(WalletPaymentOtpMail::class, 2);
+    expect($sms)->toHaveCount(1);
+    expect($sms[0][0])->toBe('9123456780');
+    expect($sms[0][2])->toBe('wallet_payment_otp');
+});
+
+test('after the office changes a member\'s email or mobile, wallet payments wait 48 hours (T-215)', function () {
+    $sponsor = portalMember('HOLD-SPONSOR');
+    $payer = portalMember('HOLD-PAYER');
+    $payer->update(['wallet_balance' => 60000]);
+    $payer->user->update(['mobile' => '9000000001']);
+
+    // A name-only correction does not start the hold.
+    app(UpdateMemberDetails::class)($payer, 'New Name', $payer->user->email, '9000000001', null, null, null, null, null);
+    expect($payer->user->fresh()->contact_changed_at)->toBeNull();
+
+    $this->travelTo(now()->setTime(10, 0));
+    app(UpdateMemberDetails::class)($payer, 'New Name', 'changed@example.test', '9000000001', null, null, null, null, null);
+    $user = $payer->user->fresh();
+    expect($user->contact_changed_at)->not->toBeNull();
+
+    $message = 'Your email or mobile was changed recently. Wallet payments are available again after '
+        .now()->addHours(48)->format('d-m-Y h:i A').'.';
+
+    $this->actingAs($user)
+        ->get('/member/register-new')
+        ->assertInertia(fn ($page) => $page->where('wallet_hold_message', $message));
+
+    $this->actingAs($user)
+        ->postJson('/member/register-new/wallet-otp')
+        ->assertStatus(422)
+        ->assertJsonValidationErrors(['wallet_otp' => $message]);
+
+    $this->actingAs($user)
+        ->post('/member/register-new', walletRegistrationPayload($sponsor, '3', ['wallet_otp' => '123456']))
+        ->assertSessionHasErrors(['payment_mode' => $message]);
+
+    expect(Member::where('sponsor_id', $sponsor->id)->exists())->toBeFalse();
+
+    // 48 hours later the wallet works again.
+    $this->travel(48)->hours();
+    $this->travel(1)->minutes();
+
+    $this->actingAs($user)
+        ->post('/member/register-new', walletRegistrationPayload($sponsor, '3', ['wallet_otp' => walletOtpFor($user)]))
+        ->assertSessionHasNoErrors();
+
+    expect((float) $payer->fresh()->wallet_balance)->toBe(10000.0);
+
+    // A mobile-only change starts the hold too.
+    app(UpdateMemberDetails::class)($payer->fresh(), 'New Name', 'changed@example.test', '9000000002', null, null, null, null, null);
+    expect($payer->user->fresh()->walletPaymentHoldUntil())->not->toBeNull();
 });

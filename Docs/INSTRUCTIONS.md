@@ -143,7 +143,8 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
 - **Plan choice: two dropdowns, Silver plans and Gold plans (T-211, 06-10-2026, client request; replaces the six plan cards).** The shared `components/plan-picker.tsx` is used on `/join` and on both assisted registration pages (member and admin).
   - Each option shows the marketing name (Silver Start/Prime/Direct, Gold Rise/Elite/Direct; T-154 — the A–F code is never shown) and "₹amount × N months" or "₹amount one-time".
   - A member joins on one plan, so choosing in one dropdown clears the other. The chosen dropdown gets a silver or gold highlight.
-  - Inside the open list, the highlighted and selected options use a light indigo (Silver) or amber (Gold) tint with dark text (06-10-2026, `Docs/Screenshots/18.png`). The theme's teal accent used to make the price line unreadable.
+  - Inside the open list, the highlighted and selected options use a light silver (slate) or amber (Gold) tint with dark text (06-10-2026, `Docs/Screenshots/18.png`). The theme's teal accent used to make the price line unreadable.
+  - **Metal colours (T-214, 08-10-2026, client request):** each dropdown sits in its own panel in its metal's colours, so the two choices look like silver and gold. **Silver:** a light slate-to-zinc gradient panel, a polished-silver round icon, slate border and label. **Gold:** a light yellow-to-amber gradient panel, a polished-gold round icon, amber border and label. The dropdown button, the selected ring, the option highlight and the summary card below use the same metal's colours. Indigo is no longer used for Silver. Dark mode uses deep slate / deep amber versions.
   - Below the dropdowns, a **summary card** for the chosen plan shows: Monthly EMI or Amount, Duration, Total, and You get (fixed weight, or "jewellery of your choice at the current rate" for Direct plans). It is built from a list of rows (`PlanSummary`), so more plan information can be added there later without changing the dropdowns.
   - Plan details: `DOMAIN_LOGIC.md` §3.
 - Order/payment summary.
@@ -170,6 +171,16 @@ Lets the member submit a correction request (reason + new value) for a locked fi
 **Notifications page** (Member `/member/notifications`, Super Admin `/super-admin/notifications`, Admin/Store Owner `/admin/notifications` — one shared layout): title + "N unread" and **Mark all as read**; **category tabs** — All, Payments, Requests, EMI Reminders — each with its unread count, a tab only appears once that category has items; an **Unread only** checkbox; the list (icon, title, body, time as "2 hours ago" with the DD-MM-YYYY date on hover/title, a **View** button, and **Mark as read** for unread ones — no whole-row click); pagination (15 per page); helpful empty states ("No unread notifications", "Nothing here yet — new payment requests will appear here").
 
 **What produces notifications:** _Super Admin:_ cash payment awaiting approval (registration or EMI), profile change request, payout request, bank details to verify, **Current Rate booking request** (T-166; bell + email + SMS). _Member:_ cash payment approved/rejected, change request approved/rejected, EMI due reminders (3 days before, on the due date, overdue), **Current Rate booking approved/cancelled** (T-166, with Super Admin's message). **SMS (28-09-2026, user decision):** SMS is really sent only once a provider's API credentials are added and enabled in `.env`. Until then every SMS, including an unimplemented `SMS_DRIVER` value, is written to the log with a warning and never breaks OTP or a notification. A provider is not expected for about 6–12 months. Rules: `DOMAIN_LOGIC.md` §21 "Notifications, SMS and reminders".
+
+## Wallet payment code and locked email/mobile (T-215, 08-10-2026)
+
+Rules: `DOMAIN_LOGIC.md` §12.2(d).
+
+- **M19 Register a New Member, Wallet chosen:** below the wallet note, a **Verify with a one-time code** box shows "We will send a 6-digit code to <masked email>" (e.g. `ja***@gmail.com`) and a **Send code** button. After sending: "Code sent to <masked email>. It is valid for 10 minutes.", a 6-digit code input, and the button becomes **Resend code** with a 60-second countdown. **Register** stays disabled until 6 digits are typed. A wrong or expired code shows under the code input and nothing is created. During the 48-hour hold, the box shows the hold message instead of the Send code button, and Register is disabled for Wallet.
+- **The email** is titled "Your GoldWave wallet payment code". It says the code approves paying a new member's registration (their name and plan, when known) from your wallet. It also says: if you did not start this, do not share the code, and change your password.
+- **Settings → Profile:** for a Member or Store Admin, the email field is read-only, with "To change your email or mobile number, please visit the GoldWave office." Super Admin and company Admin can still edit their own email.
+- **Member Profile page (M02):** under Email and Mobile, the same "visit the office" line. There is no Request change button for them.
+- **Super Admin / Admin Member Management edit** is unchanged. It is the only place a member's email or mobile changes.
 
 ## Member Profile — requesting a change (T-143, 22-09-2026)
 

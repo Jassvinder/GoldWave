@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -20,6 +21,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string $name
  * @property string $email
  * @property string|null $mobile
+ * @property CarbonImmutable|null $contact_changed_at
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property string $role
@@ -48,6 +50,7 @@ class User extends Authenticatable implements PasskeyUser
     {
         return [
             'email_verified_at' => 'datetime',
+            'contact_changed_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
         ];
@@ -86,5 +89,20 @@ class User extends Authenticatable implements PasskeyUser
     public function isStoreAdmin(): bool
     {
         return $this->role === 'store_admin';
+    }
+
+    /**
+     * DOMAIN_LOGIC.md §12.2(d) (T-215) — when the 48-hour wallet-payment hold that follows an email/mobile change
+     * ends, or null when there is no hold right now.
+     */
+    public function walletPaymentHoldUntil(): ?CarbonImmutable
+    {
+        if ($this->contact_changed_at === null) {
+            return null;
+        }
+
+        $until = CarbonImmutable::parse($this->contact_changed_at)->addHours((int) config('otp.contact_change_hold_hours'));
+
+        return $until->isFuture() ? $until : null;
     }
 }

@@ -599,6 +599,26 @@ Total distributed: ₹750 (15% of ₹5,000). **Edge case:** if the chain is shor
 - the member can request a new Repurchase on EMI afterwards (the old one is closed);
 - `earnings:verify` errors if a handover sale has any income row.
 
+### 43. Wallet payment code, locked email/mobile, 48-hour hold (NEW 08-10-2026 — client request + user decisions, DOMAIN_LOGIC.md §12.2(d), T-215)
+
+**Code.** **Given** a member with ₹1,20,000 in the wallet, registered email `jassi.payer@example.test`, and Plan F (₹50,000 one-time).
+- With Wallet chosen and no code → "Enter the 6-digit code sent to your email."; nothing is created.
+- **Send code** → the email goes to `jassi.payer@example.test`; the page shows `ja***@example.test`. No SMS while `WALLET_OTP_SMS_ENABLED=false`.
+- A wrong code → "This code is wrong or has expired…"; no member, and the wallet is still ₹1,20,000.
+- The right code → the new member is active, and the wallet is **₹70,000**.
+- The same code again for a second registration → refused; still one new member and ₹70,000.
+- **Send code** again within 60 seconds → refused ("Please wait N seconds…"). After 61 seconds it works. With SMS switched on, it also goes by SMS to the registered mobile (template `wallet_payment_otp`).
+
+**Hold.** **Given** Super Admin changes this member's email at 10:00 AM on 08-10-2026.
+- A name-only correction does not start a hold.
+- Until **10-10-2026 10:00 AM**, the page, Send code and Register all show "Your email or mobile was changed recently. Wallet payments are available again after 10-10-2026 10:00 AM." Nothing is created.
+- After that time, a wallet registration works again with a new code.
+- A mobile-only change starts the hold too.
+
+**Locked contact.** A Member or Store Admin who sends a different email on Settings → Profile gets "To change your email or mobile number, please visit the GoldWave office." The email stays the same, and a name-only save still works. A Super Admin can still change their own email.
+
+**Regression:** cash and GPay/UPI assisted registrations need no code. A Store Admin's store-wallet registration (A07) needs no code.
+
 ## Concurrency Verification (T-020, 15-09-2026)
 
 A separate PHPUnit testsuite, `tests/Concurrency/`, verifies genuine parallel-access safety for the financial critical sections `Docs/TEST.md`'s Risk-based Coverage table calls out by name: Store Wallet deduction (§16.1), Store Inventory decrement (§16.8), and the Booster Payout Processor (§19). It is **not** part of the default `php artisan test` run and never runs against SQLite — see `DOMAIN_LOGIC.md` §21's T-020 pre-coding entry for why (SQLite `:memory:` can't even be shared across two connections, so a real race can't be produced against it; the code's actual `lockForUpdate()` behavior is Postgres-specific). Run it explicitly, against the real dev Postgres database, with:

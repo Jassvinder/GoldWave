@@ -18,9 +18,12 @@ type PageProps = {
 export default function Profile({
     mustVerifyEmail,
     status,
+    canChangeEmail,
 }: {
     mustVerifyEmail: boolean;
     status?: string;
+    /** T-215 — false for a Member / Store Admin: their email is changed only by the office. */
+    canChangeEmail: boolean;
 }) {
     const { auth } = usePage<PageProps>().props;
 
@@ -34,7 +37,11 @@ export default function Profile({
                 <Heading
                     variant="small"
                     title="Profile"
-                    description="Update your name and email address"
+                    description={
+                        canChangeEmail
+                            ? 'Update your name and email address'
+                            : 'Update your name'
+                    }
                 />
 
                 <Form
@@ -68,16 +75,25 @@ export default function Profile({
                             <div className="grid gap-2">
                                 <Label htmlFor="email">Email address</Label>
 
+                                {/* Disabled for a Member / Store Admin, so the field is not even submitted (the server refuses it too). */}
                                 <Input
                                     id="email"
                                     type="email"
                                     className="mt-1 block w-full"
                                     defaultValue={auth.user.email}
-                                    name="email"
-                                    required
+                                    name={canChangeEmail ? 'email' : undefined}
+                                    disabled={!canChangeEmail}
+                                    required={canChangeEmail}
                                     autoComplete="username"
                                     placeholder="Email address"
                                 />
+
+                                {!canChangeEmail && (
+                                    <p className="text-muted-foreground text-sm">
+                                        To change your email or mobile number,
+                                        please visit the GoldWave office.
+                                    </p>
+                                )}
 
                                 <InputError
                                     className="mt-2"

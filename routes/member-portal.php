@@ -26,6 +26,8 @@ Route::middleware(['auth', 'member-portal'])->prefix('member')->name('member.')-
     // T-153 — Assisted Registration (DOMAIN_LOGIC.md §12.2(b)).
     Route::get('register-new', [AssistedRegistrationController::class, 'show'])->name('assisted-registration.show');
     Route::post('register-new', [AssistedRegistrationController::class, 'store'])->name('assisted-registration.store');
+    // T-215 — the code that approves a wallet payment (DOMAIN_LOGIC.md §12.2(d)).
+    Route::post('register-new/wallet-otp', [AssistedRegistrationController::class, 'sendWalletOtp'])->middleware('throttle:6,1')->name('assisted-registration.wallet-otp');
 
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
 

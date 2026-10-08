@@ -23,7 +23,8 @@ class ProfileUpdateTest extends TestCase
 
     public function test_profile_information_can_be_updated()
     {
-        $user = User::factory()->create();
+        // T-215: only Super Admin / company Admin may change their own email here.
+        $user = User::factory()->create(['role' => 'super_admin']);
 
         $response = $this
             ->actingAs($user)
@@ -59,6 +60,36 @@ class ProfileUpdateTest extends TestCase
             ->assertRedirect(route('profile.edit'));
 
         $this->assertNotNull($user->refresh()->email_verified_at);
+    }
+
+    public function test_a_member_or_store_admin_cannot_change_their_own_email_but_can_change_their_name()
+    {
+        foreach (['member', 'store_admin'] as $role) {
+            $user = User::factory()->create(['role' => $role]);
+            $original = $user->email;
+
+            $this->actingAs($user)
+                ->get(route('profile.edit'))
+                ->assertInertia(fn ($page) => $page->where('canChangeEmail', false));
+
+            $this->actingAs($user)
+                ->from(route('profile.edit'))
+                ->patch(route('profile.update'), [
+                    'name' => 'Renamed',
+                    'email' => 'someone-else@example.com',
+                ])
+                ->assertSessionHasErrors(['email' => 'To change your email or mobile number, please visit the GoldWave office.']);
+
+            $this->assertSame($original, $user->refresh()->email);
+
+            // The page no longer submits the email at all; a name-only save still works.
+            $this->actingAs($user)
+                ->patch(route('profile.update'), ['name' => 'Renamed'])
+                ->assertSessionHasNoErrors();
+
+            $this->assertSame('Renamed', $user->refresh()->name);
+            $this->assertSame($original, $user->email);
+        }
     }
 
     public function test_user_can_delete_their_account()

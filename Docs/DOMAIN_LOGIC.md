@@ -526,6 +526,15 @@ Two related but distinct new payment mechanisms, both funding a `payments` row (
 
 **(c) Jewellery restock/shipment tracking (T-152)** is built separately — see §16.12 — reusing (a)'s `paying_store_id` to decide whether a store-delivered joining owes a restock.
 
+**(d) One-time code for a Member's wallet payment, locked email/mobile, and a 48-hour hold (T-215, 08-10-2026, client request + user decisions).** The risk: an upline who knows a downline's login could sign in as the downline and spend the downline's wallet on someone else's registration.
+
+1. **Code before every Member wallet payment.** On Member Assisted Registration (M19), choosing **Wallet** requires a 6-digit code. The member asks for it with **Send code**. It goes to the payer's **registered email**. It also goes by SMS to the registered mobile when `WALLET_OTP_SMS_ENABLED=true`. SMS is off until an SMS pack is bought; switching it on needs no code change. The code is valid for 10 minutes, allows 5 tries and works once. A new code can be requested after 60 seconds. The server checks the code **before** the new member is created. A wrong, expired or missing code creates nothing and moves no money.
+2. **Store wallet (A07) is not covered.** The risk is about member wallets. A Store Admin's wallet payment stays as it was.
+3. **A member cannot change their own email or mobile anywhere.** Only Super Admin or the company Admin can change them, from Member Management's member edit. To change them, the member visits the office. How the office checks the request (a phone call, a document, anything else) is the office's responsibility. The Profile Change Request (§13) does not offer email or mobile. On the account Settings page, the email field is read-only for everyone except Super Admin and company Admin, and the server refuses an email change from anyone else.
+4. **48-hour hold after a change.** When Super Admin or Admin changes an existing member's email or mobile, `users.contact_changed_at` is set. For the next **48 hours**, that member cannot request a wallet-payment code or pay from the wallet. They see: "Your email or mobile was changed recently. Wallet payments are available again after <DD-MM-YYYY HH:MM>." A dummy entry handed to its leader (§14) and a first registration do not start the hold.
+5. **Not built (not asked for):** an alert to the old email/mobile after a change, and a code on payout requests. A payout goes only to the member's own verified bank account (§11), so the risk there is lower. The same code mechanism can be reused later.
+6. **Known limit.** If the upline typed their own email or mobile into the downline's registration form at joining, the code goes to the upline from the start. Software cannot detect this. Members should give their own email and mobile when they join.
+
 **Rule:** never update a wallet balance without an associated ledger transaction. Balance may be cached for performance, but the ledger remains the audit source of truth.
 
 ---
@@ -537,6 +546,7 @@ Two related but distinct new payment mechanisms, both funding a `payments` row (
 1. After registration, show a Pending Fields / Complete Profile page.
 2. The member may submit these fields **only once**; fields lock after first successful submission.
 3. Any subsequent change requires a request/email workflow to Super Admin: member submits reason + requested new value → system snapshots the old value → Super Admin approves (update field, record approval) or rejects (retain original, record reason) → member is notified via the application's notification channel.
+4. **Email and mobile are not part of this workflow (T-215, 08-10-2026).** A member can never change them, not even by request. Only Super Admin or the company Admin changes them, at the office. See §12.2(d).
 
 ---
 

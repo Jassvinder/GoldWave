@@ -40,11 +40,25 @@ class UpdateMemberDetails
         return DB::transaction(function () use ($member, $name, $email, $mobile, $panCard, $aadhaarCard, $address, $profilePhotoPath, $bankDetails, $gender) {
             $locked = Member::whereKey($member->id)->lockForUpdate()->firstOrFail();
 
-            $locked->user?->update([
-                'name' => $name,
-                'email' => $email,
-                'mobile' => $mobile,
-            ]);
+            $user = $locked->user;
+
+            if ($user !== null) {
+                $user->fill([
+                    'name' => $name,
+                    'email' => $email,
+                    'mobile' => $mobile,
+                ]);
+
+                // DOMAIN_LOGIC.md §12.2(d) (T-215): changing an existing email/mobile starts the 48-hour wallet-payment hold.
+                $contactChanged = ($user->isDirty('email') && $user->getOriginal('email') !== null)
+                    || ($user->isDirty('mobile') && $user->getOriginal('mobile') !== null);
+
+                if ($contactChanged) {
+                    $user->contact_changed_at = now();
+                }
+
+                $user->save();
+            }
 
             $memberUpdates = array_filter([
                 'pan_card' => $panCard,

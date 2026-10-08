@@ -1,6 +1,6 @@
 import { Head, usePage, useForm } from '@inertiajs/react';
-import { Check, Copy, Link2 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Check, Copy, Link2, ShieldCheck } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import InputError from '@/components/input-error';
 import { PlanPicker } from '@/components/plan-picker';
 import type { Plan } from '@/components/plan-picker';
@@ -20,7 +20,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { store } from '@/routes/member/assisted-registration';
+import { store, walletOtp } from '@/routes/member/assisted-registration';
 import { validateSponsor } from '@/routes/registration';
 
 type Props = {
@@ -29,7 +29,24 @@ type Props = {
     /** T-162 — permanent `/join?ref=…` link with this member as sponsor. */
     referral_link: string;
     payment_options: PaymentOptions;
+    /** T-215 — masked email the wallet-payment code goes to. */
+    wallet_otp_email: string;
+    /** T-215 — set during the 48-hour hold after an email/mobile change. */
+    wallet_hold_message: string | null;
 };
+
+/** `sentTo` stays set after a failed resend, so the code input never disappears once a code was sent. */
+type OtpState = {
+    sending: boolean;
+    sentTo: string | null;
+    error: string | null;
+};
+
+function xsrfToken(): string {
+    return decodeURIComponent(
+        document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
+    );
+}
 
 type SponsorState =
     | { status: 'idle' }
@@ -43,11 +60,29 @@ export default function MemberAssistedRegistration({
     wallet_balance,
     referral_link,
     payment_options,
+    wallet_otp_email,
+    wallet_hold_message,
 }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const [sponsor, setSponsor] = useState<SponsorState>({ status: 'idle' });
     const [copied, setCopied] = useState(false);
     const linkInput = useRef<HTMLInputElement>(null);
+    const [otp, setOtp] = useState<OtpState>({
+        sending: false,
+        sentTo: null,
+        error: null,
+    });
+    const [resendIn, setResendIn] = useState(0);
+
+    useEffect(() => {
+        if (resendIn <= 0) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => setResendIn((s) => s - 1), 1000);
+
+        return () => window.clearTimeout(timer);
+    }, [resendIn]);
 
     const form = useForm({
         sponsor_code: '',
@@ -60,7 +95,52 @@ export default function MemberAssistedRegistration({
         payment_mode: 'cash' as PaymentMode,
         upi_reference: '',
         upi_screenshot: null as File | null,
+        wallet_otp: '',
     });
+
+    const payingByWallet = form.data.payment_mode === 'wallet';
+
+    /** T-215 — sends the code that approves this wallet payment to the member's own registered email. */
+    async function sendWalletOtp() {
+        setOtp((current) => ({ ...current, sending: true, error: null }));
+
+        let error: string;
+
+        try {
+            const response = await fetch(walletOtp.url(), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-XSRF-TOKEN': xsrfToken(),
+                },
+                body: JSON.stringify({
+                    name: form.data.name || null,
+                    membership_plan_id: form.data.membership_plan_id || null,
+                }),
+            });
+
+            const body = await response.json().catch(() => ({}));
+
+            if (response.ok) {
+                setOtp({ sending: false, sentTo: body.sent_to, error: null });
+                setResendIn(60);
+
+                return;
+            }
+
+            error =
+                body.errors?.wallet_otp?.[0] ??
+                (response.status === 429
+                    ? 'Too many tries. Please wait a minute and try again.'
+                    : 'The code could not be sent. Please try again.');
+        } catch {
+            error =
+                'The code could not be sent. Check your connection and try again.';
+        }
+
+        setOtp((current) => ({ ...current, sending: false, error }));
+    }
 
     async function checkSponsorCode(code: string) {
         if (!code) {
@@ -70,16 +150,12 @@ export default function MemberAssistedRegistration({
 
         setSponsor({ status: 'checking' });
 
-        const xsrfToken = decodeURIComponent(
-            document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '',
-        );
-
         const response = await fetch(validateSponsor.url(), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
-                'X-XSRF-TOKEN': xsrfToken,
+                'X-XSRF-TOKEN': xsrfToken(),
             },
             body: JSON.stringify({ sponsor_code: code }),
         });
@@ -366,14 +442,33 @@ export default function MemberAssistedRegistration({
                                     }}
                                     walletLabel="My Wallet"
                                     walletNote={
-                                        <p className="text-muted-foreground text-sm">
-                                            The registration amount will be
-                                            deducted from your own wallet
-                                            balance (₹
-                                            {wallet_balance.toFixed(2)}{' '}
-                                            available) and the new member is
-                                            activated immediately.
-                                        </p>
+                                        <div className="flex flex-col gap-3">
+                                            <p className="text-muted-foreground text-sm">
+                                                The registration amount will be
+                                                deducted from your own wallet
+                                                balance (₹
+                                                {wallet_balance.toFixed(2)}{' '}
+                                                available) and the new member is
+                                                activated immediately.
+                                            </p>
+                                            <WalletOtpBox
+                                                holdMessage={
+                                                    wallet_hold_message
+                                                }
+                                                email={wallet_otp_email}
+                                                otp={otp}
+                                                resendIn={resendIn}
+                                                onSend={sendWalletOtp}
+                                                code={form.data.wallet_otp}
+                                                onCodeChange={(value) =>
+                                                    form.setData(
+                                                        'wallet_otp',
+                                                        value,
+                                                    )
+                                                }
+                                                error={form.errors.wallet_otp}
+                                            />
+                                        </div>
                                     }
                                 />
                             </div>
@@ -382,7 +477,10 @@ export default function MemberAssistedRegistration({
                                 type="submit"
                                 disabled={
                                     form.processing ||
-                                    sponsor.status !== 'valid'
+                                    sponsor.status !== 'valid' ||
+                                    (payingByWallet &&
+                                        (wallet_hold_message !== null ||
+                                            form.data.wallet_otp.length !== 6))
                                 }
                             >
                                 {form.processing && <Spinner />}
@@ -393,5 +491,100 @@ export default function MemberAssistedRegistration({
                 </Card>
             </div>
         </>
+    );
+}
+
+/**
+ * T-215 (DOMAIN_LOGIC.md §12.2(d)) — a wallet payment needs a 6-digit code sent to the member's own registered email,
+ * so someone else signed in to this account cannot spend the wallet. During the 48-hour hold after an email/mobile
+ * change, only the hold message is shown.
+ */
+function WalletOtpBox({
+    holdMessage,
+    email,
+    otp,
+    resendIn,
+    onSend,
+    code,
+    onCodeChange,
+    error,
+}: {
+    holdMessage: string | null;
+    email: string;
+    otp: OtpState;
+    resendIn: number;
+    onSend: () => void;
+    code: string;
+    onCodeChange: (value: string) => void;
+    error?: string;
+}) {
+    if (holdMessage) {
+        return (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                {holdMessage}
+            </div>
+        );
+    }
+
+    const sent = otp.sentTo !== null;
+
+    return (
+        <div className="flex flex-col gap-3 rounded-md border p-3">
+            <div className="flex items-start gap-2">
+                <ShieldCheck className="text-primary mt-0.5 size-4 shrink-0" />
+                <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">
+                        Verify with a one-time code
+                    </span>
+                    <span className="text-muted-foreground text-sm">
+                        {sent
+                            ? `Code sent to ${otp.sentTo}. It is valid for 10 minutes.`
+                            : `We will send a 6-digit code to ${email}.`}
+                    </span>
+                </div>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+                {sent && (
+                    <div className="grid gap-1 sm:flex-1">
+                        <Label htmlFor="wallet_otp" className="sr-only">
+                            One-time code
+                        </Label>
+                        <Input
+                            id="wallet_otp"
+                            value={code}
+                            onChange={(e) =>
+                                onCodeChange(e.target.value.replace(/\D/g, ''))
+                            }
+                            maxLength={6}
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            placeholder="6-digit code"
+                            className="font-mono tracking-widest"
+                            autoFocus
+                        />
+                    </div>
+                )}
+                <Button
+                    type="button"
+                    variant={sent ? 'outline' : 'default'}
+                    onClick={onSend}
+                    disabled={otp.sending || resendIn > 0}
+                    className="shrink-0"
+                >
+                    {otp.sending && <Spinner />}
+                    {sent
+                        ? resendIn > 0
+                            ? `Resend code in ${resendIn}s`
+                            : 'Resend code'
+                        : 'Send code'}
+                </Button>
+            </div>
+
+            {otp.error && (
+                <p className="text-destructive text-sm">{otp.error}</p>
+            )}
+            <InputError message={error} />
+        </div>
     );
 }

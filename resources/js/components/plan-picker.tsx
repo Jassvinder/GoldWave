@@ -31,39 +31,68 @@ type Props = {
 
 type Metal = Plan['product_category'];
 
+/**
+ * T-214 (08-10-2026, client request) — each metal's dropdown sits in a panel in that metal's own colours (polished
+ * silver / polished gold), so the two choices read as silver and gold at a glance. The summary card uses the same set.
+ */
 const METALS: {
     metal: Metal;
     label: string;
     placeholder: string;
     icon: LucideIcon;
+    /** The panel around the label and dropdown. */
+    panelClass: string;
+    /** The round polished-metal icon. */
     iconClass: string;
+    labelClass: string;
+    triggerClass: string;
     activeClass: string;
     /** Highlighted/selected option — a light tint so both lines stay readable (the theme's teal accent hid the price line, 06-10-2026). */
     itemClass: string;
+    summaryClass: string;
+    badgeClass: string;
 }[] = [
     {
         metal: 'silver',
         label: 'Silver plans',
         placeholder: 'Choose a silver plan',
         icon: Gem,
+        panelClass:
+            'border-slate-300 bg-linear-to-br from-white via-slate-100 to-zinc-200 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-zinc-800',
         iconClass:
-            'bg-indigo-100 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300',
+            'bg-linear-to-br from-white via-slate-300 to-slate-500 text-slate-800 shadow-sm ring-1 ring-slate-400/60 dark:from-slate-200 dark:via-slate-400 dark:to-slate-600 dark:text-slate-900',
+        labelClass: 'text-slate-700 dark:text-slate-200',
+        triggerClass:
+            'border-slate-300 bg-white/90 dark:border-slate-600 dark:bg-slate-950/60',
         activeClass:
-            'border-indigo-400 ring-2 ring-indigo-100 dark:ring-indigo-900',
+            'border-slate-500 ring-2 ring-slate-300/70 dark:border-slate-400 dark:ring-slate-600',
         itemClass:
-            'focus:bg-indigo-50 focus:text-indigo-950 data-[state=checked]:bg-indigo-50 dark:focus:bg-indigo-950 dark:focus:text-indigo-50 dark:data-[state=checked]:bg-indigo-950',
+            'focus:bg-slate-100 focus:text-slate-950 data-[state=checked]:bg-slate-100 dark:focus:bg-slate-800 dark:focus:text-slate-50 dark:data-[state=checked]:bg-slate-800',
+        summaryClass:
+            'border-slate-300 bg-linear-to-br from-white via-slate-50 to-zinc-100 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-zinc-900',
+        badgeClass:
+            'bg-linear-to-r from-slate-200 via-white to-slate-300 text-slate-800 ring-1 ring-slate-400/50 dark:from-slate-500 dark:via-slate-300 dark:to-slate-500 dark:text-slate-900',
     },
     {
         metal: 'gold',
         label: 'Gold plans',
         placeholder: 'Choose a gold plan',
         icon: Crown,
+        panelClass:
+            'border-amber-300 bg-linear-to-br from-yellow-50 via-amber-50 to-amber-200/70 dark:border-amber-800 dark:from-amber-950 dark:via-amber-950 dark:to-yellow-900/60',
         iconClass:
-            'bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-300',
+            'bg-linear-to-br from-yellow-200 via-amber-400 to-amber-600 text-amber-950 shadow-sm ring-1 ring-amber-500/60',
+        labelClass: 'text-amber-800 dark:text-amber-300',
+        triggerClass:
+            'border-amber-300 bg-white/90 dark:border-amber-800 dark:bg-amber-950/60',
         activeClass:
-            'border-amber-400 ring-2 ring-amber-100 dark:ring-amber-900',
+            'border-amber-500 ring-2 ring-amber-300/70 dark:border-amber-500 dark:ring-amber-800',
         itemClass:
             'focus:bg-amber-50 focus:text-amber-950 data-[state=checked]:bg-amber-50 dark:focus:bg-amber-950 dark:focus:text-amber-50 dark:data-[state=checked]:bg-amber-950',
+        summaryClass:
+            'border-amber-300 bg-linear-to-br from-yellow-50 via-amber-50 to-amber-100 dark:border-amber-800 dark:from-amber-950 dark:via-amber-950 dark:to-yellow-950',
+        badgeClass:
+            'bg-linear-to-r from-yellow-300 via-amber-200 to-amber-400 text-amber-950 ring-1 ring-amber-500/50',
     },
 ];
 
@@ -115,15 +144,26 @@ export function PlanPicker({ plans, value, onChange, error }: Props) {
                     }
 
                     return (
-                        <div key={group.metal} className="grid gap-1.5">
-                            <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
+                        <div
+                            key={group.metal}
+                            className={cn(
+                                'grid gap-2 rounded-lg border p-3',
+                                group.panelClass,
+                            )}
+                        >
+                            <span
+                                className={cn(
+                                    'flex items-center gap-2 text-sm font-semibold',
+                                    group.labelClass,
+                                )}
+                            >
                                 <span
                                     className={cn(
-                                        'flex size-5 items-center justify-center rounded-full',
+                                        'flex size-7 items-center justify-center rounded-full',
                                         group.iconClass,
                                     )}
                                 >
-                                    <group.icon className="size-3" />
+                                    <group.icon className="size-4" />
                                 </span>
                                 {group.label}
                             </span>
@@ -135,6 +175,7 @@ export function PlanPicker({ plans, value, onChange, error }: Props) {
                                     aria-label={group.label}
                                     className={cn(
                                         'h-auto min-h-11 w-full py-2 text-left',
+                                        group.triggerClass,
                                         chosen && group.activeClass,
                                     )}
                                 >
@@ -191,6 +232,9 @@ export function PlanPicker({ plans, value, onChange, error }: Props) {
 function PlanSummary({ plan }: { plan: Plan }) {
     const gold = plan.product_category === 'gold';
     const isEmi = plan.installment_count !== null;
+    const colours =
+        METALS.find((group) => group.metal === plan.product_category) ??
+        METALS[0];
 
     const rows: { label: string; value: ReactNode }[] = [
         {
@@ -217,22 +261,17 @@ function PlanSummary({ plan }: { plan: Plan }) {
     ];
 
     return (
-        <div
-            className={cn(
-                'rounded-lg border p-3',
-                gold
-                    ? 'border-amber-200 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30'
-                    : 'border-indigo-200 bg-indigo-50/60 dark:border-indigo-900 dark:bg-indigo-950/30',
-            )}
-        >
+        <div className={cn('rounded-lg border p-3', colours.summaryClass)}>
             <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold">{plan.name}</span>
+                <span
+                    className={cn('text-sm font-semibold', colours.labelClass)}
+                >
+                    {plan.name}
+                </span>
                 <span
                     className={cn(
                         'rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide uppercase',
-                        gold
-                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
-                            : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
+                        colours.badgeClass,
                     )}
                 >
                     {gold ? 'Gold' : 'Silver'} · {isEmi ? 'EMI' : 'One-time'}
