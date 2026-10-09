@@ -20,9 +20,10 @@ return new class extends Migration
     {
         Schema::create('otp_codes', function (Blueprint $table) {
             $table->id();
-            $table->string('identifier'); // mobile or email, as supplied by the member
+            // Mobile or email as supplied by the member; `user:<id>` for a wallet-payment code (T-215, §12.2(d)).
+            $table->string('identifier');
             $table->enum('channel', ['sms', 'email']);
-            $table->enum('purpose', ['login', 'password_reset']);
+            $table->enum('purpose', ['login', 'password_reset', 'wallet_payment']);
             $table->string('code_hash');
             $table->unsignedTinyInteger('attempts')->default(0);
             $table->timestamp('expires_at');

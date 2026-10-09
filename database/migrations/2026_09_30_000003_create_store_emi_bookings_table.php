@@ -2,30 +2,20 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * T-185 (30-09-2026, DOMAIN_LOGIC.md §16.13) — Repurchase on EMI, Current Rate only. The whole schema for booking
- * (T-185a), break (T-185b) and delivery (T-185c) is created here at once:
+ * T-185 (30-09-2026, DOMAIN_LOGIC.md §16.13) — Repurchase on EMI, Current Rate only: the Store Admin's request, Super
+ * Admin's decision, the held piece, and later the break (silver owed) and the delivery. `emi_schedules.kind` and
+ * `emi_installments.status = cancelled` live in the create_emi_and_payments migration.
  *
- * - `store_emi_bookings` — the Store Admin's request, Super Admin's decision, the held piece, and later the break
- *   (silver owed) and the delivery;
- * - `emi_schedules.kind` — `membership` (the plan's own schedule, every existing row) or `store_repurchase`; a store
- *   schedule has no membership plan, so `membership_plan_id` becomes nullable;
- * - `emi_installments.status` gains `cancelled` — the unpaid EMIs of a broken booking, never payable or overdue again.
+ * Adds the deferred FK from `store_sales.store_emi_booking_id` to this table now that both exist (the same pattern as
+ * create_store_sales_tables uses for `income_ledger_calculations.source_store_sale_id`).
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('emi_schedules', function (Blueprint $table) {
-            $table->enum('kind', ['membership', 'store_repurchase'])->default('membership')->after('member_id');
-            $table->foreignId('membership_plan_id')->nullable()->change();
-        });
-
-        $this->installmentStatuses(['upcoming', 'due', 'paid', 'failed', 'overdue', 'cancelled']);
-
         Schema::create('store_emi_bookings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('member_id')->constrained('members')->cascadeOnDelete();
@@ -63,37 +53,18 @@ return new class extends Migration
             $table->index(['member_id', 'status']);
             $table->index(['status', 'id']);
         });
+
+        Schema::table('store_sales', function (Blueprint $table) {
+            $table->foreign('store_emi_booking_id')->references('id')->on('store_emi_bookings');
+        });
     }
 
     public function down(): void
     {
+        Schema::table('store_sales', function (Blueprint $table) {
+            $table->dropForeign(['store_emi_booking_id']);
+        });
+
         Schema::dropIfExists('store_emi_bookings');
-
-        $this->installmentStatuses(['upcoming', 'due', 'paid', 'failed', 'overdue']);
-
-        Schema::table('emi_schedules', function (Blueprint $table) {
-            $table->dropColumn('kind');
-        });
-    }
-
-    /**
-     * Laravel stores an enum as a string with a CHECK constraint. PostgreSQL cannot `->change()` it, so the constraint is
-     * replaced directly there; SQLite (the test database) rebuilds the column through `->change()`.
-     *
-     * @param  list<string>  $statuses
-     */
-    private function installmentStatuses(array $statuses): void
-    {
-        if (DB::getDriverName() === 'pgsql') {
-            $list = implode(', ', array_map(fn (string $status) => "'{$status}'::character varying", $statuses));
-            DB::statement('ALTER TABLE emi_installments DROP CONSTRAINT IF EXISTS emi_installments_status_check');
-            DB::statement("ALTER TABLE emi_installments ADD CONSTRAINT emi_installments_status_check CHECK (status::text = ANY (ARRAY[{$list}]::text[]))");
-
-            return;
-        }
-
-        Schema::table('emi_installments', function (Blueprint $table) use ($statuses) {
-            $table->enum('status', $statuses)->default('upcoming')->change();
-        });
     }
 };

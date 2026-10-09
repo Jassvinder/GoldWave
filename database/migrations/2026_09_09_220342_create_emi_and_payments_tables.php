@@ -28,7 +28,12 @@ return new class extends Migration
             $table->foreignId('paying_member_id')->nullable()->constrained('members');
             $table->enum('type', ['registration', 'emi_installment']);
             $table->decimal('amount', 14, 2);
-            $table->enum('mode', ['online', 'cash', 'wallet']);
+            // T-184 (§5 point 9) — set only on a "Pay All Remaining EMIs" payment: how many EMIs it settles.
+            $table->unsignedSmallInteger('covers_installments')->nullable();
+            // T-196 (§10.0) — `upi`: GPay/UPI to the company QR, proven by a Ref ID + screenshot, approved like cash.
+            $table->enum('mode', ['online', 'cash', 'wallet', 'upi']);
+            $table->string('upi_reference', 64)->nullable()->unique();
+            $table->string('upi_screenshot_path')->nullable();
             $table->enum('status', ['pending', 'paid', 'failed'])->default('pending');
 
             // Online payment verification (§10.1)
@@ -52,7 +57,9 @@ return new class extends Migration
         Schema::create('emi_schedules', function (Blueprint $table) {
             $table->id();
             $table->foreignId('member_id')->constrained('members')->cascadeOnDelete();
-            $table->foreignId('membership_plan_id')->constrained('membership_plans');
+            // T-185 (§16.13) — `store_repurchase` is a Repurchase on EMI schedule, which has no membership plan.
+            $table->enum('kind', ['membership', 'store_repurchase'])->default('membership');
+            $table->foreignId('membership_plan_id')->nullable()->constrained('membership_plans');
             $table->unsignedSmallInteger('total_installments');
             // Rate booking (§3.0): every schedule starts on Future Rate; a Current Rate booking snapshots the rest.
             $table->enum('rate_booking_method', ['current_rate', 'future_rate']);
@@ -76,7 +83,8 @@ return new class extends Migration
             $table->unsignedSmallInteger('installment_no');
             $table->date('due_date');
             $table->decimal('amount', 14, 2);
-            $table->enum('status', ['upcoming', 'due', 'paid', 'failed', 'overdue'])->default('upcoming');
+            // `cancelled` (T-185b): the unpaid EMIs of a broken Repurchase on EMI, never payable or overdue again.
+            $table->enum('status', ['upcoming', 'due', 'paid', 'failed', 'overdue', 'cancelled'])->default('upcoming');
             $table->foreignId('payment_id')->nullable()->constrained('payments');
             $table->timestamps();
 

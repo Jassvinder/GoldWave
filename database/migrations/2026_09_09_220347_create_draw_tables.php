@@ -47,6 +47,8 @@ return new class extends Migration
             $table->string('prize_name');
             $table->decimal('prize_value', 14, 2);
             $table->enum('metal_type', ['silver', 'gold']);
+            // §8.3 (30-09-2026) — how many winners this month picks.
+            $table->unsignedTinyInteger('winners_count')->default(1);
             $table->timestamps();
 
             $table->unique(['draw_group_id', 'cycle_month_no']);
@@ -56,6 +58,8 @@ return new class extends Migration
             $table->id();
             $table->foreignId('draw_group_id')->constrained('draw_groups')->cascadeOnDelete();
             $table->unsignedTinyInteger('cycle_month_no');
+            // §8.3 — each winner of a month is its own row, numbered 1..winners_count.
+            $table->unsignedTinyInteger('winner_no')->default(1);
             $table->timestamp('executed_at');
             $table->foreignId('winner_member_id')->constrained('members');
             $table->text('rng_proof')->nullable();
@@ -65,7 +69,7 @@ return new class extends Migration
             $table->foreignId('reconciled_by')->nullable()->constrained('users');
             $table->timestamps();
 
-            $table->unique(['draw_group_id', 'cycle_month_no']);
+            $table->unique(['draw_group_id', 'cycle_month_no', 'winner_no']);
         });
     }
 

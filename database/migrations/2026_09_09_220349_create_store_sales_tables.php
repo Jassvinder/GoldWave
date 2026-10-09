@@ -48,6 +48,11 @@ return new class extends Migration
             $table->foreignId('store_wallet_deduction_id')->nullable()->constrained('store_wallet_ledger_entries');
             $table->enum('distribution_status', ['pending', 'processed', 'reversed'])->default('pending');
             $table->enum('status', ['draft', 'confirmed', 'cancelled'])->default('draft');
+            // T-185c (§16.13 point 4) — a handover of a Repurchase on EMI: its booking (FK added by the
+            // create_store_emi_bookings migration, which runs later) and the part of the bill already paid through
+            // the EMIs. Such a sale never generates income.
+            $table->unsignedBigInteger('store_emi_booking_id')->nullable();
+            $table->decimal('prepaid_amount', 14, 2)->nullable();
             $table->timestamps();
 
             $table->index(['store_id', 'transaction_type', 'status']);

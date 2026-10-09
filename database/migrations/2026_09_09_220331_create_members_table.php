@@ -70,6 +70,10 @@ return new class extends Migration
             $table->decimal('wallet_balance', 14, 2)->default(0);
             $table->decimal('wallet_hold_amount', 14, 2)->default(0);
 
+            // T-183 (§15) — set once, the first time the member had `store_income_min_directs` qualified directs;
+            // from then on they earn the upline parts of store income for life.
+            $table->timestamp('store_income_unlocked_at')->nullable();
+
             $table->timestamps();
 
             $table->index(['sponsor_id']);

@@ -20,6 +20,8 @@ return new class extends Migration
             $table->string('email')->unique();
             // Login by mobile + password (DOMAIN_LOGIC.md §2.2).
             $table->string('mobile')->nullable()->unique();
+            // T-215 (§12.2(d)) — when Super Admin/Admin last changed this member's email/mobile; starts a 48-hour wallet-payment hold.
+            $table->timestamp('contact_changed_at')->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->text('two_factor_secret')->nullable();

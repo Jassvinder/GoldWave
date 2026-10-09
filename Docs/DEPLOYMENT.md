@@ -43,7 +43,7 @@ These come from the code as of 02-10-2026. Close each one, or record that it was
 
 1. ~~**Uploaded documents are publicly reachable.**~~ **Done 02-10-2026 (T-206).**
    - Bank proofs and GPay/UPI screenshots are now on the private disk and open only for a logged-in Super Admin/Admin (`Docs/SECURITY.md`).
-   - The migration `2026_10_02_000001_move_proof_files_to_private_disk` moves any older files.
+   - A fresh install stores them there from the start. (The one-time migration that moved older files was removed on 08-10-2026 when migrations were merged; see `Docs/DATABASE_SCHEMA.md`.)
    - Back up `storage/app/private` as well as `storage/app/public` (section 7).
 2. **Seeded accounts use the password `password`.**
    - `SuperAdminUserSeeder` creates the Super Admin, and `CompanyRootMemberSeeder` creates the company root login.

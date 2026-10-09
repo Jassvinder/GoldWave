@@ -39,8 +39,11 @@ return new class extends Migration
             $table->decimal('rate_percent', 6, 3);
             $table->decimal('amount', 14, 2);
             $table->foreignId('rule_version_id')->constrained('rule_versions');
-            $table->enum('eligibility_status', ['paid', 'skipped'])->default('paid');
+            // `held` (T-186, §6): Level Income short of the level's qualified directs keeps its real amount with no
+            // wallet entry, and moves once to `paid` (`released_at` set) when the directs are met.
+            $table->enum('eligibility_status', ['paid', 'skipped', 'held'])->default('paid');
             $table->string('skip_reason')->nullable();
+            $table->timestamp('released_at')->nullable();
             $table->timestamps();
 
             $table->index(['beneficiary_member_id', 'type']);
