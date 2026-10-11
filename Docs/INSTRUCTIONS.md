@@ -125,7 +125,7 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
      - Rounded and inside the page width, right below the hero: 5:2 on desktop, 16:9 on phones (anchored right, where the jewellery is).
      - Auto-advances every 5 s and pauses on hover or focus. Previous/next arrows, no dots.
      - Images: `public/Images/slider/slide-1…3.webp`, made from the old `Images/hero` PNGs at 1920px (about 400 KB in total). To change them, replace the files and update `JEWELLERY_SLIDES` in `welcome.tsx`.
-  4. Why GoldWave, Plans (active `membership_plans`, marketing names, amount × months or one-time, jewellery entitlement, "Join with …"), How it works (4 steps), Member Rewards (ends with "No income is guaranteed").
+  4. Why GoldWave, Plans (active `membership_plans`, marketing names, amount × months or one-time, jewellery entitlement, "Join with …"; T-217, 09-10-2026: 4 cards per row on desktop, Silver row then Gold row, each EMI plan followed by its one-time Direct twin), How it works (4 steps), Member Rewards (ends with "No income is guaranteed").
   5. Stores (active stores, name + location; hidden when there are none), FAQ, Contact + Join band, footer (Member Login and Staff / Store Login).
   - Contact details (phone, WhatsApp, email, address) are edited by the Super Admin on the **Landing Page** screen (same screen as the hero copy). A blank field is hidden; phone, WhatsApp and email are clickable.
   - When real jewellery photos arrive, the hero's decorative cards (`HeroVisual` in `welcome.tsx`) are the place to put them.

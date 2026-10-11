@@ -13,8 +13,9 @@ export default defineConfig({
             input: ['resources/css/app.css', 'resources/js/app.tsx'],
             refresh: true,
             fonts: [
-                bunny('Instrument Sans', {
-                    weights: [400, 500, 600],
+                // UI font from the shadcn radix-nova preset b3kI32KO0 (11-10-2026).
+                bunny('Inter', {
+                    weights: [400, 500, 600, 700],
                 }),
                 // Display font for the public landing page headings (02-10-2026).
                 bunny('Poppins', {

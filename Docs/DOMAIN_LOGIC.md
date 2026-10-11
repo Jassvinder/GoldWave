@@ -95,10 +95,14 @@ The source document never specified this flow (it only listed "Login" and "passw
 | B                                         | Silver Prime           | ₹3,000/month  | 10 months (EMI) | 100gm Silver Jewellery (fixed weight)                            |
 | C                                         | Gold Rise              | ₹5,000/month  | 10 months (EMI) | 5gm Gold Jewellery (fixed weight)                                |
 | D **(NEW plan)**                          | Gold Elite             | ₹10,000/month | 10 months (EMI) | 10gm Gold Jewellery (fixed weight)                               |
-| E _(was "D" in the pre-12-09-2026 table)_ | Silver Direct          | ₹20,000       | One-time        | Choice of Silver Jewellery at the applicable current silver rate |
-| F _(was "E" in the pre-12-09-2026 table)_ | Gold Direct            | ₹50,000       | One-time        | Choice of Gold Jewellery at the applicable current gold rate     |
+| E _(was "D" in the pre-12-09-2026 table)_ | Silver Start Direct    | ₹20,000       | One-time        | Choice of Silver Jewellery at the applicable current silver rate |
+| F _(was "E" in the pre-12-09-2026 table)_ | Gold Rise Direct       | ₹50,000       | One-time        | Choice of Gold Jewellery at the applicable current gold rate     |
+| G **(NEW 09-10-2026, T-217)**             | Silver Prime Direct    | ₹30,000       | One-time        | Choice of Silver Jewellery at the applicable current silver rate |
+| H **(NEW 09-10-2026, T-217)**             | Gold Elite Direct      | ₹1,00,000     | One-time        | Choice of Gold Jewellery at the applicable current gold rate     |
 
-All benefits are **jewellery items, not solid/bullion metal**. Plans E and F are one-time (no EMI, no rate-booking choice — the applicable rate is simply the rate on the date the one-time payment is confirmed).
+All benefits are **jewellery items, not solid/bullion metal**. Plans E–H are one-time (no EMI, no rate-booking choice — the applicable rate is simply the rate on the date the one-time payment is confirmed).
+
+**T-217 (09-10-2026, user request) — a one-time twin for every EMI plan.** Each EMI plan now has a one-time "Direct" plan of the same total: E = A (₹1,000 × 20 = ₹20,000), G = B (₹3,000 × 10 = ₹30,000), F = C (₹5,000 × 10 = ₹50,000), H = D (₹10,000 × 10 = ₹1,00,000). Each Direct plan is named after its EMI twin, so E/F were renamed from "Silver Direct"/"Gold Direct". G and H follow every one-time-plan rule already in this document with no new calculation: Level Income on the full amount as one joining (§6), Pair/Reward and Level-Income directs count them as qualified once the registration is paid (§7.3, §6), Draw eligibility on full payment (§8.7), and no EMI schedule. Every rule that says "E/F" or "one-time plan" applies to E–H; the code decides one-time by `installment_count` being null, never by the letter. The landing page lists Silver then Gold, each EMI plan next to its Direct twin.
 
 **T-154 (25-09-2026, user decision) — marketing names.** The letter code (A-F) is the plan's stable internal identifier everywhere in this document and the codebase (routes, `membership_plans.code`, compensation logic) and never changes; only `membership_plans.name` — what a member actually sees — was renamed, from a generic "Plan A — ₹1,000 × 20 months" label to the marketing name above, with **no letter code shown anywhere in the UI** (user's explicit instruction). E/F are named "Direct" rather than a premium-sounding word because they are the _same total value_ as A and C respectively (₹20,000 and ₹50,000) — just paid upfront instead of by EMI — not a higher tier; naming them as if they were a top tier (the user's first draft used "Crown") would have overpromised relative to Plan D ("Elite", ₹1,00,000, the actual highest-value plan).
 
@@ -139,7 +143,7 @@ All benefits are **jewellery items, not solid/bullion metal**. Plans E and F are
 2. Show sponsor/direct name after successful validation.
 3. Check requested binary position side (Left/Right).
 4. Place the member per the Binary Position Algorithm (§4.3) — the new entry always goes to the selected L/R side even if the empty position is many levels down.
-5. **For any EMI plan (A/B/C/D):** no rate-booking choice is asked (CHANGED 20-09-2026, §3.0) — the schedule is created as Future Rate (EMI = the plan's plain amount, commitment = amount × EMIs) and the member may book at the Current Rate later. Plans E/F have no rate-booking step.
+5. **For any EMI plan (A/B/C/D):** no rate-booking choice is asked (CHANGED 20-09-2026, §3.0) — the schedule is created as Future Rate (EMI = the plan's plain amount, commitment = amount × EMIs) and the member may book at the Current Rate later. Plans E–H have no rate-booking step.
 6. Create a pending registration/order record before payment.
 7. **Online payment:** redirect/open gateway and wait for a verified callback/webhook.
 8. **Cash payment:** create a Cash Pending/Approval workflow; membership is **not** activated merely because the user selected Cash. Admin/Super Admin changes the customer's status to Active, and a flag records who activated it.
@@ -223,20 +227,23 @@ All benefits are **jewellery items, not solid/bullion metal**. Plans E and F are
 
 **Eligible base:** for one-time plans, the entry amount; for EMI plans, the actual confirmed monthly installment amount.
 
-| Level | Rate      |
-| ----- | --------- |
-| 1     | 5%        |
-| 2     | 2%        |
-| 3     | 1%        |
-| 4–8   | 1% each   |
-| 9–12  | 0.5% each |
+| Level | Silver plans | Gold plans  |
+| ----- | ------------ | ----------- |
+| 1     | 5%           | 2%          |
+| 2     | 2%           | 1%          |
+| 3     | 1%           | 1%          |
+| 4–7   | 1% each      | 0.5% each   |
+| 8     | 1%           | 0.25%       |
+| 9–12  | 0.5% each    | 0.25% each  |
 
 **Defaults changed 29-09-2026 (user, Super Admin rule version 5; now the seeded defaults in `RuleVersionSeeder`):** Level 3 is **1%** (was 2%), for Silver and Gold alike. The rates stay Super-Admin-editable per metal on Rule Versions.
+
+**Gold seeded defaults changed 09-10-2026 (user, `Docs/Screenshots/20.png`):** Gold Levels 4–7 are **0.5%** and Levels 8–12 are **0.25%** (were 1% and 0.5%, copied from Silver). This changes only `RuleVersionSeeder` (`level_income_rates_gold`) for a fresh database; an existing database keeps its active rule version until the Super Admin publishes a new one.
 
 **Level Income Chain Rule:** Levels 1–12 always follow the Sponsor/Direct chain. Level 1 = the member's direct Sponsor, Level 2 = that Sponsor's Sponsor, and so on up to Level 12. Binary Position/placement and its upline chain are never used for Level Income.
 
 **Directs needed per level (NEW 29-09-2026, user decision, T-179):** a beneficiary earns a level's income only if, at the moment the payment is confirmed, they have at least that level's number of **qualified Direct Members**. The default is 2 × the level number: L1 = 2, L2 = 4, L3 = 6 … L12 = 24, so every level needs 2 more directs than the one before. A member with only 1 qualified direct is paid no Level Income until a 2nd direct qualifies; until then it is held (T-186, below).
-- **Qualified direct** means the same as Pair/Reward (§7.3): the direct is `active`; a one-time plan (E/F) counts once its registration is paid; an EMI plan counts only once its completed EMIs reach that plan's `pair_qualification_emis` (A = 6, B = 2, C = 2, D = 1).
+- **Qualified direct** means the same as Pair/Reward (§7.3): the direct is `active`; a one-time plan (E–H) counts once its registration is paid; an EMI plan counts only once its completed EMIs reach that plan's `pair_qualification_emis` (A = 6, B = 2, C = 2, D = 1).
 - **Missing directs means the income is held, not lapsed (CHANGED 30-09-2026, user decision, T-186; supersedes the T-179 lapse rule).** The level gets a `held` row (reason `insufficient_directs`) with its real amount, calculated at payment time from that payment's rate and rule version. Nothing goes to the wallet yet. It does not pass up to the next upline and does not go to the Company Wallet.
   - **Release:** as soon as the beneficiary has the level's number of qualified directs under the **active** rule version, every held row for that level is paid to them (`eligibility_status` → `paid`, `released_at` set) with the amount fixed at payment time. There is **no time limit**. Each level is checked on its own: 2 directs release every held L1 row, while held L2 rows wait for 4.
   - **When it is checked:** whenever a payment is confirmed, for the payer's sponsor (a confirmed payment is what makes a direct qualified); after every rule-version publish, for everyone with held income; and on demand with `php artisan level-income:release-held`.
@@ -494,7 +501,7 @@ Wallet is the financial truth layer connecting income, benefits, and payouts.
 - **Pair/Reward:** the month-end evaluation skips a member who has an overdue EMI. Their entries stay unused and carry forward, and the reward is paid at the first month-end after the EMI record is clear.
 - **Income Booster:** a monthly payout that falls due while an EMI is overdue stays `pending`. The daily Booster Payout Processor pays it on the first run after the record is clear, in addition to any later month.
 - **Unaffected:**
-  - a member with no EMI schedule (one-time plans E/F);
+  - a member with no EMI schedule (one-time plans E–H);
   - a member's own EMI payments, which still give their upline income (§5 point 2);
   - the T-179 directs gate and every other skip rule, which are applied first: only income that would have been paid is ever held.
 - A pending **debit** remains a payout hold (§11.1). A held earning is always a pending **credit**, so the two never mix.
@@ -901,7 +908,7 @@ The source document contained several internally inconsistent sections. The tabl
 | Pending profile fields                                            | PAN, Aadhaar, Profile Photo, Bank Account Details, Passbook/Cancelled Cheque, Address — one-time entry, later changes need Super Admin request (§13).                                                                                                                                                        |
 | Placement traversal on occupied side                              | Straight down the selected side until first empty position (§4.3).                                                                                                                                                                                                                                           |
 | Payout controls                                                   | Member can only request, never self-withdraw; default min. ₹500 (configurable); Super Admin pays via Cheque/GPay/UPI/Bank Transfer/in-app provider, individually or in bulk/batch; bank details manually verified; TDS configurable, default 0%; optional withdrawal fee configurable, default 0 (§11).      |
-| Draw eligibility                                                  | Full payment for one-time plans (E/F); for EMI plans (A–D) a **separate rule from Pair/Reward qualification** (§8.7): 6 EMIs for Plan A, 2 EMIs for Plan B/C, 1 EMI for Plan D.                                                                                                                              |
+| Draw eligibility                                                  | Full payment for one-time plans (E–H); for EMI plans (A–D) a **separate rule from Pair/Reward qualification** (§8.7): 6 EMIs for Plan A, 2 EMIs for Plan B/C, 1 EMI for Plan D.                                                                                                                              |
 | Store Wallet                                                      | Dedicated per-store wallet funded by allocation advance + Super Admin-confirmed top-ups; used only for store-initiated new joining/repurchase payments; atomic, auditable deductions (§16.1).                                                                                                                |
 | Purchase/Repurchase Upline Income                                 | 2% self / 1% direct Sponsor / 0.5% (L2–6) / 0.25% (L7–12), with duplicate-beneficiary protection (§15).                                                                                                                                                                                                      |
 | Purchase/Repurchase invoice                                       | Every confirmed transaction generates an invoice, printable and shareable via WhatsApp (§16.2).                                                                                                                                                                                                              |

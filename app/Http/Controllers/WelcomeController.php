@@ -27,9 +27,14 @@ class WelcomeController extends Controller
                 'cta_secondary_label' => $rules->value('landing_hero_cta_secondary_label', 'Member Login'),
             ],
             'contact' => self::contact($rules),
-            'plans' => MembershipPlan::where('is_active', true)->orderBy('id')->get([
+            // T-217: Silver row then Gold row, each EMI plan followed by its one-time Direct twin of the same total.
+            'plans' => MembershipPlan::where('is_active', true)->get([
                 'id', 'name', 'amount', 'installment_count', 'product_category', 'fixed_weight_grams',
-            ]),
+            ])->sortBy([
+                fn (MembershipPlan $a, MembershipPlan $b): int => ($a->product_category === 'gold') <=> ($b->product_category === 'gold'),
+                fn (MembershipPlan $a, MembershipPlan $b): int => (float) $a->amount * ($a->installment_count ?? 1) <=> (float) $b->amount * ($b->installment_count ?? 1),
+                fn (MembershipPlan $a, MembershipPlan $b): int => ($a->installment_count === null) <=> ($b->installment_count === null),
+            ])->values(),
             'stores' => Store::where('status', 'active')->orderBy('name')->get(['id', 'name', 'location']),
         ]);
     }

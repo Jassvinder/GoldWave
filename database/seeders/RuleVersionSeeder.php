@@ -77,19 +77,20 @@ class RuleVersionSeeder extends Seeder
         // `_gold` sibling is the Gold rate. Seeded identical to Silver as a
         // starting point — Super Admin tunes them apart via the new "Gold"
         // tab on Rule Versions once real numbers are decided.
+        // 09-10-2026 (user, Docs/Screenshots/20.png): L4-7 0.5%, L8-12 0.25%.
         $this->seedValue($version, 'level_income_rates_gold', [
             '1' => 2,
             '2' => 1,
             '3' => 1,
-            '4' => 1,
-            '5' => 1,
-            '6' => 1,
-            '7' => 1,
-            '8' => 1,
-            '9' => 0.5,
-            '10' => 0.5,
-            '11' => 0.5,
-            '12' => 0.5,
+            '4' => 0.5,
+            '5' => 0.5,
+            '6' => 0.5,
+            '7' => 0.5,
+            '8' => 0.25,
+            '9' => 0.25,
+            '10' => 0.25,
+            '11' => 0.25,
+            '12' => 0.25,
         ]);
 
         // DOMAIN_LOGIC.md §6 (T-179, 29-09-2026) — qualified directs a beneficiary needs to earn each Level Income
@@ -111,7 +112,7 @@ class RuleVersionSeeder extends Seeder
 
         // DOMAIN_LOGIC.md §7.3 — minimum completed EMIs before an EMI-plan
         // joining counts as "fully eligible" for Pair/Reward. One-time plans
-        // (E/F, installment_count null) have no entry here — they're always
+        // (E-H, installment_count null) have no entry here — they're always
         // eligible on their single registration payment.
         $this->seedValue($version, 'pair_qualification_emis', ['A' => 6, 'B' => 2, 'C' => 2, 'D' => 1]);
 

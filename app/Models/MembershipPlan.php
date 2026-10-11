@@ -25,7 +25,7 @@ class MembershipPlan extends Model
         ];
     }
 
-    /** DOMAIN_LOGIC.md §3: null installment_count means a one-time plan (E/F), not an EMI plan. */
+    /** DOMAIN_LOGIC.md §3: null installment_count means a one-time plan (E-H), not an EMI plan. */
     public function isEmiPlan(): bool
     {
         return $this->installment_count !== null;

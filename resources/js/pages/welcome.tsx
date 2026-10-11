@@ -414,7 +414,7 @@ export default function Welcome({ hero, contact, plans, stores }: Props) {
                             title="Pick the plan that suits you"
                             description="Monthly EMI plans with a fixed jewellery weight, or one-time Direct plans."
                         />
-                        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
                             {plans.map((plan) => (
                                 <PlanCard
                                     key={plan.id}
@@ -798,7 +798,7 @@ function PlanCard({ plan, showJoin }: { plan: Plan; showJoin: boolean }) {
                         {gold ? 'Gold' : 'Silver'} ·{' '}
                         {isEmi ? 'EMI plan' : 'One-time'}
                     </p>
-                    <h3 className="font-display text-2xl font-bold">
+                    <h3 className="font-display text-2xl font-bold lg:text-xl">
                         {plan.name}
                     </h3>
                 </div>
@@ -842,7 +842,7 @@ function PlanCard({ plan, showJoin }: { plan: Plan; showJoin: boolean }) {
                     <Button
                         variant="outline"
                         className={cn(
-                            'mt-auto',
+                            'mt-auto h-auto min-h-9 py-2 whitespace-normal',
                             gold
                                 ? 'border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800'
                                 : 'border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800',
