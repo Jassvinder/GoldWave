@@ -2,7 +2,14 @@
 
 Keep only information needed to continue current work. Move durable decisions to their canonical document; remove stale entries when the task closes.
 
-## LATEST (02-10-2026): pre-go-live — home page (T-203), plan guide deck (T-204), go-live guide (T-205) done
+## LATEST (13-10-2026): deployed to `goldwave.life` in staging mode for live testing
+
+- The server setup, the rollback and the go-live steps are in `Docs/DEPLOYMENT.md` §0.
+- Done: site live, PostgreSQL 17, queue worker and scheduler.
+- Next: live testing with `test:entries` over SSH (lsphp85). Then go-live: `migrate:fresh --seed`, create the Super Admin again, `APP_ENV=production`, real SMTP, and the §2 items.
+- Change the company root login's password (`password`) before go-live.
+
+## Earlier (02-10-2026): pre-go-live — home page (T-203), plan guide deck (T-204), go-live guide (T-205) done
 
 - Client reviews the new home page by 03-10-2026.
 - **Before going live, work through `Docs/DEPLOYMENT.md` §2.** Private proof files (T-206) and legal page drafts (T-207) are done. Still open: real contact details, a legal review of the pages, and changing the seeded passwords.

@@ -2,9 +2,47 @@
 
 ## Status
 
-- Status: **Recommended plan written 02-10-2026 — hosting not bought yet, nothing deployed.** Section 1 is a recommendation, not a decision; record the final choice here when it is made.
-- Last successful release verified: N/A
+- Status: **First deploy done 13-10-2026 on the client's existing Hostinger VPS (CyberPanel), in staging mode for live testing.** The server as it is actually set up is in section 0. Sections 3 to 8 are the generic Ubuntu/Nginx runbook; where they differ from section 0, section 0 wins for this server.
+- Last successful release verified: 13-10-2026, commit `433898d` (site loads at `https://goldwave.life`, staging mode).
 - Release owner / escalation: [TBD]
+
+## 0. Production server as set up (13-10-2026)
+
+The client already had a CyberPanel VPS running an old Laravel + MySQL site on `goldwave.life`. The new app replaced it on the same server (user decision 13-10-2026, the old site had no users).
+
+| Item | Value |
+| --- | --- |
+| Server | Hostinger VPS, AlmaLinux 9.7, CyberPanel + OpenLiteSpeed (`lsws`), root SSH |
+| Site user / home | `goldw8285` / `/home/goldwave.life` |
+| App folder | `/home/goldwave.life/goldwave` (document root `goldwave/public`) |
+| PHP | `lsphp85` (8.5). The server's default `php` is 8.3 and the Composer platform check needs 8.4.1+, so **always run PHP and Composer as** `/usr/local/lsws/lsphp85/bin/php` (e.g. `sudo -u goldw8285 -H /usr/local/lsws/lsphp85/bin/php /usr/bin/composer install --no-dev --optimize-autoloader`), and as the site user, not root |
+| Database | PostgreSQL 17 from the PGDG repo (`postgresql17-server`, service `postgresql-17`), database and role `goldwave`, localhost only (port 5432 is not opened). CyberPanel only manages MySQL, so PostgreSQL never shows in the panel. To browse it, use `sudo -u postgres psql goldwave` or DBeaver/pgAdmin over an SSH tunnel. Never install a web DB tool |
+| Web server config | `/usr/local/lsws/conf/vhosts/goldwave.life/vhost.conf`: `docRoot $VH_ROOT/goldwave/public` and `path /usr/local/lsws/lsphp85/bin/lsphp`. Everything else (SSL, rewrite with `autoLoadHtaccess`) was kept |
+| Queue worker | systemd unit `/etc/systemd/system/goldwave-worker.service` (user `goldw8285`, `queue:work --sleep=3 --tries=3 --max-time=3600`, `Restart=always`). Check it with `systemctl status goldwave-worker` |
+| Scheduler | crontab of `goldw8285`: `* * * * * cd /home/goldwave.life/goldwave && /usr/local/lsws/lsphp85/bin/php artisan schedule:run` |
+| Pre-switch backup | `/root/backup-13-10-2026` on the server (old site files, old MySQL DB `gold_golddb`, old `vhost.conf.bak`, old crontab), also copied to the user's PC. The old site is still in `/home/goldwave.life/public_html` |
+
+**How it was deployed** (no Node or Git on the server):
+
+1. Locally: `.\gw build`, then `git archive HEAD` plus `public/build` packed into `goldwave.tar.gz`, and `scp` from the PC to the server.
+2. Extract into the app folder, `chown -R goldw8285:goldw8285`, `composer install --no-dev`.
+3. `.env` from `.env.example` + `key:generate`. The DB password was generated with `openssl rand -hex 20`. Special characters in the password failed authentication from `.env`.
+4. `migrate --force`, `db:seed --force`, `storage:link`, `optimize`.
+5. Switch the vhost `docRoot` and PHP path, then `systemctl restart lsws`. If the site still reports the old PHP version, old `lsphp` processes are still running: `pkill -u goldw8285 -f lsphp` and restart `lsws`.
+
+**Rollback to the old site:** copy `/root/backup-13-10-2026/vhost.conf.bak` back over `vhost.conf` and `systemctl restart lsws`.
+
+**After any `.env` change:** `artisan optimize` and `artisan queue:restart` (as `goldw8285` with `lsphp85`).
+
+**Staging phase, then go-live:**
+- During testing the server runs `APP_ENV=staging`, `APP_DEBUG=false`, `MAIL_MAILER=log` and `SMS_DRIVER=log`. In staging, `php artisan test:entries` works (it refuses to run in `production`), and test members' fake emails and mobiles never receive mail or SMS.
+- At go-live:
+  1. `migrate:fresh --seed --force` (wipes all test data).
+  2. Create the Super Admin again (below).
+  3. Set `APP_ENV=production` and real `MAIL_*` values, then `optimize` and `queue:restart`.
+  4. Do the section 2 items.
+
+**Super Admin on the server:** `DatabaseSeeder` creates **no** Super Admin outside `local`/`testing` (`SuperAdminUserSeeder` returns early). `MetalRateSeeder` also skips when there is no Super Admin. On 13-10-2026 the Super Admin was created with `artisan tinker --execute` (`User::updateOrCreate`, role `super_admin`). The email and password were read with `read -s` into environment variables so they stay out of shell history. Then `db:seed --class=MetalRateSeeder --force` added placeholder rates.
 
 ## 1. Hosting — what to buy
 
@@ -45,9 +83,9 @@ These come from the code as of 02-10-2026. Close each one, or record that it was
    - Bank proofs and GPay/UPI screenshots are now on the private disk and open only for a logged-in Super Admin/Admin (`Docs/SECURITY.md`).
    - A fresh install stores them there from the start. (The one-time migration that moved older files was removed on 08-10-2026 when migrations were merged; see `Docs/DATABASE_SCHEMA.md`.)
    - Back up `storage/app/private` as well as `storage/app/public` (section 7).
-2. **Seeded accounts use the password `password`.**
-   - `SuperAdminUserSeeder` creates the Super Admin, and `CompanyRootMemberSeeder` creates the company root login.
-   - Right after the first seed on the server, change both passwords, and change the Super Admin email from the `.test` address.
+2. **Seeded accounts and the Super Admin.**
+   - `CompanyRootMemberSeeder` creates the company root login with the password `password`. Change it right after the first seed on the server.
+   - `SuperAdminUserSeeder` only runs in `local`/`testing`. On the server, the Super Admin is created by hand (section 0).
 3. **Start from a fresh database.** Never copy the dev database to production: it holds demo and test data. Run only `php artisan db:seed --force`, which calls `DatabaseSeeder` and never `DemoNetworkSeeder`.
 4. **Real business settings in Super Admin:**
    - metal rates (the seeded ones are placeholders);
@@ -227,7 +265,7 @@ Avoid releasing between 23:30 and 01:00, around 09:00, and on the 15th near 00:0
 | Environment | URL / service | Deploy trigger | Configuration source | Data/migration policy |
 | --- | --- | --- | --- | --- |
 | Local dev | `php artisan serve` / `.\gw dev` | manual | local `.env` | demo data allowed (`DemoNetworkSeeder`) |
-| Production | `https://<your-domain>` on the VPS — [TBD until bought] | manual SSH deploy (section 8), or Forge if chosen | server `.env` only | fresh database, `DatabaseSeeder` only; forward-only migrations; backup before every migrating release |
+| Production | `https://goldwave.life` on the client's CyberPanel VPS (section 0). It runs as `APP_ENV=staging` until go-live | manual: build locally, upload a tarball over `scp` (section 0) | server `.env` only | fresh database, `DatabaseSeeder` only; test entries allowed only before go-live, then `migrate:fresh --seed`; forward-only migrations after go-live; backup before every migrating release |
 
 Use names of secret variables, never their values.
 
