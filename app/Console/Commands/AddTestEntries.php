@@ -2,30 +2,26 @@
 
 namespace App\Console\Commands;
 
-use App\Actions\Payments\ApproveCashPayment;
-use App\Actions\Registration\RegisterMember;
-use App\Models\Member;
-use App\Models\MembershipPlan;
-use App\Models\User;
+use App\Support\TestEntryRegistrar;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Earnings-testing helper (30-09-2026): registers test members through the real flow (RegisterMember + cash approval),
  * so every income runs exactly as for a real joining. Each member is named after the Customer ID it actually got
  * ("Test Member 17" = GWL17). The name is never computed from a member count: company placeholder entries also get
- * members rows and used to shift every later name by one. Development only.
+ * members rows and used to shift every later name by one. Development/staging only.
  *
  * Usage: php artisan test:entries "GWL01:left,PREV:right" [--plan=E]
  * Each item is SPONSOR:side; sponsor PREV = the entry added just before it in the same run.
+ * For many entries use `test:entries-file` (a CSV) or `test:entries-bulk`.
  */
 class AddTestEntries extends Command
 {
     protected $signature = 'test:entries {entries : comma-separated SPONSOR:side items, e.g. "GWL01:left,PREV:right"} {--plan=E : membership plan code}';
 
-    protected $description = 'Register test members (cash, approved) named after their own Customer ID — development only.';
+    protected $description = 'Register test members (cash, approved) named after their own Customer ID — not in production.';
 
-    public function handle(RegisterMember $register, ApproveCashPayment $approve): int
+    public function handle(TestEntryRegistrar $registrar): int
     {
         if (app()->isProduction()) {
             $this->error('test:entries never runs in production.');
@@ -33,8 +29,8 @@ class AddTestEntries extends Command
             return self::FAILURE;
         }
 
-        $planId = MembershipPlan::where('code', $this->option('plan'))->value('id');
-        $admin = User::where('role', 'super_admin')->first();
+        $planId = $registrar->planId((string) $this->option('plan'));
+        $admin = $registrar->approver();
 
         if ($planId === null || $admin === null) {
             $this->error('Plan '.$this->option('plan').' or a Super Admin user was not found.');
@@ -54,28 +50,7 @@ class AddTestEntries extends Command
                 return self::FAILURE;
             }
 
-            $member = DB::transaction(function () use ($register, $approve, $sponsor, $side, $planId, $admin): Member {
-                $token = uniqid();
-                $member = $register([
-                    'sponsor_code' => $sponsor,
-                    'placement_side' => $side,
-                    'gender' => 'male',
-                    'name' => 'Test Member',
-                    'email' => "test-{$token}@goldwave.test",
-                    'mobile' => '97'.str_pad((string) random_int(0, 99999999), 8, '0', STR_PAD_LEFT),
-                    'membership_plan_id' => $planId,
-                    'payment_mode' => 'cash',
-                ]);
-
-                $approve($member->payments()->where('type', 'registration')->firstOrFail(), $admin);
-
-                // The Customer ID is issued on approval — name and email follow the ID the member actually received.
-                $member = $member->fresh(['user', 'placementParent']) ?? $member;
-                $number = self::numberOf((string) $member->customer_id);
-                $member->user?->update(['name' => "Test Member {$number}", 'email' => "member{$number}-{$token}@goldwave.test"]);
-
-                return $member;
-            });
+            $member = $registrar->register($sponsor, $side, $planId, $admin);
 
             $this->line(sprintf(
                 '%s | %s | sponsor %s | under %s %s',
@@ -92,11 +67,9 @@ class AddTestEntries extends Command
         return self::SUCCESS;
     }
 
-    /** "GWL17" → "17", "GWL01" → "1" (the existing "Test Member 1" style). */
+    /** Kept for existing callers; see TestEntryRegistrar::numberOf(). */
     public static function numberOf(string $customerId): string
     {
-        $digits = preg_replace('/\D/', '', $customerId);
-
-        return $digits === '' || $digits === null ? $customerId : (string) (int) $digits;
+        return TestEntryRegistrar::numberOf($customerId);
     }
 }

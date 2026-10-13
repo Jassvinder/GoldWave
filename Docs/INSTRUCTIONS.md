@@ -97,7 +97,7 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
   - The "last door" is a year-long cookie `goldwave_last_portal` (`App\Support\Portal`), set on every login. It only picks the login page and is never used for access decisions.
 - **Member login keyboard order (30-09-2026):** on `/member/login` (Customer ID + Password), Tab from Customer ID goes straight to Password, then the Log in button, and only then the "Forgot password?" link — same explicit `tabIndex` order as `/login`.
 - **Payment step (T-196, 30-09-2026, user decision; rule `DOMAIN_LOGIC.md` §10.0):** one shared chooser (`components/payment-mode-picker.tsx`) on `/join`, both assisted registrations and the EMI page. It offers **Cash** and **GPay / UPI** (plus **Store Wallet** / **My Wallet** on assisted registration). Online appears only when switched on.
-  - **GPay / UPI** shows the company QR and UPI ID, with the amount on EMI payments. It asks for the **Transaction / UTR Ref ID** and a **Payment screenshot** (both required).
+  - **GPay / UPI** shows the company QR and UPI ID, with the amount (EMI payments, and since T-217 the chosen plan's amount on `/join` and both assisted registrations). It asks for the **Transaction / UTR Ref ID** and a **Payment screenshot** (both required).
   - **Layout (T-212, 06-10-2026, `Docs/Screenshots/19.png`):** everything is stacked so it fits the EMI dialog:
     1. the QR centred on top (the client's Google Pay card);
     2. a "UPI ID … Copy" row;
@@ -105,6 +105,11 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
     4. a one-line instruction;
     5. full-width Ref ID and screenshot inputs.
   - The earlier side-by-side layout squeezed the inputs into a narrow column.
+  - **Paying from the same phone (T-217, 13-10-2026, user decision in chat).** A member who opened the site on a phone cannot scan a QR shown on that phone. Under the amount the panel now shows:
+    - **"Pay with UPI app"** (phones only: Android, iPhone, iPad). It is a `upi://pay` link with the company UPI ID, payee name (`APP_NAME`), INR and the amount filled in, so the phone offers GPay / PhonePe / Paytm and the member only enters the UPI PIN.
+    - **"Save QR"** (every device). It saves the QR as a PNG with a white border; on iPhone it opens the share sheet ("Save Image" puts it in Photos). The member then opens GPay → Scan → picks the QR from the gallery.
+    - On phones, an amber hint above the inputs: tap Pay with UPI app; if it does not work, Save QR and scan it from the gallery, or pay to the UPI ID.
+    - **Known limit:** some UPI apps refuse such links (or warn) when the UPI ID is a personal, non-merchant one, and iPhones do not always open the right app from a `upi://` link. That is why Save QR and the UPI ID Copy row stay as fallbacks. Ref ID + screenshot and the approval flow are unchanged.
   - No payment gateway is used for this mode.
   - On the EMI page, each Pay and "Pay All Remaining EMIs" opens a dialog (`components/emi-pay-dialog.tsx`) with the same chooser. The confirm button reads "Submit ₹X for approval".
   - **After submitting (T-213, 06-10-2026, user-reported).** The installment stays `due` until approval.
@@ -113,6 +118,12 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
     - The Paid column names the mode (Cash, GPay/UPI, Online, Wallet) instead of the raw code.
     - Before this, the Pay button stayed visible after submitting.
   - The Registration Status page and Payment History show "GPay/UPI".
+  - **Registration Status payment line (T-219, 13-10-2026):** readable, e.g. "₹20,000 · Cash · Awaiting approval" (was "₹20000.00 · cash · pending_verification").
+  - **A refused submit is never silent (T-219, 13-10-2026, user-reported on `/join`).** On `/join`, both assisted registrations and the EMI Pay dialog:
+    - a red "Please fix the following and try again" box above the submit button lists every server error (`components/form-error-summary.tsx`); the forms keep the scroll position on errors (`preserveScroll: 'errors'`) so the box is in view;
+    - while the sponsor code is not confirmed, a line under the disabled button says "Enter a valid sponsor code above to continue." (or "Checking the sponsor code…");
+    - choosing a plan clears the plan error, and changing the payment mode clears the mode / Ref ID / screenshot errors.
+    - Cause of the report: a Ref ID typed under GPay/UPI and then left behind by switching to Cash failed validation while its field was hidden. The server now ignores the GPay/UPI proof for other modes (`DOMAIN_LOGIC.md` §10.0).
   - **Payment Approvals** (sidebar, Super Admin + Admin; the old Cash Payments page) lists Cash and GPay/UPI together. A "Paid by" column shows the Ref ID and a "View screenshot" link, and the strip counts Cash vs GPay/UPI.
   - **Payment Settings (UPI)** (Super Admin only) sets the UPI ID and uploads the QR image, and shows whether Online is on.
 - **Online payment (T-137, 22-09-2026 — switched off 30-09-2026 by T-196):** choosing Online sends the member to our signed checkout page, which opens Razorpay Checkout automatically (UPI/cards/netbanking/wallets); a failed or closed payment leaves a "Pay now" button on the Registration Status page (and the EMI page's Pay button) to retry. Cash is unchanged.
@@ -145,7 +156,7 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
   - A member joins on one plan, so choosing in one dropdown clears the other. The chosen dropdown gets a silver or gold highlight.
   - Inside the open list, the highlighted and selected options use a light silver (slate) or amber (Gold) tint with dark text (06-10-2026, `Docs/Screenshots/18.png`). The theme's teal accent used to make the price line unreadable.
   - **Metal colours (T-214, 08-10-2026, client request):** each dropdown sits in its own panel in its metal's colours, so the two choices look like silver and gold. **Silver:** a light slate-to-zinc gradient panel, a polished-silver round icon, slate border and label. **Gold:** a light yellow-to-amber gradient panel, a polished-gold round icon, amber border and label. The dropdown button, the selected ring, the option highlight and the summary card below use the same metal's colours. Indigo is no longer used for Silver. Dark mode uses deep slate / deep amber versions.
-  - Below the dropdowns, a **summary card** for the chosen plan shows: Monthly EMI or Amount, Duration, Total, and You get (fixed weight, or "jewellery of your choice at the current rate" for Direct plans). It is built from a list of rows (`PlanSummary`), so more plan information can be added there later without changing the dropdowns.
+  - Below the dropdowns, a **summary card** for the chosen plan shows: Monthly EMI or Amount, Duration, Total, and You get. For EMI plans that is "<Metal> jewellery worth ₹<total> at the rate on your last EMI", plus a note that a fixed weight comes only from locking the Current Rate after joining (T-220, 14-10-2026, user decision; the plan's weight used to be shown). For Direct plans it is "jewellery of your choice at the current rate". The home page plan cards, FAQ and plans heading use the same wording. It is built from a list of rows (`PlanSummary`), so more plan information can be added there later without changing the dropdowns.
   - Plan details: `DOMAIN_LOGIC.md` §3.
 - Order/payment summary.
 - Payment mode: Online or Cash (cash registrations stay inactive until Super Admin confirms and activates — `DOMAIN_LOGIC.md` §3.1, §10.2).

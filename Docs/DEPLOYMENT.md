@@ -14,7 +14,7 @@ The client already had a CyberPanel VPS running an old Laravel + MySQL site on `
 | --- | --- |
 | Server | Hostinger VPS, AlmaLinux 9.7, CyberPanel + OpenLiteSpeed (`lsws`), root SSH |
 | Site user / home | `goldw8285` / `/home/goldwave.life` |
-| App folder | `/home/goldwave.life/goldwave` (document root `goldwave/public`) |
+| App folder | `/home/goldwave.life/goldwave`. First install: the code directly in it (document root `goldwave/public`). After `.\gw deploy-setup`: the releases layout below (document root `goldwave/current/public`), and every path in this table that ends in `goldwave` becomes `goldwave/current` |
 | PHP | `lsphp85` (8.5). The server's default `php` is 8.3 and the Composer platform check needs 8.4.1+, so **always run PHP and Composer as** `/usr/local/lsws/lsphp85/bin/php` (e.g. `sudo -u goldw8285 -H /usr/local/lsws/lsphp85/bin/php /usr/bin/composer install --no-dev --optimize-autoloader`), and as the site user, not root |
 | Database | PostgreSQL 17 from the PGDG repo (`postgresql17-server`, service `postgresql-17`), database and role `goldwave`, localhost only (port 5432 is not opened). CyberPanel only manages MySQL, so PostgreSQL never shows in the panel. To browse it, use `sudo -u postgres psql goldwave` or DBeaver/pgAdmin over an SSH tunnel. Never install a web DB tool |
 | Web server config | `/usr/local/lsws/conf/vhosts/goldwave.life/vhost.conf`: `docRoot $VH_ROOT/goldwave/public` and `path /usr/local/lsws/lsphp85/bin/lsphp`. Everything else (SSL, rewrite with `autoLoadHtaccess`) was kept |
@@ -31,6 +31,31 @@ The client already had a CyberPanel VPS running an old Laravel + MySQL site on `
 5. Switch the vhost `docRoot` and PHP path, then `systemctl restart lsws`. If the site still reports the old PHP version, old `lsphp` processes are still running: `pkill -u goldw8285 -f lsphp` and restart `lsws`.
 
 **Rollback to the old site:** copy `/root/backup-13-10-2026/vhost.conf.bak` back over `vhost.conf` and `systemctl restart lsws`.
+
+### Releasing updates: `.\gw deploy` (14-10-2026)
+
+The local side is in `gw.cmd` and the server side is `deploy/server-deploy.sh`. The script uploads itself on every deploy.
+
+**Only committed code goes live.** The package is `git archive HEAD` plus a fresh `public/build`. If there are uncommitted changes, `gw deploy` lists them and asks before continuing. To keep a committed path off the server, add it to `.gitattributes` with `export-ignore`. `Docs/`, `tests/`, `deploy/` and the `.docx` files are already there.
+
+Server layout (`/home/goldwave.life/goldwave`):
+
+```
+current -> releases/NNNN    the site, the worker and cron run from here
+releases/0001, 0002, …      one full copy of the code per release; the last 3 are kept
+shared/.env                 one copy, linked into every release
+shared/storage              uploads, private proofs and logs; one copy, linked into every release
+shared/db-backups           a pg_dump before every deploy; the last 10 are kept
+```
+
+| Command (on the PC) | What it does |
+| --- | --- |
+| `.\gw deploy-setup` | **One time.** Moves the first install into `releases/0001`, moves `.env` and `storage` into `shared/`, and points the vhost `docRoot`, the worker `WorkingDirectory` and the cron at `current/`. The site is down for a few seconds. The old settings are saved in `/root/goldwave-setup-backup` |
+| `.\gw deploy` | Builds, packs, uploads, then on the server: unpack into a new release, link `shared/`, `composer install --no-dev`, DB dump, `migrate --force`, `storage:link`, `optimize`, switch `current`, restart LiteSpeed (and kill old `lsphp` processes), `queue:restart`, check that the site answers 200, and remove old releases. If any step before the switch fails, the half-built release is removed and the site stays on the old one |
+| `.\gw deploy-rollback` | Switches `current` back to the release before it. **Code only:** if the newer release ran a migration, restore its dump from `shared/db-backups` by hand |
+| `.\gw deploy-status` | Lists the releases and shows which one is live |
+
+Each command asks for the root password once per `scp`/`ssh` call. An SSH key removes the prompts: run `ssh-keygen -t ed25519` on the PC, then add the `.pub` key to `/root/.ssh/authorized_keys` on the server.
 
 **After any `.env` change:** `artisan optimize` and `artisan queue:restart` (as `goldw8285` with `lsphp85`).
 

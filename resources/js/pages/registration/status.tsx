@@ -36,6 +36,25 @@ const statusLabel: Record<string, string> = {
     cancelled: 'Cancelled',
 };
 
+/** T-219 — readable payment mode and state instead of the raw codes (e.g. "cash · pending_verification"). */
+const modeLabel: Record<'online' | 'cash' | 'upi' | 'wallet', string> = {
+    cash: 'Cash',
+    upi: 'GPay/UPI',
+    online: 'Online',
+    wallet: 'Wallet',
+};
+
+const paymentStateLabel: Record<string, string> = {
+    pending_verification: 'Awaiting approval',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    pending: 'Pending',
+    paid: 'Paid',
+    completed: 'Paid',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+};
+
 export default function RegistrationStatus({
     member,
     payment,
@@ -90,13 +109,17 @@ export default function RegistrationStatus({
                                 <span className="text-muted-foreground text-sm">
                                     Payment
                                 </span>
-                                <span className="text-sm">
-                                    ₹{payment.amount} ·{' '}
-                                    {payment.mode === 'upi'
-                                        ? 'GPay/UPI'
-                                        : payment.mode}{' '}
-                                    ·{' '}
-                                    {payment.cash_status ?? payment.status}
+                                <span className="text-right text-sm">
+                                    ₹
+                                    {Number(payment.amount).toLocaleString(
+                                        'en-IN',
+                                    )}{' '}
+                                    · {modeLabel[payment.mode]} ·{' '}
+                                    {paymentStateLabel[
+                                        payment.cash_status ?? payment.status
+                                    ] ??
+                                        payment.cash_status ??
+                                        payment.status}
                                 </span>
                             </div>
                         )}
@@ -130,9 +153,9 @@ export default function RegistrationStatus({
                                     {payment.mode === 'upi'
                                         ? 'GPay/UPI'
                                         : 'cash'}{' '}
-                                    payment is awaiting confirmation by
-                                    GoldWave staff. You will be able to log in
-                                    once your membership is activated.
+                                    payment is awaiting confirmation by GoldWave
+                                    staff. You will be able to log in once your
+                                    membership is activated.
                                 </p>
                             )}
 

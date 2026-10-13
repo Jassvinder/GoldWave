@@ -34,6 +34,7 @@ Status values: Active, Not applicable, [TBD], or Archived. [TBD] means missing c
 | Performance, queues, caching                                                    | PERFORMANCE_GUIDE.md                   |
 | Tests or QA                                                                     | TEST.md                                |
 | Manually testing/verifying compensation (Level/Pair/Booster/Draw/Store) numbers | EARNINGS_TESTING_GUIDE.md              |
+| Adding test members (`test:entries`, file, bulk), locally or on the live server | TEST_ENTRIES_GUIDE.md                  |
 | Build, configuration, release                                                   | DEPLOYMENT.md, DEPLOYMENT_CHECKLIST.md |
 | Search / public content                                                         | SEO_STRATEGY.md                        |
 
@@ -53,6 +54,7 @@ Only read a routed document if its status is Active. If missing context blocks a
 | PERFORMANCE_GUIDE.md      | Budgets, bottlenecks, operational limits                                                               |
 | TEST.md                   | Commands, coverage intent, QA scenarios                                                                |
 | EARNINGS_TESTING_GUIDE.md | Step-by-step manual playbook for verifying compensation calculations on the running app                |
+| TEST_ENTRIES_GUIDE.md     | How to add test members with the `test:entries*` commands (CSV file, bulk), locally and on the server  |
 | DEPLOYMENT.md             | Environment and release procedure                                                                      |
 | DEPLOYMENT_CHECKLIST.md   | Release gate                                                                                           |
 | TASKS.md                  | Work backlog and status                                                                                |

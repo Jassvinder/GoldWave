@@ -6,6 +6,11 @@
 *.md diff=markdown
 *.php diff=php
 
+# Not sent to the live server by `gw deploy` (git archive skips export-ignore paths). Add a path here to keep it off.
+/Docs export-ignore
+/tests export-ignore
+/deploy export-ignore
+/*.docx export-ignore
 CHANGELOG.md export-ignore
 README.md export-ignore
 .github/workflows/browser-tests.yml export-ignore

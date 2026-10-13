@@ -57,6 +57,21 @@ test('GPay/UPI needs both the Ref ID and the screenshot', function () {
         ->assertSessionHasErrors(['upi_reference', 'upi_screenshot']);
 });
 
+test('T-219: a Cash registration ignores a leftover GPay/UPI Ref ID and screenshot', function () {
+    $this->post('/join', upiJoinPayload([
+        'payment_mode' => 'cash',
+        'email' => 'cash-left-over@example.test',
+        'upi_reference' => '123',
+        'upi_screenshot' => UploadedFile::fake()->create('notes.txt'),
+    ]))->assertSessionHasNoErrors()->assertRedirect();
+
+    $payment = Member::whereHas('user', fn ($q) => $q->where('email', 'cash-left-over@example.test'))
+        ->sole()->payments()->sole();
+    expect($payment->mode)->toBe('cash')
+        ->and($payment->upi_reference)->toBeNull()
+        ->and($payment->upi_screenshot_path)->toBeNull();
+});
+
 test('a GPay/UPI registration waits for approval with its proof, and an Admin can approve it', function () {
     $this->post('/join', upiJoinPayload(['upi_reference' => 'UTR123456789']))->assertRedirect();
 

@@ -1,6 +1,9 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
+import FormErrorSummary, {
+    SponsorRequiredHint,
+} from '@/components/form-error-summary';
 import { PlanPicker } from '@/components/plan-picker';
 import type { Plan } from '@/components/plan-picker';
 import {
@@ -109,7 +112,7 @@ export default function Register({
 
     function submit(event: React.FormEvent) {
         event.preventDefault();
-        form.post(store.url());
+        form.post(store.url(), { preserveScroll: 'errors' });
     }
 
     return (
@@ -302,9 +305,10 @@ export default function Register({
                             <PlanPicker
                                 plans={plans}
                                 value={form.data.membership_plan_id}
-                                onChange={(id) =>
-                                    form.setData('membership_plan_id', id)
-                                }
+                                onChange={(id) => {
+                                    form.setData('membership_plan_id', id);
+                                    form.clearErrors('membership_plan_id');
+                                }}
                                 error={form.errors.membership_plan_id}
                             />
 
@@ -313,10 +317,22 @@ export default function Register({
                                 <Label>Payment Mode</Label>
                                 <PaymentModePicker
                                     options={payment_options}
-                                    mode={form.data.payment_mode}
-                                    onModeChange={(mode) =>
-                                        form.setData('payment_mode', mode)
+                                    amount={
+                                        plans.find(
+                                            (p) =>
+                                                p.id ===
+                                                form.data.membership_plan_id,
+                                        )?.amount
                                     }
+                                    mode={form.data.payment_mode}
+                                    onModeChange={(mode) => {
+                                        form.setData('payment_mode', mode);
+                                        form.clearErrors(
+                                            'payment_mode',
+                                            'upi_reference',
+                                            'upi_screenshot',
+                                        );
+                                    }}
                                     upiReference={form.data.upi_reference}
                                     onUpiReferenceChange={(value) =>
                                         form.setData('upi_reference', value)
@@ -334,6 +350,7 @@ export default function Register({
                                 />
                             </div>
 
+                            <FormErrorSummary errors={form.errors} />
                             <Button
                                 type="submit"
                                 disabled={
@@ -344,6 +361,7 @@ export default function Register({
                                 {form.processing && <Spinner />}
                                 Continue to Payment
                             </Button>
+                            <SponsorRequiredHint status={sponsor.status} />
                             <p className="text-muted-foreground -mt-3 text-center text-xs">
                                 By continuing you agree to the{' '}
                                 <a

@@ -56,13 +56,16 @@ class PaymentModes
     /**
      * Validation rules for the GPay/UPI proof, keyed by the request field that holds the mode.
      *
+     * T-219 (13-10-2026): for any other mode the proof fields are dropped, not validated — a Ref ID typed under
+     * GPay/UPI before switching to Cash used to fail `min:6` with the field hidden, so Submit seemed to do nothing.
+     *
      * @return array<string, mixed>
      */
     public static function upiProofRules(string $modeField): array
     {
         return [
-            'upi_reference' => ["required_if:{$modeField},upi", 'nullable', 'string', 'min:6', 'max:64', 'unique:payments,upi_reference'],
-            'upi_screenshot' => ["required_if:{$modeField},upi", 'nullable', 'image', 'max:5120'],
+            'upi_reference' => ["exclude_unless:{$modeField},upi", 'required', 'string', 'min:6', 'max:64', 'unique:payments,upi_reference'],
+            'upi_screenshot' => ["exclude_unless:{$modeField},upi", 'required', 'image', 'max:5120'],
         ];
     }
 

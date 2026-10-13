@@ -1,5 +1,6 @@
 import { useForm, usePage } from '@inertiajs/react';
 import { useState, type ReactNode } from 'react';
+import FormErrorSummary from '@/components/form-error-summary';
 import {
     PaymentModePicker,
     type PaymentMode,
@@ -76,7 +77,14 @@ export function EmiPayDialog({
                     <PaymentModePicker
                         options={options}
                         mode={form.data.mode}
-                        onModeChange={(mode) => form.setData('mode', mode)}
+                        onModeChange={(mode) => {
+                            form.setData('mode', mode);
+                            form.clearErrors(
+                                'mode',
+                                'upi_reference',
+                                'upi_screenshot',
+                            );
+                        }}
                         upiReference={form.data.upi_reference}
                         onUpiReferenceChange={(value) =>
                             form.setData('upi_reference', value)
@@ -92,6 +100,8 @@ export function EmiPayDialog({
                         amount={amount}
                         idPrefix="emi-pay"
                     />
+
+                    <FormErrorSummary errors={form.errors} />
 
                     <DialogFooter>
                         <Button

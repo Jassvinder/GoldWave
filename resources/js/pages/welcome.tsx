@@ -185,7 +185,7 @@ const FAQS = [
     },
     {
         question: 'Will I get real jewellery or metal?',
-        answer: 'Every plan gives you genuine gold or silver jewellery items (not coins or bars). EMI plans give a fixed weight; Direct plans let you choose jewellery at the current rate.',
+        answer: "Every plan gives you genuine gold or silver jewellery items (not coins or bars). EMI plans give jewellery worth your total EMIs at the rate on your last EMI (or lock today's rate for a fixed weight after joining); Direct plans let you choose jewellery at the current rate.",
     },
     {
         question: 'How do I join?',
@@ -206,11 +206,12 @@ function rupees(value: string | number): string {
     return `₹${Number(value).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 }
 
+/** T-220 (14-10-2026) — EMI plans run on Future Rate, so no weight is promised up front (DOMAIN_LOGIC.md §3.0). */
 function entitlement(plan: Plan): string {
     const metal = plan.product_category === 'gold' ? 'Gold' : 'Silver';
 
-    if (plan.fixed_weight_grams) {
-        return `${Number(plan.fixed_weight_grams)} gm ${metal} Jewellery`;
+    if (plan.installment_count) {
+        return `${metal} jewellery worth ${rupees(Number(plan.amount) * plan.installment_count)} at the rate on your last EMI`;
     }
 
     return `${metal} jewellery of your choice at the current rate`;
@@ -412,7 +413,7 @@ export default function Welcome({ hero, contact, plans, stores }: Props) {
                         <SectionHeading
                             eyebrow="Our Plans"
                             title="Pick the plan that suits you"
-                            description="Monthly EMI plans with a fixed jewellery weight, or one-time Direct plans."
+                            description="Monthly EMI plans that build up to jewellery of their full value, or one-time Direct plans."
                         />
                         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                             {plans.map((plan) => (

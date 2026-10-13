@@ -694,3 +694,66 @@ test('a Store can register a different, new member and pay from the Store Wallet
     $companyWallet = CompanyWallet::firstOrFail();
     expect((float) $companyWallet->balance)->toBe(50000.0);
 });
+
+// ---------------------------------------------------------------- T-219: leftover GPay/UPI proof under Cash
+
+test('T-219: a Store assisted Cash registration and a Cash EMI payment ignore a leftover GPay/UPI Ref ID', function () {
+    $result = makeAdminWithStore('T218');
+    $sponsor = adminPortalMember('T218-SPONSOR');
+    $sponsor->update(['status' => 'active']);
+    $plan = MembershipPlan::where('code', 'F')->firstOrFail();
+
+    $this->actingAs($result['admin'])
+        ->post('/admin/register-new', [
+            'sponsor_code' => $sponsor->customer_id,
+            'placement_side' => 'left',
+            'gender' => 'male',
+            'name' => 'T218 Cash Member',
+            'email' => 't218-cash@example.test',
+            'mobile' => '9876541218',
+            'membership_plan_id' => $plan->id,
+            'payment_mode' => 'cash',
+            'upi_reference' => '123',
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    $newMember = Member::where('sponsor_id', $sponsor->id)->firstOrFail();
+    expect($newMember->status)->toBe('payment_pending')
+        ->and($newMember->customer_id)->toBeNull()
+        ->and($newMember->payments->firstWhere('type', 'registration')->upi_reference)->toBeNull();
+
+    $memberUser = User::factory()->create(['role' => 'member']);
+    $emiPlan = MembershipPlan::where('code', 'A')->firstOrFail();
+    $member = Member::create([
+        'user_id' => $memberUser->id,
+        'customer_id' => 'T218EMI',
+        'membership_plan_id' => $emiPlan->id,
+        'status' => 'active',
+        'activated_at' => now(),
+    ]);
+    $schedule = EmiSchedule::create([
+        'member_id' => $member->id,
+        'membership_plan_id' => $emiPlan->id,
+        'total_installments' => 20,
+        'rate_booking_method' => 'future_rate',
+        'installment_amount' => 1000,
+    ]);
+    $installment = EmiInstallment::create([
+        'emi_schedule_id' => $schedule->id,
+        'installment_no' => 2,
+        'due_date' => now()->toDateString(),
+        'amount' => 1000,
+        'status' => 'due',
+    ]);
+
+    $this->actingAs($memberUser)
+        ->post('/member/emi/'.$installment->id.'/pay', ['mode' => 'cash', 'upi_reference' => '12'])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    $payment = Payment::where('member_id', $member->id)->where('type', 'emi_installment')->sole();
+    expect($payment->mode)->toBe('cash')
+        ->and($payment->cash_status)->toBe('pending_verification')
+        ->and($payment->upi_reference)->toBeNull();
+});

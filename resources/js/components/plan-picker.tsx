@@ -107,11 +107,16 @@ function schedule(plan: Plan): string {
         : `${rupees(plan.amount)} one-time`;
 }
 
+/**
+ * T-220 (14-10-2026, user decision) — an EMI plan registers on Future Rate (DOMAIN_LOGIC.md §3.0), so its weight is not
+ * known yet: the member gets jewellery worth the EMIs paid, at the rate on the last EMI. The plan's
+ * `fixed_weight_grams` applies only after a Current Rate booking, so it is not shown here.
+ */
 function entitlement(plan: Plan): string {
     const metal = plan.product_category === 'gold' ? 'Gold' : 'Silver';
 
-    return plan.fixed_weight_grams
-        ? `${Number(plan.fixed_weight_grams)} gm ${metal} Jewellery`
+    return plan.installment_count
+        ? `${metal} jewellery worth ${rupees(Number(plan.amount) * plan.installment_count)} at the rate on your last EMI`
         : `${metal} jewellery of your choice at the current rate`;
 }
 
@@ -287,6 +292,13 @@ function PlanSummary({ plan }: { plan: Plan }) {
                     </div>
                 ))}
             </dl>
+            {isEmi && (
+                <p className="text-muted-foreground mt-2 text-xs">
+                    The weight depends on the {gold ? 'gold' : 'silver'} rate on
+                    your last EMI. Want a fixed weight? After joining you can
+                    lock today&apos;s rate from your Membership Plan page.
+                </p>
+            )}
         </div>
     );
 }
