@@ -89,7 +89,9 @@ cmd_setup() {
     systemctl daemon-reload
 
     say "Rebuilding caches and the storage link for the new paths"
-    rm -f "$APP/releases/0001/public/storage"
+    # The old config/route cache holds the pre-move paths; artisan would use them (13-10-2026: storage:link failed).
+    rm -f "$APP/releases/0001/public/storage" "$APP/releases/0001/bootstrap/cache/config.php" \
+        "$APP/releases/0001/bootstrap/cache/events.php" "$APP"/releases/0001/bootstrap/cache/routes-*.php
     artisan "$APP/releases/0001" storage:link
     artisan "$APP/releases/0001" optimize
     restart_php
