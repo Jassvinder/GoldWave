@@ -29,8 +29,12 @@ class MembershipPlanSeeder extends Seeder
             ['code' => 'B', 'name' => 'Silver Prime', 'amount' => 3000, 'installment_count' => 10, 'product_category' => 'silver', 'fixed_weight_grams' => 100],
             ['code' => 'C', 'name' => 'Gold Rise', 'amount' => 5000, 'installment_count' => 10, 'product_category' => 'gold', 'fixed_weight_grams' => 5],
             ['code' => 'D', 'name' => 'Gold Elite', 'amount' => 10000, 'installment_count' => 10, 'product_category' => 'gold', 'fixed_weight_grams' => 10],
-            ['code' => 'E', 'name' => 'Silver Direct', 'amount' => 20000, 'installment_count' => null, 'product_category' => 'silver', 'fixed_weight_grams' => null],
-            ['code' => 'F', 'name' => 'Gold Direct', 'amount' => 50000, 'installment_count' => null, 'product_category' => 'gold', 'fixed_weight_grams' => null],
+            ['code' => 'E', 'name' => 'Silver Start Direct', 'amount' => 20000, 'installment_count' => null, 'product_category' => 'silver', 'fixed_weight_grams' => null],
+            ['code' => 'F', 'name' => 'Gold Rise Direct', 'amount' => 50000, 'installment_count' => null, 'product_category' => 'gold', 'fixed_weight_grams' => null],
+            // 09-10-2026 (user decision): one-time versions of B and D. They were added on the dev DB only and so were
+            // missing from fresh installs, including the first live deploy (found and moved here 14-10-2026).
+            ['code' => 'G', 'name' => 'Silver Prime Direct', 'amount' => 30000, 'installment_count' => null, 'product_category' => 'silver', 'fixed_weight_grams' => null],
+            ['code' => 'H', 'name' => 'Gold Elite Direct', 'amount' => 100000, 'installment_count' => null, 'product_category' => 'gold', 'fixed_weight_grams' => null],
         ];
 
         foreach ($plans as $plan) {

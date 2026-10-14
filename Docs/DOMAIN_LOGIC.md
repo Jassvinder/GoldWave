@@ -95,10 +95,14 @@ The source document never specified this flow (it only listed "Login" and "passw
 | B                                         | Silver Prime           | ₹3,000/month  | 10 months (EMI) | 100gm Silver Jewellery (fixed weight)                            |
 | C                                         | Gold Rise              | ₹5,000/month  | 10 months (EMI) | 5gm Gold Jewellery (fixed weight)                                |
 | D **(NEW plan)**                          | Gold Elite             | ₹10,000/month | 10 months (EMI) | 10gm Gold Jewellery (fixed weight)                               |
-| E _(was "D" in the pre-12-09-2026 table)_ | Silver Direct          | ₹20,000       | One-time        | Choice of Silver Jewellery at the applicable current silver rate |
-| F _(was "E" in the pre-12-09-2026 table)_ | Gold Direct            | ₹50,000       | One-time        | Choice of Gold Jewellery at the applicable current gold rate     |
+| E _(was "D" in the pre-12-09-2026 table)_ | Silver Start Direct    | ₹20,000       | One-time        | Choice of Silver Jewellery at the applicable current silver rate |
+| F _(was "E" in the pre-12-09-2026 table)_ | Gold Rise Direct       | ₹50,000       | One-time        | Choice of Gold Jewellery at the applicable current gold rate     |
+| G **(added 09-10-2026)**                  | Silver Prime Direct    | ₹30,000       | One-time        | Choice of Silver Jewellery at the applicable current silver rate |
+| H **(added 09-10-2026)**                  | Gold Elite Direct      | ₹1,00,000     | One-time        | Choice of Gold Jewellery at the applicable current gold rate     |
 
-All benefits are **jewellery items, not solid/bullion metal**. Plans E and F are one-time (no EMI, no rate-booking choice — the applicable rate is simply the rate on the date the one-time payment is confirmed).
+**09-10-2026 (user decision):** G and H were added as the one-time versions of B and D (same total value, paid upfront). E and F were renamed to Silver Start Direct and Gold Rise Direct to match A and C. All four were changed only on the dev DB at first. On 14-10-2026 they were moved into `MembershipPlanSeeder`, after the first live deploy came up without them.
+
+All benefits are **jewellery items, not solid/bullion metal**. Plans E, F, G and H are one-time (no EMI, no rate-booking choice — the applicable rate is simply the rate on the date the one-time payment is confirmed).
 
 **T-154 (25-09-2026, user decision) — marketing names.** The letter code (A-F) is the plan's stable internal identifier everywhere in this document and the codebase (routes, `membership_plans.code`, compensation logic) and never changes; only `membership_plans.name` — what a member actually sees — was renamed, from a generic "Plan A — ₹1,000 × 20 months" label to the marketing name above, with **no letter code shown anywhere in the UI** (user's explicit instruction). E/F are named "Direct" rather than a premium-sounding word because they are the _same total value_ as A and C respectively (₹20,000 and ₹50,000) — just paid upfront instead of by EMI — not a higher tier; naming them as if they were a top tier (the user's first draft used "Crown") would have overpromised relative to Plan D ("Elite", ₹1,00,000, the actual highest-value plan).
 
