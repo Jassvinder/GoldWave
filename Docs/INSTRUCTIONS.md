@@ -350,6 +350,13 @@ Admin view: draw cycle/date, group size configuration, generated groups, eligibl
   - **Sponsor's Monthly Draw page:** an amber card **Upline benefits you received (n)** above everything, with Draw (Group # · Month, date), Your direct who won, and Prize. It appears even when the sponsor is in no group.
   - **Member Dashboard, Monthly Draw card:** rows for **Draws won** and **Upline benefits received**, plus a "Latest upline benefit: prize — your direct GWLxx won the draw" note.
   - **01-10-2026, user-requested:** each win also has its own row, "Won · Group #n, Month m — Silver Jewellery · ₹20,000.00".
+- **Manual draw (T-221, 15-10-2026, client request; rule in `DOMAIN_LOGIC.md` §8.4):**
+  - **Draw Settings:** a first section, **How the Draw is Held**, has a checkbox **Automatic draw on the 15th at 12:00 PM**. Its help line changes with the setting. Off: "the draw is held in person; enter the drawn Customer IDs on Draw Management".
+  - **Draw Management, automatic draw off:** a blue notice at the top explains the steps. Each active group card has a blue row "Month n draw held? Enter the Customer ID(s) drawn." with an **Enter draw result** button.
+  - **The dialog:** it shows the group, month and prize, and one Customer ID field per winner. The fields suggest the IDs still in the draw. Under each field, the member's name appears in green, or "Not in this group's draw" / "Entered twice" in red. **Save result** is enabled only when every field is valid. The dialog warns that a saved result can't be changed.
+  - **After a draw:** the card says "This month's draw is done. The Month n result can be entered from next month."
+  - **Result rows:** the winner's name is shown next to the Customer ID. The line under it reads "Drawn automatically on DD-MM-YYYY" or "Manual draw · entered by NAME on DD-MM-YYYY".
+  - **Member pages:** no change. A manual result shows exactly like an automatic one.
 
 Rule: `DOMAIN_LOGIC.md` §8.
 

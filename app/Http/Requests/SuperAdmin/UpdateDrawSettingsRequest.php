@@ -15,6 +15,7 @@ class UpdateDrawSettingsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'draw_auto_enabled' => ['required', 'boolean'],
             'draw_group_size' => ['required', 'integer', 'min:1'],
             'draw_prize_silver_name' => ['required', 'string', 'max:255'],
             'draw_prize_silver_value' => ['required', 'numeric', 'gt:0', 'max:9999999999.99'],

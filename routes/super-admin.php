@@ -89,6 +89,7 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
     Route::get('draw-management', [DrawManagementController::class, 'index'])->name('draw-management.index');
     Route::post('draw-management/{execution}/reconcile', [DrawManagementController::class, 'reconcile'])->name('draw-management.reconcile');
     Route::post('draw-management/groups/{group}/month-prize', [DrawManagementController::class, 'setMonthPrize'])->name('draw-management.month-prize');
+    Route::post('draw-management/groups/{group}/manual-result', [DrawManagementController::class, 'recordManualResult'])->name('draw-management.manual-result');
 
     // S07 — Gold & Silver Rate Settings.
     Route::get('metal-rates', [MetalRateController::class, 'index'])->name('metal-rates.index');

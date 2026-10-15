@@ -21,6 +21,7 @@ use Illuminate\Database\Seeder;
  *
  * 29-09-2026 (user request): the root is always present on a fresh database, named "GoldWave", with the company's
  * contact email and mobile on a login user of its own. It stays a non-earning company root.
+ * 15-10-2026 (user request): renamed "Shri Shyam".
  */
 class CompanyRootMemberSeeder extends Seeder
 {
@@ -29,7 +30,7 @@ class CompanyRootMemberSeeder extends Seeder
         $user = User::updateOrCreate(
             ['email' => 'raj9944kumar@gmail.com'],
             [
-                'name' => 'GoldWave',
+                'name' => 'Shri Shyam',
                 'mobile' => '8814900944',
                 'role' => 'member',
                 'password' => 'password',
@@ -45,7 +46,7 @@ class CompanyRootMemberSeeder extends Seeder
                 'status' => 'active',
                 'activated_at' => now(),
                 'is_company_dummy' => true,
-                'placeholder_name' => 'GoldWave',
+                'placeholder_name' => 'Shri Shyam',
             ],
         );
     }

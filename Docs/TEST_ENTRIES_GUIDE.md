@@ -151,4 +151,4 @@ php artisan test:entries-file D:\entries.csv
 
 ## 9. Before go-live
 
-All test entries are removed by `migrate:fresh --seed --force` **while the server is still in staging**. Production blocks that command. The full order is in `Docs/DEPLOYMENT.md` §0.
+All test entries are removed by `migrate:fresh --seed --force`, run by hand **while the server is still in staging**. Production blocks that command. The full order is in `Docs/DEPLOYMENT.md` §0 "Go-live runbook".

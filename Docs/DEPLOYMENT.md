@@ -61,13 +61,51 @@ Each command asks for the root password once per `scp`/`ssh` call. An SSH key re
 
 **Staging phase, then go-live:**
 - During testing the server runs `APP_ENV=staging`, `APP_DEBUG=false`, `MAIL_MAILER=log` and `SMS_DRIVER=log`. In staging, `php artisan test:entries` works (it refuses to run in `production`), and test members' fake emails and mobiles never receive mail or SMS.
-- At go-live:
-  1. `migrate:fresh --seed --force` (wipes all test data).
-  2. Create the Super Admin again (below).
-  3. Set `APP_ENV=production` and real `MAIL_*` values, then `optimize` and `queue:restart`.
-  4. Do the section 2 items.
+- **Go-live runbook (written 15-10-2026, T-222).** The user runs it by hand, step by step, on the server as root. The wipe in step 3 is **never** scripted or put in code (user rule, 15-10-2026). `gwa` is the alias from `Docs/TEST_ENTRIES_GUIDE.md` §1.
+  0. **On the PC:** commit, then `.\gw deploy`, so the server has the latest seeders (root "Shri Shyam") and the manual draw (T-221).
+  1. **Check that the server is still in staging.** `migrate:fresh` is blocked in production by `DB::prohibitDestructiveCommands()`.
+     ```bash
+     grep '^APP_ENV' /home/goldwave.life/goldwave/shared/.env    # must say staging
+     ```
+  2. **Back up the staging data, then stop the site and the worker.** The dump goes in `/root`, outside the deploy rotation, so it is not deleted later.
+     ```bash
+     (cd /tmp && sudo -u postgres pg_dump goldwave) | gzip > /root/goldwave-staging-final-$(date +%d-%m-%Y_%H%M).sql.gz
+     ls -lh /root/goldwave-staging-final-*
+     gwa down
+     systemctl stop goldwave-worker
+     ```
+  3. **Wipe and reseed the database.** This deletes all test data. It creates the root "Shri Shyam" (`GWL-ROOT`), the plans and the rule version.
+     ```bash
+     gwa migrate:fresh --seed --force
+     ```
+  4. **Create the Super Admin ("Lakhdataar").** The email and password are typed at prompts, so they never land in shell history. Super Admin logs in with this email.
+     ```bash
+     read -p "Super Admin email: " SA_EMAIL
+     read -s -p "Super Admin password: " SA_PASS; echo
+     cd /home/goldwave.life/goldwave/current
+     sudo -u goldw8285 env SA_EMAIL="$SA_EMAIL" SA_PASS="$SA_PASS" /usr/local/lsws/lsphp85/bin/php artisan tinker --execute='App\Models\User::updateOrCreate(["email" => strtolower(getenv("SA_EMAIL"))], ["name" => "Lakhdataar", "role" => "super_admin", "password" => getenv("SA_PASS"), "email_verified_at" => now()]); echo "Super Admin ready", PHP_EOL;'
+     unset SA_PASS
+     gwa db:seed --class=MetalRateSeeder --force
+     ```
+  5. **Change the root login's password.** The seeder sets it to `password`.
+     ```bash
+     read -s -p "New password for the Shri Shyam root login: " ROOT_PASS; echo
+     cd /home/goldwave.life/goldwave/current
+     sudo -u goldw8285 env ROOT_PASS="$ROOT_PASS" /usr/local/lsws/lsphp85/bin/php artisan tinker --execute='App\Models\User::where("email", "raj9944kumar@gmail.com")->update(["password" => Illuminate\Support\Facades\Hash::make(getenv("ROOT_PASS"))]); echo "Root password changed", PHP_EOL;'
+     unset ROOT_PASS
+     ```
+  6. **Switch to production.** In `nano /home/goldwave.life/goldwave/shared/.env`, set `APP_ENV=production`, keep `APP_DEBUG=false`, and enter the real `MAIL_MAILER=smtp` and `MAIL_*` values. `SMS_DRIVER` stays `log` until a provider is chosen. Then:
+     ```bash
+     gwa optimize
+     systemctl start goldwave-worker
+     gwa queue:restart
+     gwa up
+     gwa about | grep -i -E 'environment|debug'    # production, OFF
+     ```
+  7. **In the browser, as Lakhdataar:** set Metal Rates; Payment Settings (UPI ID and QR); Draw Settings (switch off **Automatic draw** if the draw is held in person, and set the prizes); review Rule Versions; set the Landing Page contact details. Then do the remaining section 2 items.
+  - **If the staging data is needed again after step 3:** the dump in `/root` holds it. It is a plain SQL dump, so it can only be loaded into an empty `goldwave` database. Plan that restore separately; don't improvise it.
 
-**Super Admin on the server:** `DatabaseSeeder` creates **no** Super Admin outside `local`/`testing` (`SuperAdminUserSeeder` returns early). `MetalRateSeeder` also skips when there is no Super Admin. On 13-10-2026 the Super Admin was created with `artisan tinker --execute` (`User::updateOrCreate`, role `super_admin`). The email and password were read with `read -s` into environment variables so they stay out of shell history. Then `db:seed --class=MetalRateSeeder --force` added placeholder rates.
+**Super Admin on the server:** `DatabaseSeeder` creates **no** Super Admin outside `local`/`testing` (`SuperAdminUserSeeder` returns early). From go-live on, the Super Admin is named "Lakhdataar" (go-live step 4 above). `MetalRateSeeder` also skips when there is no Super Admin. On 13-10-2026 the Super Admin was created with `artisan tinker --execute` (`User::updateOrCreate`, role `super_admin`). The email and password were read with `read -s` into environment variables so they stay out of shell history. Then `db:seed --class=MetalRateSeeder --force` added placeholder rates.
 
 ## 1. Hosting — what to buy
 

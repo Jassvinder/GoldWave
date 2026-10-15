@@ -2,9 +2,11 @@
 
 namespace App\Console\Commands;
 
+use App\Actions\Draw\ExecuteMonthlyDraw;
 use App\Jobs\RunMonthlyDrawExecution;
 use App\Models\DrawExecution;
 use App\Models\DrawGroup;
+use App\Services\RuleVersionService;
 use Illuminate\Console\Command;
 use Illuminate\Console\ConfirmableTrait;
 
@@ -21,9 +23,15 @@ class RunDrawExecution extends Command
 
     protected $description = 'Run the Monthly Draw now for every active group (each run draws the next cycle month).';
 
-    public function handle(): int
+    public function handle(RuleVersionService $rules): int
     {
         if (! $this->confirmToProceed()) {
+            return self::FAILURE;
+        }
+
+        if (! ExecuteMonthlyDraw::autoDrawEnabled($rules)) {
+            $this->error('The automatic draw is off in Draw Settings. Enter the drawn Customer IDs on Draw Management.');
+
             return self::FAILURE;
         }
 

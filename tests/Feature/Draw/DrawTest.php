@@ -2,6 +2,7 @@
 
 use App\Actions\Draw\ExecuteMonthlyDraw;
 use App\Actions\Draw\GenerateDrawGroups;
+use App\Jobs\RunMonthlyDrawExecution;
 use App\Models\DrawExecution;
 use App\Models\DrawGroup;
 use App\Models\DrawGroupMonthConfig;
@@ -12,6 +13,7 @@ use App\Models\MembershipPlan;
 use App\Models\RuleValue;
 use App\Models\RuleVersion;
 use App\Models\User;
+use App\Services\RuleVersionService;
 
 /**
  * DOMAIN_LOGIC.md §8 (Monthly Draw), Docs/TEST.md scenario 6 — grouping
@@ -354,4 +356,115 @@ test('the upline benefit shows on the sponsor\'s Draw page and Dashboard and on 
             ->where('draw.wins.0.prize_name', 'Silver Jewellery')
             ->where('draw.wins.0.prize_value', '20000.00')
             ->where('draw.wins.0.cycle_month_no', 1));
+});
+
+function setAutoDraw(bool $enabled): void
+{
+    RuleValue::updateOrCreate(
+        ['rule_version_id' => RuleVersion::where('is_active', true)->value('id'), 'key' => 'draw_auto_enabled'],
+        ['value' => $enabled],
+    );
+}
+
+test('with the automatic draw off, the 15th job and jobs:draw draw nothing, but groups still form (T-221)', function () {
+    setAutoDraw(false);
+    $group = formGroupOf(5, 5, 'DMO');
+
+    RunMonthlyDrawExecution::dispatchSync();
+    $this->artisan('jobs:draw')->assertFailed();
+
+    expect($group->status)->toBe('active')
+        ->and(DrawExecution::count())->toBe(0);
+});
+
+test('a manual draw result is recorded like the automatic one and shows on the member page (T-221)', function () {
+    setAutoDraw(false);
+    $sponsor = drawMember('DMS-SPONSOR');
+    RuleValue::where('key', 'draw_group_size')->update(['value' => 1]);
+    app(GenerateDrawGroups::class)(); // the sponsor in a group of their own
+    for ($i = 1; $i <= 10; $i++) {
+        drawMember(sprintf('DMS%02d', $i), $sponsor);
+    }
+    RuleValue::where('key', 'draw_group_size')->update(['value' => 10]);
+    $group = app(GenerateDrawGroups::class)()[0];
+    $admin = User::factory()->create(['role' => 'admin', 'name' => 'Desk Admin']);
+
+    // Typed in lower case with spaces — still found.
+    $this->actingAs($admin)
+        ->post("/super-admin/draw-management/groups/{$group->id}/manual-result", ['customer_ids' => [' dms07 ']])
+        ->assertRedirect('/super-admin/draw-management')
+        ->assertSessionHasNoErrors();
+
+    $execution = DrawExecution::where('draw_group_id', $group->id)->sole();
+    $winner = Member::where('customer_id', 'DMS07')->first();
+    expect($execution->winner_member_id)->toBe($winner->id)
+        ->and($execution->cycle_month_no)->toBe(1)
+        ->and($execution->status)->toBe('executed')
+        ->and($execution->upline_benefit_member_id)->toBe($sponsor->id)
+        ->and(json_decode($execution->rng_proof, true))->toMatchArray(['algorithm' => 'manual', 'entered_by' => 'Desk Admin'])
+        ->and($group->members()->where('member_id', $winner->id)->value('is_winner_removed'))->toBeTrue()
+        ->and(DrawGroupMonthConfig::where('draw_group_id', $group->id)->where('cycle_month_no', 1)->value('prize_name'))->toBe('Silver Jewellery');
+
+    $this->actingAs($winner->user)->get('/member/draw')
+        ->assertInertia(fn ($page) => $page
+            ->where('groups.0.executions.0.winner_customer_id', 'DMS07')
+            ->where('groups.0.executions.0.is_own_win', true)
+            ->where('groups.0.executions.0.prize_name', 'Silver Jewellery'));
+
+    $this->actingAs($admin)->get('/super-admin/draw-management')
+        ->assertInertia(fn ($page) => $page
+            ->where('auto_draw_enabled', false)
+            ->where('groups.0.drawn_this_month', true)
+            ->where('groups.0.executions.0.entered_by', 'Desk Admin')
+            ->where('groups.0.remaining_members', fn ($members) => count($members) === 9));
+
+    // One draw per calendar month: a second entry this month is refused.
+    $this->actingAs($admin)
+        ->post("/super-admin/draw-management/groups/{$group->id}/manual-result", ['customer_ids' => ['DMS01']])
+        ->assertSessionHasErrors('customer_ids');
+    expect(DrawExecution::count())->toBe(1);
+});
+
+test('a manual draw result is refused for a wrong, repeated or already-won ID, a wrong count, or while the automatic draw is on (T-221)', function () {
+    $group = formGroupOf(5, 5, 'DMR');
+    drawMember('DMR-OUTSIDER');
+    $admin = User::factory()->create(['role' => 'super_admin']);
+    $url = "/super-admin/draw-management/groups/{$group->id}/manual-result";
+
+    // Automatic draw on (the default).
+    $this->actingAs($admin)->post($url, ['customer_ids' => ['DMR001']])->assertSessionHasErrors('customer_ids');
+
+    setAutoDraw(false);
+    $this->actingAs($admin)->post($url, ['customer_ids' => ['DMR-OUTSIDER']])->assertSessionHasErrors('customer_ids.0');
+    $this->actingAs($admin)->post($url, ['customer_ids' => ['DMR001', 'DMR002']])->assertSessionHasErrors('customer_ids');
+
+    $group->monthConfigs()->create(['cycle_month_no' => 1, 'prize_name' => 'Pair', 'prize_value' => 1000, 'metal_type' => 'silver', 'winners_count' => 2]);
+    $this->actingAs($admin)->post($url, ['customer_ids' => ['DMR001', 'dmr001']])->assertSessionHasErrors('customer_ids.1');
+    expect(DrawExecution::count())->toBe(0);
+
+    $this->actingAs($admin)->post($url, ['customer_ids' => ['DMR001', 'DMR003']])->assertSessionHasNoErrors();
+    expect(DrawExecution::where('draw_group_id', $group->id)->orderBy('winner_no')->pluck('winner_member_id')->all())
+        ->toBe(Member::whereIn('customer_id', ['DMR001', 'DMR003'])->orderBy('customer_id')->pluck('id')->all());
+
+    // Next month, a member who already won can't be drawn again.
+    $this->travel(1)->months();
+    $this->actingAs($admin)->post($url, ['customer_ids' => ['DMR003']])->assertSessionHasErrors('customer_ids.0');
+    $this->actingAs($admin)->post($url, ['customer_ids' => ['DMR004']])->assertSessionHasNoErrors();
+    expect(DrawExecution::where('cycle_month_no', 2)->sole()->winner->customer_id)->toBe('DMR004');
+});
+
+test('Draw Settings saves the automatic draw switch (T-221)', function () {
+    $this->actingAs(User::factory()->create(['role' => 'super_admin']))
+        ->post('/super-admin/draw-settings', [
+            'draw_auto_enabled' => false,
+            'draw_group_size' => 200,
+            'draw_prize_silver_name' => 'Silver Jewellery',
+            'draw_prize_silver_value' => 20000,
+            'draw_prize_gold_name' => 'Gold Jewellery',
+            'draw_prize_gold_value' => 25000,
+            'draw_winners_per_month' => 1,
+        ])
+        ->assertRedirect('/super-admin/draw-settings');
+
+    expect(ExecuteMonthlyDraw::autoDrawEnabled(app(RuleVersionService::class)))->toBeFalse();
 });

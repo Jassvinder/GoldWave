@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Actions\Draw\ExecuteMonthlyDraw;
+use App\Services\RuleVersionService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -27,8 +28,13 @@ class RunMonthlyDrawExecution implements ShouldQueue
     /** @param  bool  $advanceOneMonth  set only by the manual `jobs:draw` command: draw each group's next month even if it was already drawn this calendar month */
     public function __construct(public bool $advanceOneMonth = false) {}
 
-    public function handle(ExecuteMonthlyDraw $execute): void
+    public function handle(ExecuteMonthlyDraw $execute, RuleVersionService $rules): void
     {
+        // T-221 — with the automatic draw off, the draw is held in person and entered on Draw Management instead.
+        if (! ExecuteMonthlyDraw::autoDrawEnabled($rules)) {
+            return;
+        }
+
         $execute(oncePerCalendarMonth: ! $this->advanceOneMonth);
     }
 }

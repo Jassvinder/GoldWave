@@ -24,7 +24,7 @@ class SuperAdminUserSeeder extends Seeder
         User::updateOrCreate(
             ['email' => 'superadmin@goldwave.test'],
             [
-                'name' => 'GoldWave Super Admin',
+                'name' => 'Lakhdataar',
                 'mobile' => '9000000000',
                 'password' => 'password',
                 'role' => 'super_admin',

@@ -6,8 +6,8 @@ Keep only information needed to continue current work. Move durable decisions to
 
 - The server setup, the rollback and the go-live steps are in `Docs/DEPLOYMENT.md` §0.
 - Done: site live, PostgreSQL 17, queue worker and scheduler.
-- Next: live testing with `test:entries` over SSH (lsphp85). Then go-live: `migrate:fresh --seed`, create the Super Admin again, `APP_ENV=production`, real SMTP, and the §2 items.
-- Change the company root login's password (`password`) before go-live.
+- 15-10-2026: the client wants genuine entries on this server. Before that, the manual draw (T-221) and the names "Shri Shyam" / "Lakhdataar" (T-222) were added. Both are not committed or deployed yet.
+- Next: the user commits and runs `.\gw deploy`, then runs the go-live runbook in `DEPLOYMENT.md` §0 by hand (steps 0–7).
 
 ## Earlier (02-10-2026): pre-go-live — home page (T-203), plan guide deck (T-204), go-live guide (T-205) done
 

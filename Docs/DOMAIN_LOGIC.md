@@ -361,6 +361,15 @@ The Settings module must expose, at minimum: milestone-wise minimum Direct Membe
 8. Evaluate the eligible upline draw benefit (§8.5).
 9. Publish/store the result for member/admin reporting.
 
+**Manual draw (15-10-2026, client request, T-221).** Members asked for the draw to be held in person, in front of everyone.
+
+- **Switch:** Draw Settings has **Automatic draw on the 15th at 12:00 PM** (rule key `draw_auto_enabled`, on by default). When it is off, the 15th draw job and `php artisan jobs:draw` draw nothing.
+- **Groups:** groups are still formed automatically on the 15th (§8.1).
+- **Entering the result:** after the in-person draw, Super Admin or the company Admin enters the drawn **Customer IDs** on Draw Management, group by group. There must be exactly as many IDs as the month's winners count. Each ID must be a different member who is still in that group's draw. Upper/lower case and spaces don't matter. Anything else is refused, and nothing is saved.
+- **Same as the automatic draw:** the result is recorded exactly as an automatic one would be: same prize snapshot, removal from the pool, upline benefit (§8.5), `DrawResultPublished` event, and the same display on the member pages. The difference is the audit record: `rng_proof` stores `algorithm: manual`, the entered ID, who entered it, and the pool at that moment. Draw Management shows "Manual draw · entered by …".
+- **Limits:** one draw per group per calendar month (§8.3) still applies. A saved result can't be edited. As with every draw, a correction is a note added through "Mark as Verified".
+- **Switching modes:** manual entry is refused while the automatic draw is on, so the two can never both run for the same month.
+
 ### 8.5 Upline draw benefit
 
 If the winner's Sponsor/Direct (the member who personally sponsored/joined them) has **at least 10 Direct Members**, that one direct Sponsor receives the same item/benefit. No additional upline levels receive the draw benefit. If there is no qualifying upline, the winner still receives their own prize and the upline benefit is simply skipped.

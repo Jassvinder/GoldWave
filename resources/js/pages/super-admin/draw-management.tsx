@@ -1,15 +1,28 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { Dices, Trophy, Users } from 'lucide-react';
+import { Dices, PenLine, Trophy, Users } from 'lucide-react';
 import { FormEventHandler, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import { FormSection, type FormSectionColor } from '@/components/form-section';
 import InputError from '@/components/input-error';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { StatStrip } from '@/components/stat-strip';
 import { formatDate } from '@/lib/utils';
-import { monthPrize, reconcile } from '@/routes/super-admin/draw-management';
+import {
+    manualResult,
+    monthPrize,
+    reconcile,
+} from '@/routes/super-admin/draw-management';
 
 type Execution = {
     id: number;
@@ -20,6 +33,9 @@ type Execution = {
     metal_type: string | null;
     status: string;
     winner_customer_id: string;
+    winner_name: string | null;
+    /** T-221 — who entered it, for a draw held in person; null for the automatic draw. */
+    entered_by: string | null;
     upline_benefit_customer_id: string | null;
     upline_benefit_name: string | null;
     executed_at: string | null;
@@ -42,6 +58,10 @@ type Group = {
     /** Members of this group who haven't won yet, so are still in its monthly draws. */
     eligible_remaining: number;
     draws_done: number;
+    /** One draw per group per calendar month — true once this month's is held. */
+    drawn_this_month: boolean;
+    /** Members still in the draw (empty once the group is completed). */
+    remaining_members: { customer_id: string; name: string | null }[];
     cycle_months: number;
     /** The coming draw's prize; null once all draws are done. */
     next_draw: {
@@ -73,7 +93,7 @@ type Pool = {
     not_yet_eligible: number;
 };
 
-type Props = { groups: Group[]; pool: Pool };
+type Props = { auto_draw_enabled: boolean; groups: Group[]; pool: Pool };
 
 /** One labelled figure inside a group card, with a short hint underneath. */
 function GroupFact({
@@ -216,6 +236,169 @@ function MonthPrizeForm({ group }: { group: Group }) {
     );
 }
 
+/**
+ * T-221 — with the automatic draw off, the draw is held in person and this saves the drawn Customer IDs as the
+ * group's winners for its next month. Each ID shows the member's name as it is typed, so a misread slip is caught
+ * before saving; the result can't be changed afterwards.
+ */
+function ManualResultDialog({
+    group,
+    nextDraw,
+}: {
+    group: Group;
+    nextDraw: NonNullable<Group['next_draw']>;
+}) {
+    const count = Math.min(
+        nextDraw.winners_count,
+        group.remaining_members.length,
+    );
+    const [open, setOpen] = useState(false);
+    const form = useForm<{ customer_ids: string[] }>({
+        customer_ids: Array.from({ length: count }, () => ''),
+    });
+    const errors = form.errors as Record<string, string | undefined>;
+    const names = new Map(
+        group.remaining_members.map((member) => [
+            member.customer_id.toUpperCase(),
+            member.name,
+        ]),
+    );
+    const entries = form.data.customer_ids.map((id) => id.trim().toUpperCase());
+
+    const lookup = (id: string, index: number) => {
+        if (id === '') {
+            return null;
+        }
+
+        if (entries.indexOf(id) !== index) {
+            return { ok: false, text: 'Entered twice' };
+        }
+
+        if (!names.has(id)) {
+            return { ok: false, text: 'Not in this group’s draw' };
+        }
+
+        return { ok: true, text: names.get(id) ?? 'Name not set' };
+    };
+
+    const ready = entries.every((id, index) => lookup(id, index)?.ok === true);
+    const listId = `draw-ids-${group.id}`;
+
+    const submit: FormEventHandler = (e) => {
+        e.preventDefault();
+        form.post(manualResult.url(group.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                setOpen(false);
+                form.reset();
+            },
+        });
+    };
+
+    return (
+        <Dialog
+            open={open}
+            onOpenChange={(value) => {
+                setOpen(value);
+
+                if (!value) {
+                    form.clearErrors();
+                }
+            }}
+        >
+            <DialogTrigger asChild>
+                <Button size="sm">
+                    <PenLine />
+                    Enter draw result
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>
+                        Group #{group.group_no} · Month{' '}
+                        {nextDraw.cycle_month_no} draw result
+                    </DialogTitle>
+                    <DialogDescription>
+                        Prize: {nextDraw.prize_name} ·{' '}
+                        {rupees(nextDraw.prize_value)}. Enter the Customer ID
+                        {count === 1 ? '' : 's'} drawn. Check the name shown
+                        before saving — a saved result can’t be changed.
+                    </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={submit} className="flex flex-col gap-4">
+                    <datalist id={listId}>
+                        {group.remaining_members.map((member) => (
+                            <option
+                                key={member.customer_id}
+                                value={member.customer_id}
+                            >
+                                {member.name ?? ''}
+                            </option>
+                        ))}
+                    </datalist>
+                    {form.data.customer_ids.map((value, index) => {
+                        const match = lookup(entries[index], index);
+                        const inputId = `draw-${group.id}-winner-${index}`;
+
+                        return (
+                            <div key={index} className="grid gap-1.5">
+                                <Label htmlFor={inputId}>
+                                    {count === 1
+                                        ? 'Winner’s Customer ID'
+                                        : `Winner ${index + 1} — Customer ID`}
+                                </Label>
+                                <Input
+                                    id={inputId}
+                                    list={listId}
+                                    autoComplete="off"
+                                    autoFocus={index === 0}
+                                    placeholder="e.g. GWL01234"
+                                    value={value}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            'customer_ids',
+                                            form.data.customer_ids.map(
+                                                (id, i) =>
+                                                    i === index
+                                                        ? e.target.value
+                                                        : id,
+                                            ),
+                                        )
+                                    }
+                                    aria-invalid={match?.ok === false}
+                                />
+                                {match && (
+                                    <p
+                                        className={
+                                            match.ok
+                                                ? 'text-sm font-medium text-green-700 dark:text-green-400'
+                                                : 'text-destructive text-sm'
+                                        }
+                                    >
+                                        {match.text}
+                                    </p>
+                                )}
+                                <InputError
+                                    message={errors[`customer_ids.${index}`]}
+                                />
+                            </div>
+                        );
+                    })}
+                    <InputError message={errors.customer_ids} />
+                    <DialogFooter>
+                        <Button
+                            type="submit"
+                            disabled={!ready || form.processing}
+                        >
+                            Save result
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 const GROUP_COLOR: Record<string, FormSectionColor> = {
     forming: 'purple',
     active: 'blue',
@@ -223,7 +406,11 @@ const GROUP_COLOR: Record<string, FormSectionColor> = {
 };
 
 /** INSTRUCTIONS.md M13's Admin view / Admin Draw Management — groups, executions, and the manual reconciliation screen. */
-export default function SuperAdminDrawManagement({ groups, pool }: Props) {
+export default function SuperAdminDrawManagement({
+    auto_draw_enabled,
+    groups,
+    pool,
+}: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const [noteByExecution, setNoteByExecution] = useState<
         Record<number, string>
@@ -255,6 +442,19 @@ export default function SuperAdminDrawManagement({ groups, pool }: Props) {
                     <p className="text-muted-foreground text-sm">
                         {flash.status}
                     </p>
+                )}
+
+                {!auto_draw_enabled && (
+                    <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+                        <span className="font-medium">
+                            Automatic draw is off.
+                        </span>{' '}
+                        Hold each group’s draw in person, then press{' '}
+                        <span className="font-medium">Enter draw result</span>{' '}
+                        on its card. Groups are still formed automatically on
+                        the 15th. Turn the automatic draw back on in Draw
+                        Settings.
+                    </div>
                 )}
 
                 <StatStrip
@@ -387,6 +587,35 @@ export default function SuperAdminDrawManagement({ groups, pool }: Props) {
                                 </div>
                             )}
 
+                            {!auto_draw_enabled &&
+                                group.status === 'active' &&
+                                group.next_draw &&
+                                (group.drawn_this_month ? (
+                                    <p className="text-muted-foreground rounded-md border border-dashed p-3 text-sm">
+                                        This month’s draw is done. The Month{' '}
+                                        {group.next_draw.cycle_month_no} result
+                                        can be entered from next month.
+                                    </p>
+                                ) : (
+                                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+                                        <span>
+                                            Month{' '}
+                                            {group.next_draw.cycle_month_no}{' '}
+                                            draw held? Enter the Customer ID
+                                            {group.next_draw.winners_count > 1
+                                                ? 's'
+                                                : ''}{' '}
+                                            drawn.
+                                        </span>
+                                        <ManualResultDialog
+                                            // A changed winner count for the month resets the form's ID fields.
+                                            key={`${group.next_draw.cycle_month_no}-${group.next_draw.winners_count}`}
+                                            group={group}
+                                            nextDraw={group.next_draw}
+                                        />
+                                    </div>
+                                ))}
+
                             {group.next_draw && (
                                 <MonthPrizeForm group={group} />
                             )}
@@ -408,8 +637,9 @@ export default function SuperAdminDrawManagement({ groups, pool }: Props) {
 
                             {group.executions.length === 0 && (
                                 <p className="text-muted-foreground text-sm">
-                                    No draw held for this group yet — the first
-                                    one runs on the 15th.
+                                    {auto_draw_enabled
+                                        ? 'No draw held for this group yet — the first one runs on the 15th.'
+                                        : 'No draw result entered for this group yet.'}
                                 </p>
                             )}
 
@@ -433,6 +663,8 @@ export default function SuperAdminDrawManagement({ groups, pool }: Props) {
                                                     ? ` ${execution.winner_no}`
                                                     : ''}
                                                 : {execution.winner_customer_id}
+                                                {execution.winner_name &&
+                                                    ` (${execution.winner_name})`}
                                             </div>
                                             {execution.prize_name && (
                                                 <div>
@@ -444,7 +676,9 @@ export default function SuperAdminDrawManagement({ groups, pool }: Props) {
                                                 </div>
                                             )}
                                             <div className="text-muted-foreground">
-                                                Executed{' '}
+                                                {execution.entered_by
+                                                    ? `Manual draw · entered by ${execution.entered_by} on`
+                                                    : 'Drawn automatically on'}{' '}
                                                 {formatDate(
                                                     execution.executed_at,
                                                 )}

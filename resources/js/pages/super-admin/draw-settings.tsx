@@ -1,14 +1,16 @@
 import { Head, useForm, usePage } from '@inertiajs/react';
-import { Gift, Settings2 } from 'lucide-react';
+import { Dices, Gift, Settings2 } from 'lucide-react';
 import { FormEventHandler } from 'react';
 import { FormSection } from '@/components/form-section';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { update } from '@/routes/super-admin/draw-settings';
 
 type Props = {
+    draw_auto_enabled: boolean;
     draw_group_size: number;
     draw_prize_silver_name: string;
     draw_prize_silver_value: number;
@@ -25,6 +27,7 @@ type Props = {
 export default function SuperAdminDrawSettings(props: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const { data, setData, post, processing, errors } = useForm({
+        draw_auto_enabled: props.draw_auto_enabled,
         draw_group_size: props.draw_group_size,
         draw_prize_silver_name: props.draw_prize_silver_name,
         draw_prize_silver_value: props.draw_prize_silver_value,
@@ -62,6 +65,36 @@ export default function SuperAdminDrawSettings(props: Props) {
                         {flash.status}
                     </p>
                 )}
+
+                <FormSection
+                    icon={Dices}
+                    color="blue"
+                    title="How the Draw is Held"
+                    description="Groups are still formed automatically on the 15th either way."
+                    contentClassName="flex flex-col gap-2"
+                >
+                    <div className="flex items-start gap-2">
+                        <Checkbox
+                            id="draw_auto_enabled"
+                            checked={data.draw_auto_enabled}
+                            onCheckedChange={(checked) =>
+                                setData('draw_auto_enabled', checked === true)
+                            }
+                            className="mt-0.5"
+                        />
+                        <div className="grid gap-1">
+                            <Label htmlFor="draw_auto_enabled">
+                                Automatic draw on the 15th at 12:00 PM
+                            </Label>
+                            <p className="text-muted-foreground text-xs">
+                                {data.draw_auto_enabled
+                                    ? 'The system picks each group’s winners by itself on the 15th.'
+                                    : 'Off — the draw is held in person. Enter the drawn Customer IDs for each group on Draw Management; members see the result the same way.'}
+                            </p>
+                        </div>
+                    </div>
+                    <InputError message={errors.draw_auto_enabled} />
+                </FormSection>
 
                 <FormSection
                     icon={Settings2}

@@ -7,6 +7,7 @@ use App\Actions\Draw\GenerateDrawGroups;
 use App\Actions\Draw\ReconcileDrawExecution;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\ReconcileDrawExecutionRequest;
+use App\Http\Requests\SuperAdmin\RecordManualDrawRequest;
 use App\Http\Requests\SuperAdmin\SetDrawMonthPrizeRequest;
 use App\Models\DrawExecution;
 use App\Models\DrawGroup;
@@ -18,6 +19,7 @@ use App\Services\RuleVersionService;
 use App\Support\Dates;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -31,17 +33,33 @@ class DrawManagementController extends Controller
 {
     private const CYCLE_MONTHS = ExecuteMonthlyDraw::CYCLE_MONTHS;
 
-    public function index(Request $request, GenerateDrawGroups $generator, RuleVersionService $rules, DrawPrizeResolver $prizes): Response
+    public function index(Request $request, GenerateDrawGroups $generator, RuleVersionService $rules, DrawPrizeResolver $prizes, ExecuteMonthlyDraw $draw): Response
     {
-        $groups = DrawGroup::with(['monthConfigs', 'executions.winner', 'executions.uplineBenefitMember.user', 'executions.reconciledBy', 'executions.corrections'])
+        $groups = DrawGroup::with(['monthConfigs', 'executions.winner.user', 'executions.uplineBenefitMember.user', 'executions.reconciledBy', 'executions.corrections'])
             ->orderByDesc('id')
             ->get()
-            ->map(fn (DrawGroup $group): array => $this->summarizeGroup($group, $prizes));
+            ->map(fn (DrawGroup $group): array => $this->summarizeGroup($group, $prizes, $draw));
 
         return Inertia::render('super-admin/draw-management', [
+            'auto_draw_enabled' => ExecuteMonthlyDraw::autoDrawEnabled($rules),
             'groups' => $groups,
             'pool' => $this->summarizePool($generator, (int) $rules->value('draw_group_size', 200)),
         ]);
+    }
+
+    /** T-221 — saves the Customer IDs drawn in person as the group's winners for its next month (§8.4 "Manual draw"). */
+    public function recordManualResult(RecordManualDrawRequest $request, DrawGroup $group, ExecuteMonthlyDraw $draw, RuleVersionService $rules): RedirectResponse
+    {
+        if (ExecuteMonthlyDraw::autoDrawEnabled($rules)) {
+            throw ValidationException::withMessages([
+                'customer_ids' => 'The automatic draw is on. Turn it off in Draw Settings to enter a manual draw result.',
+            ]);
+        }
+
+        $executions = $draw->recordManual($group, $request->customerIds(), $request->user());
+
+        return redirect()->route('super-admin.draw-management.index')
+            ->with('status', "Draw result saved for Group #{$group->group_no}, Month {$executions[0]->cycle_month_no}.");
     }
 
     public function reconcile(ReconcileDrawExecutionRequest $request, DrawExecution $execution, ReconcileDrawExecution $action): RedirectResponse
@@ -70,7 +88,7 @@ class DrawManagementController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function summarizeGroup(DrawGroup $group, DrawPrizeResolver $prizes): array
+    private function summarizeGroup(DrawGroup $group, DrawPrizeResolver $prizes, ExecuteMonthlyDraw $draw): array
     {
         $configs = $group->monthConfigs->keyBy('cycle_month_no');
         $nextMonth = ((int) $group->executions->max('cycle_month_no')) + 1;
@@ -87,6 +105,13 @@ class DrawManagementController extends Controller
 
         $winners = $group->members()->where('is_winner_removed', true)->count();
 
+        // T-221 — who can still be drawn, so the manual-result form can suggest IDs and show the name of each one entered.
+        $remaining = $group->status === 'active'
+            ? $group->members()->where('is_winner_removed', false)->with('member.user')->get()
+                ->map(fn (DrawGroupMember $link): array => ['customer_id' => $link->member->customer_id, 'name' => $link->member->user?->name])
+                ->sortBy('customer_id', SORT_NATURAL)->values()
+            : collect();
+
         return [
             'id' => $group->id,
             'group_no' => $group->group_no,
@@ -99,6 +124,8 @@ class DrawManagementController extends Controller
             'winners' => $winners,
             'eligible_remaining' => $range->count() - $winners,
             'draws_done' => $nextMonth - 1,
+            'drawn_this_month' => $draw->drawnThisCalendarMonth($group),
+            'remaining_members' => $remaining,
             'cycle_months' => self::CYCLE_MONTHS,
             // The prize the coming draw will carry — the group's own, or the Silver/Gold default (§8.3).
             'next_draw' => $nextMonth > self::CYCLE_MONTHS ? null : [
@@ -151,6 +178,8 @@ class DrawManagementController extends Controller
     /** @return array<string, mixed> */
     private function summarizeExecution(DrawExecution $execution, ?DrawGroupMonthConfig $prize): array
     {
+        $proof = json_decode((string) $execution->rng_proof, true) ?: [];
+
         return [
             'id' => $execution->id,
             'cycle_month_no' => $execution->cycle_month_no,
@@ -160,6 +189,9 @@ class DrawManagementController extends Controller
             'metal_type' => $prize?->metal_type,
             'status' => $execution->status,
             'winner_customer_id' => $execution->winner->customer_id,
+            'winner_name' => $execution->winner->user?->name,
+            // T-221 — a draw held in person and entered by hand says who entered it.
+            'entered_by' => ($proof['algorithm'] ?? null) === 'manual' ? ($proof['entered_by'] ?? '—') : null,
             'upline_benefit_customer_id' => $execution->uplineBenefitMember?->customer_id,
             'upline_benefit_name' => $execution->uplineBenefitMember?->user?->name,
             'executed_at' => Dates::date($execution->executed_at),

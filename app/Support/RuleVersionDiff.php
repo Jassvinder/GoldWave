@@ -29,6 +29,7 @@ class RuleVersionDiff
         'payout_min_amount' => 'Payout Minimum Amount',
         'payout_tds_percent' => 'Payout TDS %',
         'payout_processing_fee_percent' => 'Payout Processing Fee %',
+        'draw_auto_enabled' => 'Automatic Draw on the 15th',
         'draw_group_size' => 'Draw Group Size',
         'draw_eligibility_emis' => 'Draw Eligibility EMIs',
         'draw_prize_silver_name' => 'Draw Prize — Silver (Months 1–15)',

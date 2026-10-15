@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\SuperAdmin;
 
+use App\Actions\Draw\ExecuteMonthlyDraw;
 use App\Actions\Settings\PublishRuleVersion;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\UpdateDrawSettingsRequest;
@@ -15,6 +16,7 @@ use Inertia\Response;
 /**
  * INSTRUCTIONS.md S06 (settings half) — group size and the default monthly prizes (§8.3, 30-09-2026): Silver for
  * months 1–15 and Gold for 16–20 of every group's cycle, used whenever a group-month has no prize of its own.
+ * T-221 — the "Automatic draw on the 15th" switch; off means the draw is held in person and entered on Draw Management.
  */
 class DrawSettingsController extends Controller
 {
@@ -27,6 +29,7 @@ class DrawSettingsController extends Controller
         }
 
         return Inertia::render('super-admin/draw-settings', [
+            'draw_auto_enabled' => ExecuteMonthlyDraw::autoDrawEnabled($rules),
             'draw_group_size' => (int) $rules->value('draw_group_size', 200),
             'draw_prize_silver_name' => (string) $prizes['draw_prize_silver_name'],
             'draw_prize_silver_value' => (float) $prizes['draw_prize_silver_value'],
@@ -40,6 +43,7 @@ class DrawSettingsController extends Controller
     public function update(UpdateDrawSettingsRequest $request, PublishRuleVersion $action): RedirectResponse
     {
         $action([
+            'draw_auto_enabled' => $request->boolean('draw_auto_enabled'),
             'draw_group_size' => $request->integer('draw_group_size'),
             'draw_prize_silver_name' => $request->string('draw_prize_silver_name')->trim()->toString(),
             'draw_prize_silver_value' => (float) $request->input('draw_prize_silver_value'),

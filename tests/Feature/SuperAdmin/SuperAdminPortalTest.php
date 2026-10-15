@@ -496,6 +496,7 @@ test('a super admin can assign a leader to a dummy entry (S05), and the leader\'
 test('a super admin can update draw settings and reconcile an executed draw (S06)', function () {
     $this->actingAs(spSuperAdmin())
         ->post('/super-admin/draw-settings', [
+            'draw_auto_enabled' => true,
             'draw_group_size' => 5,
             'draw_prize_silver_name' => 'Silver Anklet',
             'draw_prize_silver_value' => 18000,
