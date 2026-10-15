@@ -1,4 +1,5 @@
-import { Head } from '@inertiajs/react';
+import { Head, usePoll } from '@inertiajs/react';
+import { useEffect } from 'react';
 import { PublicLogoLink } from '@/components/public-logo-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
 
 type Props = {
     member: {
@@ -23,6 +25,8 @@ type Props = {
         status: string;
         cash_status: string | null;
     } | null;
+    /** T-229 — the payment is being confirmed in the background right now. */
+    processing: boolean;
     /** Signed checkout link while an online payment is still pending (T-137). */
     pay_url: string | null;
     payment_error: string | null;
@@ -58,9 +62,23 @@ const paymentStateLabel: Record<string, string> = {
 export default function RegistrationStatus({
     member,
     payment,
+    processing,
     pay_url,
     payment_error,
 }: Props) {
+    // T-229 — refresh every few seconds while the payment is confirmed in the background.
+    const { start, stop } = usePoll(3000, {}, { autoStart: false });
+
+    useEffect(() => {
+        if (processing) {
+            start();
+        } else {
+            stop();
+        }
+
+        return stop;
+    }, [processing, start, stop]);
+
     return (
         <>
             <Head title="Registration Status" />
@@ -132,6 +150,28 @@ export default function RegistrationStatus({
                                 {payment_error}
                             </p>
                         )}
+
+                        {processing && (
+                            <p className="flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+                                <Spinner className="shrink-0" />
+                                Payment received — confirming the membership.
+                                This takes a few seconds; this page updates by
+                                itself.
+                            </p>
+                        )}
+
+                        {!processing &&
+                            payment?.mode === 'wallet' &&
+                            payment.status === 'pending' && (
+                                <p
+                                    role="alert"
+                                    className="border-destructive/40 bg-destructive/10 text-destructive rounded-md border p-3 text-sm"
+                                >
+                                    The wallet payment could not be completed.
+                                    No wallet was charged. Please contact
+                                    GoldWave to complete this registration.
+                                </p>
+                            )}
 
                         {pay_url && (
                             <div className="flex flex-col gap-2">

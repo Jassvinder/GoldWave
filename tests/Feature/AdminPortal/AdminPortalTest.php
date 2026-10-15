@@ -2,6 +2,8 @@
 
 use App\Actions\Store\AllocateStoreInventoryItem;
 use App\Actions\Store\CreateStore;
+use App\Events\PaymentConfirmed;
+use App\Jobs\ProcessStoreCashCollection;
 use App\Models\CompanyWallet;
 use App\Models\EmiInstallment;
 use App\Models\EmiSchedule;
@@ -18,6 +20,8 @@ use App\Models\StoreRestockShipment;
 use App\Models\StoreSale;
 use App\Models\User;
 use App\Services\StoreWalletService;
+use App\Support\PaymentInProgress;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 
 /**
@@ -651,6 +655,39 @@ test('a Store Admin can collect a member\'s pending cash registration payment vi
     expect($payment->fresh()->paying_store_id)->toBe($store->id);
     expect($newMember->fresh()->status)->toBe('active');
     expect($newMember->fresh()->customer_id)->not->toBeNull();
+});
+
+test('T-229: a failing background store collection keeps nothing — the Store Wallet is not charged and the store admin is told', function () {
+    $result = makeAdminWithStore('COLLECTFAIL');
+    $store = $result['store'];
+    $sponsor = adminPortalMember('COLLECTFAILSP');
+    $sponsor->update(['status' => 'active']);
+
+    $this->post('/join', [
+        'sponsor_code' => $sponsor->customer_id,
+        'placement_side' => 'left',
+        'gender' => 'male',
+        'name' => 'Collect Fail Member',
+        'email' => 'collectfail@example.test',
+        'mobile' => '9876500002',
+        'membership_plan_id' => MembershipPlan::where('code', 'F')->value('id'),
+        'payment_mode' => 'cash',
+    ])->assertRedirect();
+
+    $newMember = Member::where('sponsor_id', $sponsor->id)->firstOrFail();
+    $payment = Payment::where('member_id', $newMember->id)->where('type', 'registration')->firstOrFail();
+    $balanceBefore = (float) $store->wallet->fresh()->balance;
+    PaymentInProgress::claim($payment->id);
+
+    Event::listen(PaymentConfirmed::class, fn () => throw new RuntimeException('income failed'));
+
+    expect(fn () => ProcessStoreCashCollection::dispatchSync($payment, $store, $result['admin']))->toThrow(RuntimeException::class);
+
+    expect($payment->fresh()->status)->toBe('pending')
+        ->and($newMember->fresh()->status)->not->toBe('active')
+        ->and((float) $store->wallet->fresh()->balance)->toBe($balanceBefore)
+        ->and(PaymentInProgress::isRunning($payment->id))->toBeFalse()
+        ->and($result['admin']->notifications()->where('data', 'like', '%Store cash collection failed%')->exists())->toBeTrue();
 });
 
 // ---------------------------------------------------------------- T-153: Assisted Registration (Store)

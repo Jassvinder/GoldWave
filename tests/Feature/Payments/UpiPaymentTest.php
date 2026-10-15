@@ -1,11 +1,16 @@
 <?php
 
+use App\Events\PaymentConfirmed;
+use App\Jobs\ProcessCashPaymentApproval;
 use App\Models\Member;
 use App\Models\MembershipPlan;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\RuleVersionService;
+use App\Support\PaymentInProgress;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -144,4 +149,75 @@ test('a pending GPay/UPI payment alerts the company and shows in the Super Admin
     $this->actingAs($superAdmin)->get('/dashboard')->assertInertia(fn ($page) => $page
         ->component('super-admin/dashboard')
         ->where('alerts', fn ($alerts) => collect($alerts)->contains('1 cash / GPay-UPI payment(s) awaiting approval.')));
+});
+
+test('T-226: the History tab lists approved and rejected payments with who decided them, and filters them', function () {
+    $this->post('/join', upiJoinPayload(['name' => 'Ravi Upi', 'upi_reference' => 'UTR111222333']));
+    $this->post('/join', upiJoinPayload(['name' => 'Sita Cash', 'payment_mode' => 'cash', 'upi_reference' => null, 'upi_screenshot' => null]));
+    $this->post('/join', upiJoinPayload(['name' => 'Still Pending', 'payment_mode' => 'cash', 'upi_reference' => null, 'upi_screenshot' => null]));
+
+    $admin = User::factory()->create(['role' => 'admin', 'name' => 'Desk Admin']);
+    $upi = Payment::where('upi_reference', 'UTR111222333')->sole();
+    $cash = Payment::whereHas('member.user', fn ($q) => $q->where('name', 'Sita Cash'))->sole();
+    $this->actingAs($admin)->post("/super-admin/cash-payments/{$upi->id}/approve");
+    $this->actingAs($admin)->post("/super-admin/cash-payments/{$cash->id}/reject");
+
+    // Pending tab: History is not loaded, but its total shows on the tab.
+    $this->actingAs($admin)->get('/super-admin/cash-payments')
+        ->assertInertia(fn ($page) => $page->where('tab', 'pending')->where('history', null)->where('history_total', 2)->has('pending', 1));
+
+    $this->actingAs($admin)->get('/super-admin/cash-payments?tab=history')
+        ->assertInertia(fn ($page) => $page
+            ->where('tab', 'history')
+            ->has('history.data', 2)
+            ->where('history.data', fn ($rows) => collect($rows)->pluck('decided_by')->unique()->all() === ['Desk Admin'])
+            ->where('history.data', fn ($rows) => collect($rows)->firstWhere('name', 'Ravi Upi')['cash_status'] === 'approved'
+                && collect($rows)->firstWhere('name', 'Sita Cash')['cash_status'] === 'rejected'));
+
+    // Ref ID search (any case), and the status / mode filters.
+    $this->actingAs($admin)->get('/super-admin/cash-payments?tab=history&search=utr111')
+        ->assertInertia(fn ($page) => $page->has('history.data', 1)->where('history.data.0.name', 'Ravi Upi'));
+    $this->actingAs($admin)->get('/super-admin/cash-payments?tab=history&status=rejected')
+        ->assertInertia(fn ($page) => $page->has('history.data', 1)->where('history.data.0.name', 'Sita Cash'));
+    $this->actingAs($admin)->get('/super-admin/cash-payments?tab=history&mode=upi')
+        ->assertInertia(fn ($page) => $page->has('history.data', 1)->where('history.data.0.upi_reference', 'UTR111222333'));
+    $this->actingAs($admin)->get('/super-admin/cash-payments?tab=history&from='.now()->addDay()->toDateString())
+        ->assertInertia(fn ($page) => $page->has('history.data', 0));
+});
+
+test('T-228: approving queues a background approval once, shows it as approving and blocks a rejection meanwhile', function () {
+    Queue::fake();
+    $this->post('/join', upiJoinPayload(['name' => 'Queued Member', 'upi_reference' => 'UTR555666777']));
+    $payment = Payment::where('upi_reference', 'UTR555666777')->sole();
+    $admin = User::factory()->create(['role' => 'super_admin']);
+
+    $this->actingAs($admin)->post("/super-admin/cash-payments/{$payment->id}/approve")->assertSessionHas('status');
+    $this->actingAs($admin)->post("/super-admin/cash-payments/{$payment->id}/approve");
+    Queue::assertPushed(ProcessCashPaymentApproval::class, 1);
+
+    // Nothing is decided yet; the row says it is being approved, and it can't be rejected now.
+    expect($payment->fresh()->cash_status)->toBe('pending_verification');
+    $this->actingAs($admin)->get('/super-admin/cash-payments')
+        ->assertInertia(fn ($page) => $page->where('pending.0.approving', true));
+    $this->actingAs($admin)->post("/super-admin/cash-payments/{$payment->id}/reject");
+    expect($payment->fresh()->cash_status)->toBe('pending_verification');
+});
+
+test('T-228: a failing background approval keeps nothing — the payment stays pending and the company users are told', function () {
+    $this->post('/join', upiJoinPayload(['name' => 'Rollback Member', 'upi_reference' => 'UTR888999000']));
+    $payment = Payment::where('upi_reference', 'UTR888999000')->sole();
+    $admin = User::factory()->create(['role' => 'super_admin']);
+    PaymentInProgress::claim($payment->id);
+
+    // An income listener fails half-way through the approval.
+    Event::listen(PaymentConfirmed::class, fn () => throw new RuntimeException('income failed'));
+
+    expect(fn () => ProcessCashPaymentApproval::dispatchSync($payment, $admin))->toThrow(RuntimeException::class);
+
+    $payment->refresh();
+    expect($payment->cash_status)->toBe('pending_verification')
+        ->and($payment->status)->toBe('pending')
+        ->and($payment->member->fresh()->status)->not->toBe('active')
+        ->and(PaymentInProgress::isRunning($payment->id))->toBeFalse()
+        ->and($admin->notifications()->where('data', 'like', '%Payment approval failed%')->exists())->toBeTrue();
 });

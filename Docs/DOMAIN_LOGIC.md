@@ -464,6 +464,26 @@ Cash and GPay/UPI share the manual-approval status `payments.cash_status` (pendi
 3. On approval: mark Paid, continue normal eligibility processing.
 4. On rejection/cancellation: retain the audit trail, generate no compensation.
 
+**Approval runs in the background, all or nothing (T-228, 15-10-2026, user decision).** Approving a deep member's payment took seconds (T-227), and only Super Admin / Admin waits on it.
+
+- **Approve:** the button queues the approval (`ProcessCashPaymentApproval`) and returns at once. Until it finishes, the row shows **Approving…** and can be neither approved again nor rejected. The page refreshes itself every 3 s.
+- **One transaction:** the job marks the payment paid, activates the member (or confirms the EMI) and runs every income listener (Level, Pair, Booster, held income, store income) in one database transaction.
+- **On failure:** nothing is kept. The payment stays **pending**, Super Admin and Admin get a "Payment approval failed" bell alert, and the error goes to the log. The job has one attempt only; the operator decides whether to approve again.
+- **The member** gets the "payment approved" notification only after the commit.
+- **Reject** is still immediate.
+- **Requires the queue worker.** With `goldwave-worker` stopped, an approval waits in the queue (the "Approving…" mark expires after 10 minutes) and completes once the worker runs again.
+- **Same for every payment settlement (T-229, 15-10-2026, user request).** Each runs its whole settlement in one transaction in a background job. While it runs, the payment is marked (`App\Support\PaymentInProgress`, 10 minutes), so the pages show "Processing…" and refuse a second settlement or a rejection. A failure keeps nothing and sends a "… failed" bell alert (`PaymentSettlementFailed`).
+
+| Settlement | Job | Checked at once in the request | On failure |
+| --- | --- | --- | --- |
+| Super Admin / Admin approval | `ProcessCashPaymentApproval` | approval mode, still pending | stays in Pending; company users alerted; 1 attempt |
+| Store cash collection via Store Wallet (§12.2(a)) | `ProcessStoreCashCollection` | cash, not paid, enough Store Wallet balance | Store Wallet not charged; store admin and company users alerted; 1 attempt |
+| Wallet-funded assisted registration (§12.2(b)) | `ProcessWalletFundedRegistration` | enough wallet balance, checked in the same transaction as the registration (`QueueWalletFundedRegistration`) | wallet not charged; registration stays pending; payer and company users alerted; the status page says no wallet was charged; 1 attempt |
+| Online payment (§10.1) | `ProcessOnlinePaymentConfirmation` | gateway signature (browser return and webhook) | the money is already taken, so 3 attempts (10 s, 60 s apart), then company users are alerted to finish it by hand |
+
+- **Short wallet balance:** a wallet-funded registration is refused before any member is created. Before T-229, a pending member was left behind.
+- **Where the payer lands:** after a wallet-funded registration, the payer goes to the new member's signed status page. It shows "Payment received — confirming the membership…" and refreshes itself until the member is Active.
+
 ---
 
 ## 11. Payment Out / Payout

@@ -1,12 +1,20 @@
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import {
+    Head,
+    Link,
+    router,
+    useForm,
+    usePage,
+    usePoll,
+} from '@inertiajs/react';
 import { FileText, Gem, RefreshCw, ShoppingBag, Wallet } from 'lucide-react';
-import { FormEventHandler, useState } from 'react';
+import { FormEventHandler, useEffect, useState } from 'react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { FormSection } from '@/components/form-section';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 import {
     Select,
     SelectContent,
@@ -125,6 +133,8 @@ type PendingPayment = {
     type: string;
     amount: string;
     created_at: string;
+    /** T-229 — being settled in the background right now. */
+    processing: boolean;
 };
 
 type CollectSearchResult = {
@@ -296,6 +306,25 @@ export default function AdminSales({
         );
     };
 
+    // T-229 — while a collection is settled in the background, refresh the search result until it is done.
+    const anyProcessing =
+        collect_search?.payments.some((p) => p.processing) ?? false;
+    const { start, stop } = usePoll(
+        3000,
+        { only: ['collect_search'] },
+        { autoStart: false },
+    );
+
+    useEffect(() => {
+        if (anyProcessing) {
+            start();
+        } else {
+            stop();
+        }
+
+        return stop;
+    }, [anyProcessing, start, stop]);
+
     const saleForm = useForm({
         transaction_type: 'purchase',
         customer_id: '',
@@ -415,12 +444,24 @@ export default function AdminSales({
                                                     : 'EMI Installment'}{' '}
                                                 — ₹{p.amount}
                                             </span>
-                                            <Button
-                                                size="sm"
-                                                onClick={() => collect(p.id)}
-                                            >
-                                                Collect via Store Wallet
-                                            </Button>
+                                            {p.processing ? (
+                                                <Badge
+                                                    variant="secondary"
+                                                    className="gap-1.5"
+                                                >
+                                                    <Spinner className="size-3" />
+                                                    Processing…
+                                                </Badge>
+                                            ) : (
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        collect(p.id)
+                                                    }
+                                                >
+                                                    Collect via Store Wallet
+                                                </Button>
+                                            )}
                                         </li>
                                     ))}
                                 </ul>

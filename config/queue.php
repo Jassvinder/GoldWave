@@ -40,7 +40,8 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // Above the longest job timeout (ProcessCashPaymentApproval, 300 s), so a running job is never handed out twice.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 360),
             // 15-10-2026 — a job (e.g. a notification email) sent inside a transaction waits for the commit, so the
             // worker never picks it up before its rows exist, and never sends one for a rolled-back action.
             'after_commit' => true,

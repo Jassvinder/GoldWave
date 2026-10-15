@@ -16,6 +16,8 @@ return [
     'channels' => [
         // Super Admin alerts — bell + page. Add 'mail' / 'sms' here to also get them by email / SMS.
         'cash_payment_awaiting_approval' => ['database'],
+        // T-228/T-229 — a payment settled in the background failed and was rolled back.
+        'payment_settlement_failed' => ['database'],
         'profile_change_request_submitted' => ['database'],
         'payout_request_submitted' => ['database'],
         'bank_details_submitted' => ['database'],

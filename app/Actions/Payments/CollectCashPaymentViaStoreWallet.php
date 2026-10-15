@@ -69,9 +69,13 @@ class CollectCashPaymentViaStoreWallet
             } elseif ($locked->type === 'emi_installment') {
                 ($this->confirmEmiInstallment)($locked);
             }
+
+            // T-229 (15-10-2026) — income runs inside the same transaction: a failure anywhere also gives the Store
+            // Wallet its money back, and the payment stays pending.
+            event(new PaymentConfirmed($locked->refresh()));
         });
 
-        event(new PaymentConfirmed($payment->refresh()));
+        $payment->refresh();
 
         Notifier::toUser($payment->member->user, new CashPaymentDecided($payment, true));
     }

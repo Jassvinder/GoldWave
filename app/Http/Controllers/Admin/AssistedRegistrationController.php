@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Actions\Registration\ConfirmWalletFundedRegistration;
+use App\Actions\Registration\QueueWalletFundedRegistration;
 use App\Actions\Registration\RegisterMember;
 use App\Contracts\PaymentGatewayContract;
 use App\Http\Controllers\Controller;
@@ -42,7 +42,7 @@ class AssistedRegistrationController extends Controller
     public function store(
         AssistedRegisterMemberRequest $request,
         RegisterMember $registerMember,
-        ConfirmWalletFundedRegistration $confirmWallet,
+        QueueWalletFundedRegistration $queueWalletRegistration,
     ): RedirectResponse {
         /** @var Store $store */
         $store = $request->attributes->get('store');
@@ -52,14 +52,14 @@ class AssistedRegistrationController extends Controller
         // to the CHECK constraint by raw SQL (see ConfirmWalletFundedRegistration's comment).
         $paymentMode = $request->string('payment_mode')->toString();
 
-        $newMember = $registerMember($request->validated());
-
+        // T-229 — the Store Wallet payment is settled in the background; the status page follows it to "Active".
         if ($paymentMode === 'wallet') {
-            $confirmWallet($newMember, $store, null, $request->user());
+            $newMember = $queueWalletRegistration($request->validated(), $store, null, $request->user());
 
-            return redirect()->route('admin.assisted-registration.show')
-                ->with('status', "Registration confirmed for Customer ID {$newMember->fresh()->customer_id}.");
+            return redirect(RegistrationController::signedStatusUrl($newMember));
         }
+
+        $newMember = $registerMember($request->validated());
 
         $payment = $newMember->payments->firstWhere('type', 'registration');
         PaymentModes::attachUpiProof($payment, $request);

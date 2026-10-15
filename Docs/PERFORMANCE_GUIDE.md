@@ -10,7 +10,8 @@
 
 | User/system path                                                                                                                                               | Target | Current evidence | Owner |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------------- | ----- |
-| [TBD — fill in once the app is running and can be measured, e.g. Level Income calculation per payment event, Draw execution across all groups, Dashboard load] | [TBD]  | [TBD]            | [TBD] |
+| Cash/UPI approval of a registration (activation + every `PaymentConfirmed` listener, run inside the request) | [TBD] | 15-10-2026, dev DB, member 553 levels deep, timed in a rolled-back transaction: 35.2 s / 3,387 queries before T-227, 5.9 s after. What is left is mainly the recursive team count for the 27 uplines that have enough Directs for a Booster level (2.6 s) and one Pair entry per upline (552 inserts). A shallow member: 0.6 s. | [TBD] |
+| [TBD — other paths, e.g. Draw execution across all groups, Dashboard load] | [TBD]  | [TBD]            | [TBD] |
 
 Do not invent numeric targets — this table stays empty/TBD until real measurements exist. The rules below are agreed engineering standards from the client, not measured budgets, and apply regardless of the numbers above.
 

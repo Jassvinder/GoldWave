@@ -86,11 +86,13 @@ class ConfirmWalletFundedRegistration
             ]);
 
             ($this->activate)($newMember, $operator->id, $payment->fresh());
+
+            // T-229 (15-10-2026) — income runs inside the same transaction: a failure anywhere also gives the payer
+            // their wallet money back, and the registration stays pending.
+            event(new PaymentConfirmed($payment->fresh()));
         });
 
         $payment = Payment::where('member_id', $newMember->id)->where('type', 'registration')->firstOrFail();
-
-        event(new PaymentConfirmed($payment));
 
         Notifier::toUser($newMember->fresh()->user, new AssistedRegistrationConfirmed($payment));
     }

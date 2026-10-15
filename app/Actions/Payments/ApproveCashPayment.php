@@ -52,11 +52,16 @@ class ApproveCashPayment
                 ($this->confirmEmiInstallment)($locked);
             }
 
+            // T-228 (15-10-2026) — the income listeners run inside the same transaction, so a failure anywhere rolls
+            // the whole approval back and the payment stays pending. Before, they ran after the commit, and a failing
+            // listener left a paid payment with part of its income missing.
+            event(new PaymentConfirmed($locked->refresh()));
+
             return false;
         });
 
         if (! $wasAlreadyPaid) {
-            event(new PaymentConfirmed($payment->refresh()));
+            $payment->refresh();
 
             // T-141 — tell the member (bell if they can log in yet, plus email + SMS).
             Notifier::toUser($payment->member->user, new CashPaymentDecided($payment, true));

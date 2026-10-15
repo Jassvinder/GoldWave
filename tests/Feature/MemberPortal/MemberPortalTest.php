@@ -1,7 +1,10 @@
 <?php
 
 use App\Actions\Admin\UpdateMemberDetails;
+use App\Actions\Registration\QueueWalletFundedRegistration;
 use App\Contracts\SmsGatewayContract;
+use App\Events\PaymentConfirmed;
+use App\Http\Controllers\Registration\RegistrationController;
 use App\Mail\WalletPaymentOtpMail;
 use App\Models\BoosterPayoutSchedule;
 use App\Models\BoosterQualification;
@@ -14,8 +17,10 @@ use App\Models\RuleVersion;
 use App\Models\User;
 use App\Notifications\BankDetailsVerified;
 use App\Services\WalletLedgerService;
+use App\Support\PaymentInProgress;
 use App\Support\Portal;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
@@ -515,14 +520,45 @@ test('assisted registration via wallet is blocked when the payer\'s wallet balan
             'payment_mode' => 'wallet',
             'wallet_otp' => walletOtpFor($payer->user),
         ])
-        ->assertSessionHasErrors('amount');
+        ->assertSessionHasErrors('payment_mode');
+
+    // T-229 — the balance is checked in the same transaction as the registration, so a short wallet leaves no
+    // pending member behind (before, the member row and its unpaid payment stayed).
+    expect(Member::where('sponsor_id', $sponsor->id)->exists())->toBeFalse();
+    expect((float) $payer->fresh()->wallet_balance)->toBe(100.0);
+});
+
+test('T-229: a failing background wallet registration keeps nothing — the payer is not charged and is told', function () {
+    $sponsor = portalMember('AR-SPONSOR-FAIL');
+    $payer = portalMember('AR-FAILPAYER');
+    $payer->update(['wallet_balance' => 100000]);
+
+    // An income listener fails half-way through the settlement.
+    Event::listen(PaymentConfirmed::class, fn () => throw new RuntimeException('income failed'));
+
+    expect(fn () => app(QueueWalletFundedRegistration::class)([
+        'sponsor_code' => $sponsor->customer_id,
+        'placement_side' => 'left',
+        'gender' => 'male',
+        'name' => 'Rolled Back Member',
+        'email' => 'rolled-back@example.test',
+        'mobile' => '9876533333',
+        'membership_plan_id' => MembershipPlan::where('code', 'F')->value('id'),
+        'payment_mode' => 'wallet',
+    ], null, $payer, $payer->user))->toThrow(RuntimeException::class);
 
     $newMember = Member::where('sponsor_id', $sponsor->id)->firstOrFail();
-    $payment = $newMember->payments->firstWhere('type', 'registration');
-    // The member row and its pending payment were already created by RegisterMember before the
-    // wallet debit failed — this mirrors a normal cash/online registration's pending state.
-    expect($payment->status)->toBe('pending');
-    expect((float) $payer->fresh()->wallet_balance)->toBe(100.0);
+    $payment = $newMember->payments()->where('type', 'registration')->firstOrFail();
+
+    expect($payment->status)->toBe('pending')
+        ->and($newMember->status)->not->toBe('active')
+        ->and((float) $payer->fresh()->wallet_balance)->toBe(100000.0)
+        ->and(PaymentInProgress::isRunning($payment->id))->toBeFalse()
+        ->and($payer->user->notifications()->where('data', 'like', '%Wallet registration payment failed%')->exists())->toBeTrue();
+
+    // The status page says no wallet was charged, instead of showing a spinner.
+    $this->get(RegistrationController::signedStatusUrl($newMember))
+        ->assertInertia(fn ($page) => $page->where('processing', false)->where('payment.mode', 'wallet')->where('payment.status', 'pending'));
 });
 
 test('assisted registration still supports cash, unaffected by the wallet option (T-153 regression)', function () {

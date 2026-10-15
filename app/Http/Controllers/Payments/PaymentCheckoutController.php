@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers\Payments;
 
-use App\Actions\Payments\ConfirmOnlinePayment;
 use App\Contracts\PaymentGatewayContract;
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessOnlinePaymentConfirmation;
 use App\Models\Payment;
 use App\Services\Payments\RazorpayGateway;
+use App\Support\PaymentInProgress;
 use App\Support\PaymentReturnUrl;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -63,7 +64,7 @@ class PaymentCheckoutController extends Controller
         ]);
     }
 
-    public function verify(Request $request, Payment $payment, PaymentGatewayContract $gateway, ConfirmOnlinePayment $confirm): RedirectResponse
+    public function verify(Request $request, Payment $payment, PaymentGatewayContract $gateway): RedirectResponse
     {
         abort_unless($payment->mode === 'online' && $gateway instanceof RazorpayGateway, 404);
 
@@ -83,7 +84,10 @@ class PaymentCheckoutController extends Controller
             return back()->withErrors(['payment' => $result->message ?? 'The payment could not be verified.']);
         }
 
-        $confirm($payment, $result->providerReference, $result->payload);
+        // T-229 — confirmed in the background; the status page shows "confirming" until it is done.
+        if (PaymentInProgress::claim($payment->id)) {
+            ProcessOnlinePaymentConfirmation::dispatch($payment, $result->providerReference, $result->payload);
+        }
 
         return redirect(PaymentReturnUrl::for($payment));
     }

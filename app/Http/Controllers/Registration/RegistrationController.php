@@ -12,6 +12,7 @@ use App\Models\Member;
 use App\Models\MembershipPlan;
 use App\Services\Payments\PaymentModes;
 use App\Services\Payments\RazorpayGateway;
+use App\Support\PaymentInProgress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -110,8 +111,10 @@ class RegistrationController extends Controller
                 'plan' => $member->membershipPlan?->name,
             ],
             'payment' => $payment = $member->payments->firstWhere('type', 'registration'),
+            // T-229 — the payment is being confirmed in the background (online return, or a wallet-funded registration).
+            'processing' => $processing = $payment !== null && PaymentInProgress::isRunning($payment->id),
             // A still-pending online payment can always be (re)started from here through a fresh signed checkout link.
-            'pay_url' => PaymentModes::onlineEnabled() && $payment !== null && $payment->mode === 'online' && $payment->status === 'pending'
+            'pay_url' => ! $processing && PaymentModes::onlineEnabled() && $payment !== null && $payment->mode === 'online' && $payment->status === 'pending'
                 ? RazorpayGateway::checkoutUrl($payment)
                 : null,
             'payment_error' => session('payment_error'),

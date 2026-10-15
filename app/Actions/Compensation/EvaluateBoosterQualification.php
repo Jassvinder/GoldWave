@@ -66,6 +66,13 @@ class EvaluateBoosterQualification
         }
 
         DB::transaction(function () use ($ancestors, $levels, $ruleVersion) {
+            // 15-10-2026 — a cash approval for a member 553 levels deep took 35 s: every ancestor ran its own
+            // qualification and Direct-count queries plus a full recursive team count. Both cheap inputs are now read
+            // for the whole chain at once, and the team is counted only for an ancestor with enough Directs for a level
+            // it doesn't hold yet. The outcome is unchanged.
+            $ancestorIds = array_map(fn (array $link): int => $link['member']->id, $ancestors);
+            [$qualifiedLevels, $directCounts] = $this->chainFacts($ancestorIds);
+
             foreach ($ancestors as $link) {
                 // DOMAIN_LOGIC.md §14.2 point 5: an unassigned dummy (or the
                 // seeded company root, which is never assignable) never
@@ -76,34 +83,66 @@ class EvaluateBoosterQualification
                     continue;
                 }
 
-                $this->evaluateForAncestor($link['member'], $levels, $ruleVersion);
+                $id = $link['member']->id;
+                $this->evaluateForAncestor($link['member'], $levels, $ruleVersion, $qualifiedLevels[$id] ?? [], $directCounts[$id] ?? 0);
             }
         });
     }
 
-    /** @param array<int, array<string, mixed>> $levels */
-    private function evaluateForAncestor(Member $ancestor, array $levels, RuleVersion $ruleVersion): void
+    /**
+     * Every ancestor's already-qualified levels and Direct count, read in a few queries for the whole chain.
+     *
+     * @param  list<int>  $ancestorIds
+     * @return array{0: array<int, list<int>>, 1: array<int, int>}
+     */
+    private function chainFacts(array $ancestorIds): array
     {
-        $alreadyQualifiedLevels = BoosterQualification::where('member_id', $ancestor->id)->pluck('level_no')->all();
-        $directCount = $ancestor->directs()->count();
-        $teamSides = $this->teamSizeCounter->countSides($ancestor);
+        $qualifiedLevels = [];
+        $directCounts = [];
 
-        foreach ($levels as $level) {
-            $levelNo = (int) $level['level_no'];
-
-            if (in_array($levelNo, $alreadyQualifiedLevels, true)) {
-                continue;
+        foreach (array_chunk($ancestorIds, 1000) as $chunk) {
+            foreach (BoosterQualification::whereIn('member_id', $chunk)->get(['member_id', 'level_no']) as $row) {
+                $qualifiedLevels[(int) $row->member_id][] = (int) $row->level_no;
             }
 
-            $meetsDirects = $directCount >= (int) $level['min_directs'];
+            $counts = Member::whereIn('sponsor_id', $chunk)
+                ->groupBy('sponsor_id')
+                ->selectRaw('sponsor_id, COUNT(*) AS directs')
+                ->pluck('directs', 'sponsor_id');
+
+            foreach ($counts as $sponsorId => $count) {
+                $directCounts[(int) $sponsorId] = (int) $count;
+            }
+        }
+
+        return [$qualifiedLevels, $directCounts];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $levels
+     * @param  list<int>  $alreadyQualifiedLevels
+     */
+    private function evaluateForAncestor(Member $ancestor, array $levels, RuleVersion $ruleVersion, array $alreadyQualifiedLevels, int $directCount): void
+    {
+        // Levels still open to this ancestor on Directs alone; the team split needs the (expensive) team count.
+        $candidates = array_filter($levels, fn (array $level): bool => ! in_array((int) $level['level_no'], $alreadyQualifiedLevels, true)
+            && $directCount >= (int) $level['min_directs']);
+
+        if ($candidates === []) {
+            return;
+        }
+
+        $teamSides = $this->teamSizeCounter->countSides($ancestor);
+
+        foreach ($candidates as $level) {
             $meetsSplit = $teamSides['left'] >= (int) $level['team_split_left']
                 && $teamSides['right'] >= (int) $level['team_split_right'];
 
-            if (! $meetsDirects || ! $meetsSplit) {
+            if (! $meetsSplit) {
                 continue;
             }
 
-            $this->createQualificationAndSchedule($ancestor, $levelNo, $level, $ruleVersion);
+            $this->createQualificationAndSchedule($ancestor, (int) $level['level_no'], $level, $ruleVersion);
         }
     }
 

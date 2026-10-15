@@ -1,4 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
+import { ArrowLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,6 +10,7 @@ import { formatDate, formatGender, formatRatePer10g } from '@/lib/utils';
 import { show as showDirects } from '@/routes/member/directs';
 import {
     bankProof,
+    index as membersIndex,
     show as showMember,
     verifyBankDetail,
 } from '@/routes/super-admin/members';
@@ -154,6 +156,22 @@ export default function SuperAdminMemberDetail({
             <Head title={member.customer_id} />
 
             <div className="flex w-full flex-col gap-6 p-4">
+                {/* 15-10-2026 — back to wherever this page was opened from (Member Management, Payment History, …), with its filters. */}
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="-mb-3 self-start"
+                    onClick={() =>
+                        window.history.length > 1
+                            ? window.history.back()
+                            : router.visit(membersIndex.url())
+                    }
+                >
+                    <ArrowLeft />
+                    Back
+                </Button>
+
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle className="text-2xl">

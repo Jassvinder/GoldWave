@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Member;
 
-use App\Actions\Registration\ConfirmWalletFundedRegistration;
+use App\Actions\Registration\QueueWalletFundedRegistration;
 use App\Actions\Registration\RegisterMember;
 use App\Actions\Registration\SendWalletPaymentOtp;
 use App\Actions\Registration\VerifyWalletPaymentOtp;
@@ -27,7 +27,7 @@ use Inertia\Response;
  * payment option, funding the new member's registration from this
  * member's own wallet balance instead of the new member paying cash/online
  * themselves. Reuses `RegisterMember` untouched; `payment_mode=wallet`
- * settles immediately via `ConfirmWalletFundedRegistration` right after.
+ * is settled by `ConfirmWalletFundedRegistration` in the background (T-229, `QueueWalletFundedRegistration`).
  */
 class AssistedRegistrationController extends Controller
 {
@@ -77,7 +77,7 @@ class AssistedRegistrationController extends Controller
     public function store(
         AssistedRegisterMemberRequest $request,
         RegisterMember $registerMember,
-        ConfirmWalletFundedRegistration $confirmWallet,
+        QueueWalletFundedRegistration $queueWalletRegistration,
         VerifyWalletPaymentOtp $verifyWalletOtp,
     ): RedirectResponse {
         $payer = $request->user()->member;
@@ -94,14 +94,14 @@ class AssistedRegistrationController extends Controller
             $verifyWalletOtp($request->user(), $request->string('wallet_otp')->toString());
         }
 
-        $newMember = $registerMember($request->validated());
-
+        // T-229 — the wallet payment is settled in the background; the status page follows it to "Active".
         if ($paymentMode === 'wallet') {
-            $confirmWallet($newMember, null, $payer, $request->user());
+            $newMember = $queueWalletRegistration($request->validated(), null, $payer, $request->user());
 
-            return redirect()->route('member.assisted-registration.show')
-                ->with('status', "Registration confirmed for Customer ID {$newMember->fresh()->customer_id}.");
+            return redirect(RegistrationController::signedStatusUrl($newMember));
         }
+
+        $newMember = $registerMember($request->validated());
 
         $payment = $newMember->payments->firstWhere('type', 'registration');
         PaymentModes::attachUpiProof($payment, $request);

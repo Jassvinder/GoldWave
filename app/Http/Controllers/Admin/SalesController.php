@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Billing\GenerateStoreSaleBill;
 use App\Actions\Billing\ResolveDeliverableBenefit;
-use App\Actions\Payments\CollectCashPaymentViaStoreWallet;
 use App\Actions\Store\ConfirmStoreSale;
 use App\Actions\Store\PriceStoreSale;
 use App\Actions\Store\RecordItemBuyback;
@@ -13,6 +12,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\RecordItemBuybackRequest;
 use App\Http\Requests\Admin\RecordPlanJewelleryDeliveryRequest;
 use App\Http\Requests\Admin\RecordStoreSaleRequest;
+use App\Jobs\ProcessStoreCashCollection;
 use App\Models\Member;
 use App\Models\MetalRate;
 use App\Models\Payment;
@@ -21,6 +21,7 @@ use App\Models\StoreInventoryItem;
 use App\Models\StoreSale;
 use App\Services\InvoicePresenter;
 use App\Services\RuleVersionService;
+use App\Support\PaymentInProgress;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -132,6 +133,8 @@ class SalesController extends Controller
                 'type' => $payment->type,
                 'amount' => $payment->amount,
                 'created_at' => $payment->created_at,
+                // T-229 — being settled (or approved) in the background right now.
+                'processing' => PaymentInProgress::isRunning($payment->id),
             ]);
 
         return [
@@ -142,15 +145,35 @@ class SalesController extends Controller
         ];
     }
 
-    public function collectPayment(Payment $payment, Request $request, CollectCashPaymentViaStoreWallet $action): RedirectResponse
+    /**
+     * T-229 (15-10-2026) — checks what can be checked at once (a pending cash payment, enough Store Wallet balance),
+     * then settles it in the background (`ProcessStoreCashCollection`). If that fails, nothing is kept.
+     */
+    public function collectPayment(Payment $payment, Request $request): RedirectResponse
     {
         /** @var Store $store */
         $store = $request->attributes->get('store');
+        $back = redirect()->route('admin.sales.index', ['collect_customer_id' => $payment->member?->customer_id]);
 
-        $action($payment, $store, $request->user());
+        if ($payment->mode !== 'cash') {
+            throw ValidationException::withMessages(['payment' => 'This payment is not a cash payment.']);
+        }
 
-        return redirect()->route('admin.sales.index', ['collect_customer_id' => $payment->member?->customer_id])
-            ->with('status', 'Payment collected and settled via Store Wallet.');
+        if ($payment->status === 'paid') {
+            throw ValidationException::withMessages(['payment' => 'This payment has already been settled.']);
+        }
+
+        if ((float) $payment->amount > (float) $store->wallet()->firstOrFail()->balance) {
+            throw ValidationException::withMessages(['amount' => 'Insufficient Store Wallet balance for this transaction.']);
+        }
+
+        if (! PaymentInProgress::claim($payment->id)) {
+            return $back->with('status', 'This payment is already being processed.');
+        }
+
+        ProcessStoreCashCollection::dispatch($payment, $store, $request->user());
+
+        return $back->with('status', 'Collection started. It is settled via the Store Wallet in the background within a few seconds.');
     }
 
     public function storeSale(RecordStoreSaleRequest $request, ConfirmStoreSale $action, PriceStoreSale $priceSale): RedirectResponse

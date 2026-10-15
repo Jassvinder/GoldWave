@@ -26,11 +26,11 @@ class ConfirmOnlinePayment
      */
     public function __invoke(Payment $payment, string $providerReference, array $gatewayPayload): void
     {
-        $wasAlreadyPaid = DB::transaction(function () use ($payment, $providerReference, $gatewayPayload) {
+        DB::transaction(function () use ($payment, $providerReference, $gatewayPayload) {
             $locked = Payment::whereKey($payment->id)->lockForUpdate()->firstOrFail();
 
             if ($locked->status === 'paid') {
-                return true;
+                return;
             }
 
             $locked->update([
@@ -46,11 +46,11 @@ class ConfirmOnlinePayment
                 ($this->confirmEmiInstallment)($locked);
             }
 
-            return false;
+            // T-229 (15-10-2026) — income runs inside the same transaction, so a failure keeps nothing and the
+            // confirmation can simply be tried again.
+            event(new PaymentConfirmed($locked->refresh()));
         });
 
-        if (! $wasAlreadyPaid) {
-            event(new PaymentConfirmed($payment->refresh()));
-        }
+        $payment->refresh();
     }
 }

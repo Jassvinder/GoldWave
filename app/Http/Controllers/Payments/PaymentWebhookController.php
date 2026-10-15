@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers\Payments;
 
-use App\Actions\Payments\ConfirmOnlinePayment;
 use App\Contracts\PaymentGatewayContract;
 use App\Http\Controllers\Controller;
+use App\Jobs\ProcessOnlinePaymentConfirmation;
 use App\Models\Payment;
+use App\Support\PaymentInProgress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,7 +21,7 @@ use Illuminate\Http\Request;
  */
 class PaymentWebhookController extends Controller
 {
-    public function __invoke(Request $request, PaymentGatewayContract $gateway, ConfirmOnlinePayment $action): JsonResponse
+    public function __invoke(Request $request, PaymentGatewayContract $gateway): JsonResponse
     {
         $result = $gateway->verifyCallback($request);
 
@@ -34,7 +35,10 @@ class PaymentWebhookController extends Controller
 
         $payment = Payment::where('id', $result->paymentId)->where('mode', 'online')->firstOrFail();
 
-        $action($payment, $result->providerReference, $result->payload);
+        // T-229 — confirmed in the background (idempotent); skipped when the browser return already queued it.
+        if ($payment->status !== 'paid' && PaymentInProgress::claim($payment->id)) {
+            ProcessOnlinePaymentConfirmation::dispatch($payment, $result->providerReference, $result->payload);
+        }
 
         return response()->json(['status' => 'ok']);
     }

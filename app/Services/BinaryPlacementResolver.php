@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Member;
+use Illuminate\Support\Facades\DB;
 
 /**
  * ARCHITECTURE.md: the ONE place `placement_parent_id` gets decided.
@@ -54,21 +55,56 @@ class BinaryPlacementResolver
      */
     public function ancestorsWithSide(Member $member, ?int $maxDepth = null): array
     {
+        if ($member->placement_parent_id === null || $maxDepth === 0) {
+            return [];
+        }
+
+        // 15-10-2026 — one recursive query instead of one query per level (a 553-level chain took ~1.5 s per walk,
+        // and a cash approval walks it twice). Without a cycle a chain can't be longer than the member table, which
+        // bounds the recursion; the visited-id guard below still stops at the first repeat, as before.
+        $limit = min($maxDepth ?? PHP_INT_MAX, Member::count());
+
+        $rows = DB::select(<<<'SQL'
+            WITH RECURSIVE chain (id, parent_id, side, depth) AS (
+                SELECT id, placement_parent_id, placement_side, 1 FROM members WHERE id = ?
+                UNION ALL
+                SELECT m.id, m.placement_parent_id, m.placement_side, c.depth + 1
+                FROM members m
+                INNER JOIN chain c ON m.id = c.parent_id
+                WHERE c.depth < ?
+            )
+            SELECT id, side FROM chain ORDER BY depth
+            SQL, [$member->placement_parent_id, $limit]);
+
+        $ancestorIds = [];
+
+        foreach ($rows as $row) {
+            $ancestorIds[] = (int) $row->id;
+        }
+
+        $models = [];
+
+        foreach (array_chunk($ancestorIds, 1000) as $ids) {
+            foreach (Member::whereIn('id', $ids)->get() as $model) {
+                $models[$model->id] = $model;
+            }
+        }
+
         $chain = [];
-        $current = $member;
         $visited = [$member->id => true];
+        // The side each ancestor is reached from: $member's own side first, then each child's side on the way up.
+        $side = $member->placement_side;
 
-        for ($i = 0; $maxDepth === null || $i < $maxDepth; $i++) {
-            $parent = $current->placementParent()->first();
+        foreach ($rows as $row) {
+            $id = (int) $row->id;
 
-            if (! $parent || isset($visited[$parent->id])) {
+            if (isset($visited[$id]) || ! isset($models[$id])) {
                 break;
             }
 
-            $visited[$parent->id] = true;
-
-            $chain[] = ['member' => $parent, 'side' => $current->placement_side];
-            $current = $parent;
+            $visited[$id] = true;
+            $chain[] = ['member' => $models[$id], 'side' => $side];
+            $side = $row->side;
         }
 
         return $chain;
