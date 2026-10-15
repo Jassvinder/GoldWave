@@ -156,7 +156,8 @@ test('profile change requests, payout requests and new bank details each alert t
     ]);
 
     $titles = collect(ntfInbox(ntfSuperAdmin()))->pluck('data.title')->all();
-    expect($titles)->toBe(['Profile change request', 'Payout request', 'Bank details to verify']);
+    // All three land within the same second, so their order in the inbox is not fixed.
+    expect($titles)->toEqualCanonicalizing(['Profile change request', 'Payout request', 'Bank details to verify']);
 
     $bankAlert = ntfSuperAdmin()->notifications()->where('data', 'like', '%Bank details to verify%')->firstOrFail();
     expect($bankAlert->data['url'])->toBe('/super-admin/members/'.$fresh->id);

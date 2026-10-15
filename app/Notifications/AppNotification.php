@@ -3,6 +3,8 @@
 namespace App\Notifications;
 
 use App\Notifications\Channels\SmsChannel;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -15,8 +17,25 @@ use Illuminate\Notifications\Notification;
  *
  * Categories drive the tabs on the Notifications page: `payment`, `request`, `emi`.
  */
-abstract class AppNotification extends Notification
+abstract class AppNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
+    /** A queued email whose record was deleted meanwhile is dropped, not retried. */
+    public bool $deleteWhenMissingModels = true;
+
+    /**
+     * 15-10-2026 — a cash approval on the live server timed out while it emailed the member, sponsor, uplines and
+     * admins one by one inside the request. Now only the bell record is written at once (`sync`). Email and SMS go
+     * through the queue worker, so a slow or wrong mail server never holds up, or breaks, the action that sent them.
+     *
+     * @return array<string, string>
+     */
+    public function viaConnections(): array
+    {
+        return ['database' => 'sync'];
+    }
+
     /** Config key under `notifications.channels`. */
     abstract public function key(): string;
 

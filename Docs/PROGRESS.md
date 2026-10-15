@@ -8,6 +8,9 @@ Keep only information needed to continue current work. Move durable decisions to
 - Done: site live, PostgreSQL 17, queue worker and scheduler.
 - 15-10-2026: the client wants genuine entries on this server. Before that, the manual draw (T-221) and the names "Shri Shyam" / "Lakhdataar" (T-222) were added. Both are not committed or deployed yet.
 - Next: the user commits and runs `.\gw deploy`, then runs the go-live runbook in `DEPLOYMENT.md` §0 by hand (steps 0–7).
+- 15-10-2026, later: go-live was run (production, root "Shri Shyam", Super Admin "Lakhdataar"). Live bugs T-224 (500 on cash/UPI) and T-225 (520 on cash approval) are fixed locally and need commit + deploy. Mail sends through Gmail SMTP for now.
+- Around 22-10-2026, when the user can log in to Cloudflare again: add SPF/DKIM/DMARC and move mail back to `noreply@goldwave.life` (`DEPLOYMENT.md` §0 "Mail" row). Also check the real-IP question (T-225 report, `sessions.ip_address`).
+- Open user decision: password rule for members in production (12+ characters with symbols, plus the online leaked-password check).
 
 ## Earlier (02-10-2026): pre-go-live — home page (T-203), plan guide deck (T-204), go-live guide (T-205) done
 

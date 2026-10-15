@@ -41,7 +41,9 @@ return [
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
             'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
-            'after_commit' => false,
+            // 15-10-2026 — a job (e.g. a notification email) sent inside a transaction waits for the commit, so the
+            // worker never picks it up before its rows exist, and never sends one for a rolled-back action.
+            'after_commit' => true,
         ],
 
         'beanstalkd' => [

@@ -30,7 +30,6 @@ use App\Services\CompanyWalletService;
 use App\Services\Notifier;
 use App\Services\RuleVersionService;
 use App\Services\WalletLedgerService;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
@@ -271,7 +270,8 @@ test('four roles: a company Admin gets every company page except the Super-Admin
     }
 
     // Company alerts reach the Admin too.
-    Notifier::toSuperAdmins(new PayoutRequestSubmitted(Model::unguarded(fn () => new PayoutRequest(['requested_amount' => 100]))->setRelation('member', spMember('SP-T173'))));
+    // A saved request: since T-225 notifications are queued, and a queued one reloads its models from the database.
+    Notifier::toSuperAdmins(new PayoutRequestSubmitted(PayoutRequest::create(['member_id' => spMember('SP-T173')->id, 'requested_amount' => 100, 'status' => 'pending'])));
     expect($admin->notifications()->count())->toBe(1);
 
     // A Store Admin (Store Owner) never reaches the company portal.
