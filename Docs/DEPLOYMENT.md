@@ -91,7 +91,7 @@ Each command asks for the root password once per `scp`/`ssh` call. An SSH key re
      ```bash
      read -s -p "New password for the Shri Shyam root login: " ROOT_PASS; echo
      cd /home/goldwave.life/goldwave/current
-     sudo -u goldw8285 env ROOT_PASS="$ROOT_PASS" /usr/local/lsws/lsphp85/bin/php artisan tinker --execute='App\Models\User::where("email", "raj9944kumar@gmail.com")->update(["password" => Illuminate\Support\Facades\Hash::make(getenv("ROOT_PASS"))]); echo "Root password changed", PHP_EOL;'
+     sudo -u goldw8285 env ROOT_PASS="$ROOT_PASS" /usr/local/lsws/lsphp85/bin/php artisan tinker --execute='App\Models\Member::where("customer_id", "GWL-ROOT")->firstOrFail()->user->update(["password" => getenv("ROOT_PASS")]); echo "Root password changed", PHP_EOL;'
      unset ROOT_PASS
      ```
   6. **Switch to production.** In `nano /home/goldwave.life/goldwave/shared/.env`, set `APP_ENV=production`, keep `APP_DEBUG=false`, and enter the real `MAIL_MAILER=smtp` and `MAIL_*` values. `SMS_DRIVER` stays `log` until a provider is chosen. Then:
@@ -147,7 +147,7 @@ These come from the code as of 02-10-2026. Close each one, or record that it was
    - A fresh install stores them there from the start. (The one-time migration that moved older files was removed on 08-10-2026 when migrations were merged; see `Docs/DATABASE_SCHEMA.md`.)
    - Back up `storage/app/private` as well as `storage/app/public` (section 7).
 2. **Seeded accounts and the Super Admin.**
-   - `CompanyRootMemberSeeder` creates the company root login with the password `password`. Change it right after the first seed on the server.
+   - `CompanyRootMemberSeeder` creates the company root login (Customer ID `GWL-ROOT`) with the password `password`, the placeholder email `gwl-root@goldwave.invalid` and no mobile. Right after the first seed on the server, change the password, and set a real email if the root should receive mail. Re-running the seeder never touches an existing root.
    - `SuperAdminUserSeeder` only runs in `local`/`testing`. On the server, the Super Admin is created by hand (section 0).
 3. **Start from a fresh database.** Never copy the dev database to production: it holds demo and test data. Run only `php artisan db:seed --force`, which calls `DatabaseSeeder` and never `DemoNetworkSeeder`.
 4. **Real business settings in Super Admin:**

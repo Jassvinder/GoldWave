@@ -34,7 +34,7 @@ gwa tinker --execute='echo App\Models\Member::where("customer_id", "GWL-ROOT")->
 ```
 
 - `active` means it is there.
-- `MISSING` means you must create it: `gwa db:seed --class=CompanyRootMemberSeeder --force`. This also **resets the root login's password to `password`**, so change it again afterwards.
+- `MISSING` means you must create it: `gwa db:seed --class=CompanyRootMemberSeeder --force`. It creates the root with the password `password`, so change it afterwards. When the root already exists, the seeder does nothing (15-10-2026).
 
 GWL-ROOT never earns (it is a company placeholder). Put test entries on its **left**. Its right side is where the daily dummy entries go when Super Admin switches them on.
 

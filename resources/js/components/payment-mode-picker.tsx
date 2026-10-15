@@ -43,6 +43,13 @@ const LABELS: Record<PaymentMode, string> = {
     wallet: 'Wallet',
 };
 
+const HINTS: Record<PaymentMode, string> = {
+    cash: 'Pay at the office or store',
+    upi: 'Scan the QR, then add the Ref ID and screenshot',
+    online: 'Card, UPI or netbanking, confirmed at once',
+    wallet: 'Paid from the wallet balance at once',
+};
+
 /**
  * T-196 (DOMAIN_LOGIC.md §10) — the one payment-mode chooser for registration, assisted registration and EMI
  * payments. GPay/UPI shows the company QR + UPI ID and asks for the Transaction/UTR Ref ID and a payment screenshot
@@ -72,23 +79,47 @@ export function PaymentModePicker({
 
     return (
         <div className="grid gap-3">
-            <div className="flex flex-wrap gap-2">
-                {options.modes.map((option) => (
-                    <button
-                        key={option}
-                        type="button"
-                        onClick={() => onModeChange(option)}
-                        className={`min-w-28 flex-1 rounded-md border px-3 py-2 text-sm ${
-                            mode === option
-                                ? 'border-primary bg-primary text-primary-foreground'
-                                : 'border-input bg-transparent'
-                        }`}
-                    >
-                        {option === 'wallet' && walletLabel
-                            ? walletLabel
-                            : LABELS[option]}
-                    </button>
-                ))}
+            {/* 15-10-2026 — radio options, not buttons: members thought a filled "button" would submit the form. */}
+            <div
+                role="radiogroup"
+                aria-label="Payment mode"
+                className="flex flex-wrap gap-2"
+            >
+                {options.modes.map((option) => {
+                    const selected = mode === option;
+
+                    return (
+                        <label
+                            key={option}
+                            htmlFor={`${idPrefix}-mode-${option}`}
+                            className={`flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 text-sm transition-colors ${
+                                selected
+                                    ? 'border-primary bg-primary/5 ring-primary ring-1'
+                                    : 'border-input hover:bg-muted/50'
+                            }`}
+                        >
+                            <input
+                                id={`${idPrefix}-mode-${option}`}
+                                type="radio"
+                                name={`${idPrefix}-mode`}
+                                value={option}
+                                checked={selected}
+                                onChange={() => onModeChange(option)}
+                                className="accent-primary mt-0.5 size-4 shrink-0 cursor-pointer"
+                            />
+                            <span className="grid gap-0.5">
+                                <span className="font-medium">
+                                    {option === 'wallet' && walletLabel
+                                        ? walletLabel
+                                        : LABELS[option]}
+                                </span>
+                                <span className="text-muted-foreground text-xs">
+                                    {HINTS[option]}
+                                </span>
+                            </span>
+                        </label>
+                    );
+                })}
             </div>
             <InputError message={errors.mode} />
 

@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Registration\CalculateEmiRateBooking;
+use App\Contracts\PaymentGatewayContract;
 use App\Models\EmiSchedule;
 use App\Models\Member;
 use App\Models\MembershipPlan;
@@ -356,4 +357,23 @@ test('registration requires a valid gender and stores it on the member (T-122)',
     $this->post('/join', [...$payload, 'gender' => 'other'])->assertSessionHasNoErrors();
 
     expect(Member::whereHas('user', fn ($q) => $q->where('email', 'gendertest@example.test'))->firstOrFail()->gender)->toBe('other');
+});
+
+test('a cash registration works when the online gateway cannot load (production without Razorpay keys, 15-10-2026)', function () {
+    createActiveMember('GWL950');
+    // What production does without Razorpay keys: the gateway refuses to load. Only Online may ever need it.
+    app()->bind(PaymentGatewayContract::class, fn () => throw new RuntimeException('Online payments are not configured.'));
+
+    $this->post('/join', [
+        'sponsor_code' => 'GWL950',
+        'placement_side' => 'left',
+        'gender' => 'male',
+        'name' => 'Live Cash Member',
+        'email' => 'livecash@example.test',
+        'mobile' => '9876500001',
+        'membership_plan_id' => MembershipPlan::where('code', 'E')->value('id'),
+        'payment_mode' => 'cash',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect(User::where('email', 'livecash@example.test')->first()?->member?->payments->first()?->mode)->toBe('cash');
 });

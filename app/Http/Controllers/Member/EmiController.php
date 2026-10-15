@@ -218,7 +218,6 @@ class EmiController extends Controller
         PayEmiInstallmentRequest $request,
         EmiInstallment $installment,
         InitiateEmiInstallmentPayment $action,
-        PaymentGatewayContract $gateway,
     ): RedirectResponse {
         $member = $request->user()->member;
 
@@ -229,8 +228,9 @@ class EmiController extends Controller
         PaymentModes::attachUpiProof($payment, $request);
 
         if ($payment->mode === 'online') {
-            // T-137 — through the bound gateway (Razorpay checkout, or the dev stand-in when no keys are set).
-            return redirect($gateway->createIntent($payment)['redirect_url']);
+            // T-137 — through the bound gateway (Razorpay checkout, or the dev stand-in when no keys are set). Resolved
+            // only for Online: without Razorpay keys it refuses to load in production (15-10-2026).
+            return redirect(app(PaymentGatewayContract::class)->createIntent($payment)['redirect_url']);
         }
 
         return redirect()->route('member.emi.index')
@@ -238,7 +238,7 @@ class EmiController extends Controller
     }
 
     /** T-184 — "Pay All Remaining EMIs" (DOMAIN_LOGIC.md §5 point 9), the same Online / Cash flow as a single EMI. */
-    public function payAll(PayEmiInstallmentRequest $request, InitiateFullEmiPayment $action, PaymentGatewayContract $gateway): RedirectResponse
+    public function payAll(PayEmiInstallmentRequest $request, InitiateFullEmiPayment $action): RedirectResponse
     {
         $member = $request->user()->member;
 
@@ -248,7 +248,7 @@ class EmiController extends Controller
         PaymentModes::attachUpiProof($payment, $request);
 
         if ($payment->mode === 'online') {
-            return redirect($gateway->createIntent($payment)['redirect_url']);
+            return redirect(app(PaymentGatewayContract::class)->createIntent($payment)['redirect_url']);
         }
 
         return redirect()->route('member.emi.index')
@@ -256,7 +256,7 @@ class EmiController extends Controller
     }
 
     /** T-185a — "Pay All Remaining EMIs" for the member's own store Repurchase on EMI (principal only, Current Rate). */
-    public function payAllStore(PayEmiInstallmentRequest $request, StoreEmiBooking $booking, InitiateFullEmiPayment $action, PaymentGatewayContract $gateway): RedirectResponse
+    public function payAllStore(PayEmiInstallmentRequest $request, StoreEmiBooking $booking, InitiateFullEmiPayment $action): RedirectResponse
     {
         $member = $request->user()->member;
 
@@ -266,7 +266,7 @@ class EmiController extends Controller
         PaymentModes::attachUpiProof($payment, $request);
 
         if ($payment->mode === 'online') {
-            return redirect($gateway->createIntent($payment)['redirect_url']);
+            return redirect(app(PaymentGatewayContract::class)->createIntent($payment)['redirect_url']);
         }
 
         return redirect()->route('member.emi.index')

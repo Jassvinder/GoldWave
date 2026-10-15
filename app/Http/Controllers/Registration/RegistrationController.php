@@ -62,7 +62,7 @@ class RegistrationController extends Controller
         ]);
     }
 
-    public function store(RegisterMemberRequest $request, RegisterMember $action, PaymentGatewayContract $gateway): RedirectResponse
+    public function store(RegisterMemberRequest $request, RegisterMember $action): RedirectResponse
     {
         $member = $action($request->validated());
 
@@ -74,7 +74,8 @@ class RegistrationController extends Controller
 
         if ($payment->mode === 'online') {
             try {
-                $intent = $gateway->createIntent($payment);
+                // Resolved only here: without Razorpay keys the gateway refuses to load in production (15-10-2026).
+                $intent = app(PaymentGatewayContract::class)->createIntent($payment);
             } catch (ValidationException $e) {
                 // The registration is already saved; the status page offers "Pay now" so the member can retry.
                 return redirect(self::signedStatusUrl($member))

@@ -43,7 +43,6 @@ class AssistedRegistrationController extends Controller
         AssistedRegisterMemberRequest $request,
         RegisterMember $registerMember,
         ConfirmWalletFundedRegistration $confirmWallet,
-        PaymentGatewayContract $gateway,
     ): RedirectResponse {
         /** @var Store $store */
         $store = $request->attributes->get('store');
@@ -67,7 +66,7 @@ class AssistedRegistrationController extends Controller
 
         if ($paymentMode === 'online') {
             try {
-                $intent = $gateway->createIntent($payment);
+                $intent = app(PaymentGatewayContract::class)->createIntent($payment);
             } catch (ValidationException $e) {
                 return redirect(RegistrationController::signedStatusUrl($newMember))
                     ->with('payment_error', collect($e->errors())->flatten()->first());

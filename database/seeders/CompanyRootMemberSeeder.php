@@ -19,35 +19,38 @@ use Illuminate\Database\Seeder;
  * out-of-sequence Customer ID rather than `CustomerIdGenerator`, so it never
  * consumes a slot from the real GWL0N numbering.
  *
- * 29-09-2026 (user request): the root is always present on a fresh database, named "GoldWave", with the company's
- * contact email and mobile on a login user of its own. It stays a non-earning company root.
- * 15-10-2026 (user request): renamed "Shri Shyam".
+ * 29-09-2026 (user request): the root is always present on a fresh database with a login user of its own. It stays a
+ * non-earning company root. 15-10-2026 (user request): named "Shri Shyam", and identified only by its fixed Customer ID
+ * `GWL-ROOT` — never by an email or mobile, which belong to people and can move to a real member. The seeder only
+ * creates a missing root; it never touches an existing root or its login (email, mobile, password are set on the server).
  */
 class CompanyRootMemberSeeder extends Seeder
 {
+    public const CUSTOMER_ID = 'GWL-ROOT';
+
     public function run(): void
     {
-        $user = User::updateOrCreate(
-            ['email' => 'raj9944kumar@gmail.com'],
-            [
-                'name' => 'Shri Shyam',
-                'mobile' => '8814900944',
-                'role' => 'member',
-                'password' => 'password',
-                'email_verified_at' => now(),
-            ],
-        );
+        if (Member::where('customer_id', self::CUSTOMER_ID)->exists()) {
+            return;
+        }
 
-        Member::updateOrCreate(
-            ['is_company_root' => true],
-            [
-                'user_id' => $user->id,
-                'customer_id' => 'GWL-ROOT',
-                'status' => 'active',
-                'activated_at' => now(),
-                'is_company_dummy' => true,
-                'placeholder_name' => 'Shri Shyam',
-            ],
-        );
+        $user = User::create([
+            'name' => 'Shri Shyam',
+            // `users.email` is required and unique; this placeholder is no one's inbox. Set a real one on the server.
+            'email' => 'gwl-root@goldwave.invalid',
+            'role' => 'member',
+            'password' => 'password',
+            'email_verified_at' => now(),
+        ]);
+
+        Member::create([
+            'user_id' => $user->id,
+            'customer_id' => self::CUSTOMER_ID,
+            'status' => 'active',
+            'activated_at' => now(),
+            'is_company_dummy' => true,
+            'is_company_root' => true,
+            'placeholder_name' => 'Shri Shyam',
+        ]);
     }
 }
