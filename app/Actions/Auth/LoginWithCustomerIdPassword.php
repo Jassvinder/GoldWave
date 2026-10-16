@@ -31,6 +31,11 @@ class LoginWithCustomerIdPassword
             throw ValidationException::withMessages(['customer_id' => 'Invalid Customer ID or password.']);
         }
 
+        // T-231 — told only after the password is right, so it reveals nothing to someone guessing.
+        if ($member->isBlocked()) {
+            throw ValidationException::withMessages(['customer_id' => Member::BLOCKED_LOGIN_MESSAGE]);
+        }
+
         Auth::login($user);
         session(['goldwave_login_method' => 'password']);
         Portal::stamp(Portal::MEMBER);

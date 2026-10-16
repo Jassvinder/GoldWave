@@ -44,6 +44,8 @@ type Props = {
         verified_at: string | null;
     } | null;
     requests: PayoutRequest[];
+    /** T-231 — set while withdrawals are on hold (Payout Hold). */
+    on_hold_message: string | null;
 };
 
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> =
@@ -63,6 +65,7 @@ export default function Payout({
     min_amount,
     bank_detail,
     requests,
+    on_hold_message,
 }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const { data, setData, post, processing, errors } = useForm({
@@ -91,7 +94,11 @@ export default function Payout({
                     title="Request a Payout"
                     description={`Available balance ₹${available_balance} · Minimum request ₹${min_amount}`}
                 >
-                    {!bank_detail ? (
+                    {on_hold_message ? (
+                        <p className="border-destructive/40 bg-destructive/10 text-destructive rounded-md border p-3 text-sm">
+                            {on_hold_message}
+                        </p>
+                    ) : !bank_detail ? (
                         <p className="text-muted-foreground text-sm">
                             Complete your Pending Profile fields to add bank
                             details before requesting a payout.

@@ -4,6 +4,7 @@ namespace Tests\Feature\Settings;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 class ProfileUpdateTest extends TestCase
@@ -92,39 +93,19 @@ class ProfileUpdateTest extends TestCase
         }
     }
 
-    public function test_user_can_delete_their_account()
+    /** 15-10-2026 (user decision) — no role can delete its own account: the route no longer exists. */
+    public function test_no_user_can_delete_their_own_account()
     {
-        $user = User::factory()->create();
+        foreach (['member', 'super_admin'] as $role) {
+            $user = User::factory()->create(['role' => $role]);
 
-        $response = $this
-            ->actingAs($user)
-            ->delete(route('profile.destroy'), [
-                'password' => 'password',
-            ]);
+            $this->actingAs($user)
+                ->delete('/settings/profile', ['password' => 'password'])
+                ->assertStatus(405);
 
-        $response
-            ->assertSessionHasNoErrors()
-            ->assertRedirect(route('home'));
+            $this->assertNotNull($user->fresh());
+        }
 
-        $this->assertGuest();
-        $this->assertNull($user->fresh());
-    }
-
-    public function test_correct_password_must_be_provided_to_delete_account()
-    {
-        $user = User::factory()->create();
-
-        $response = $this
-            ->actingAs($user)
-            ->from(route('profile.edit'))
-            ->delete(route('profile.destroy'), [
-                'password' => 'wrong-password',
-            ]);
-
-        $response
-            ->assertSessionHasErrors('password')
-            ->assertRedirect(route('profile.edit'));
-
-        $this->assertNotNull($user->fresh());
+        $this->assertFalse(Route::has('profile.destroy'));
     }
 }

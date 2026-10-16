@@ -457,6 +457,25 @@ Profile and one-time field state; membership plan and product benefit; sponsor/d
 
 Security: sensitive financial/profile changes require appropriate authorization and create audit records (`SECURITY.md`).
 
+### Member Restrictions (T-231, 16-10-2026 — client requirement; rules in `DOMAIN_LOGIC.md` §2.3)
+
+- **Page "Member Restrictions"** (sidebar under Members, Super Admin only, `/super-admin/member-restrictions`):
+  - **Finding a member:** a **Customer ID** box with **Find**. It shows the member card: name, status, wallet, pending payout requests, and the current state ("No restriction", red "Blocked since DD-MM-YYYY", amber "Payout Hold since DD-MM-YYYY"). It has a **View member** link and the action buttons: **Put on Payout Hold / Lift Payout Hold** and **Block account / Unblock account**. The company root shows a note instead of buttons.
+  - **Every action opens a dialog.** It lists in plain words what will happen (e.g. "N pending payout requests will be cancelled"), and asks for a **Reason** (at least 10 characters), the **Customer ID typed again** and **your password**. The confirm button stays disabled until the reason and the Customer ID are right.
+  - **Unblock dialog:** when a separate hold exists, it shows **"Also lift the Payout Hold"**, ticked by default.
+  - **"Restricted now" table:** member, state badges and wallet, with a **Manage** button that loads that member.
+  - **"History" table:** the last 100, newest first. It shows Started (date, time, by), Member, Restriction, Reason, and Ended (date, time, by, why) or "In force". A row opens the member.
+- **Member Management:**
+  - A red **Blocked** and/or amber **Payout Hold** badge under the status.
+  - A new filter: Any restriction / Restricted / Blocked / Payout Hold.
+- **Member Detail:**
+  - A red (blocked) or amber (hold) banner at the top, with **Manage restrictions** for Super Admin.
+  - A **Restriction History** card.
+  - While blocked, the EMI card has **Record Cash EMI**. It opens a dialog ("EMI #n · ₹X") with "Cash received — record ₹X". It settles in the background, like an approval.
+- **Member side:**
+  - The login form shows "Your GoldWave account is blocked. Please contact GoldWave." A blocked member who is signed in is signed out on the next click.
+  - Under a hold or a block, the Payout page shows "Withdrawals from your wallet are on hold. Please contact GoldWave." instead of the request form. Assisted registration shows the same message on the Wallet option.
+
 ---
 
 ## Admin Compensation Management

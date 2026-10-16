@@ -49,6 +49,8 @@ class PayoutController extends Controller
                 'verified_at' => Dates::date($bankDetail->verified_at),
             ] : null,
             'requests' => $requests,
+            // T-231 — a Payout Hold stops new requests; the member sees why to contact the company, never the reason.
+            'on_hold_message' => $member->cannotTakeMoneyOut() ? SubmitPayoutRequest::ON_HOLD_MESSAGE : null,
         ]);
     }
 

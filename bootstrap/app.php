@@ -1,6 +1,7 @@
 <?php
 
 use App\Console\Scheduling;
+use App\Http\Middleware\EnsureMemberNotBlocked;
 use App\Http\Middleware\EnsureMemberPortal;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureStoreOwnership;
@@ -33,6 +34,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->web(append: [
             HandleAppearance::class,
+            // T-231 — a member blocked while signed in is signed out on their next request.
+            EnsureMemberNotBlocked::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);

@@ -11,6 +11,9 @@ Keep only information needed to continue current work. Move durable decisions to
 - 15-10-2026, later: go-live was run (production, root "Shri Shyam", Super Admin "Lakhdataar"). Live bugs T-224 (500 on cash/UPI) and T-225 (520 on cash approval) are fixed locally and need commit + deploy. Mail sends through Gmail SMTP for now.
 - Around 22-10-2026, when the user can log in to Cloudflare again: add SPF/DKIM/DMARC and move mail back to `noreply@goldwave.life` (`DEPLOYMENT.md` §0 "Mail" row). Also check the real-IP question (T-225 report, `sessions.ip_address`).
 - Open user decision: password rule for members in production (12+ characters with symbols, plus the online leaked-password check).
+- 16-10-2026: T-231 done (Payout Hold + Account Block, `DOMAIN_LOGIC.md` §2.3). It carries a new migration, which the next `.\gw deploy` runs.
+- Also offered, not started: a project-wide audit for risky breakdowns (atomicity, heavy work in requests, production-only differences, scheduled-job scale, races, unbounded queries). Already known: `ConfirmStoreSale` fires `StoreSaleConfirmed` after its transaction (same pattern T-228 fixed for approvals).
+- Uncommitted on the PC: T-221…T-231. The user deploys with `.\gw deploy` after committing.
 
 ## Earlier (02-10-2026): pre-go-live — home page (T-203), plan guide deck (T-204), go-live guide (T-205) done
 

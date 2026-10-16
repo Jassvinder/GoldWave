@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Member;
 
+use App\Actions\Payout\SubmitPayoutRequest;
 use App\Actions\Registration\QueueWalletFundedRegistration;
 use App\Actions\Registration\RegisterMember;
 use App\Actions\Registration\SendWalletPaymentOtp;
@@ -49,9 +50,12 @@ class AssistedRegistrationController extends Controller
             'referral_link' => route('registration.show', ['ref' => $member->referralCode()]),
             // T-215 — the wallet-payment code goes here; a recent email/mobile change holds wallet payments for 48 h.
             'wallet_otp_email' => SendWalletPaymentOtp::maskEmail($request->user()->email),
-            'wallet_hold_message' => ($holdUntil = $request->user()->walletPaymentHoldUntil())
-                ? SendWalletPaymentOtp::holdMessage($holdUntil->format('d-m-Y h:i A'))
-                : null,
+            // T-231 — a Payout Hold also blocks wallet-paid registrations, shown the same way.
+            'wallet_hold_message' => $member->cannotTakeMoneyOut()
+                ? SubmitPayoutRequest::ON_HOLD_MESSAGE
+                : (($holdUntil = $request->user()->walletPaymentHoldUntil())
+                    ? SendWalletPaymentOtp::holdMessage($holdUntil->format('d-m-Y h:i A'))
+                    : null),
         ]);
     }
 

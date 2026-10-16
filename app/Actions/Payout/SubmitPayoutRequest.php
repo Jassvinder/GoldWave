@@ -27,8 +27,15 @@ class SubmitPayoutRequest
         private readonly WalletLedgerService $wallet,
     ) {}
 
+    /** T-231 — shown on a Payout Hold or Account Block. The reason itself is never shown to the member. */
+    public const ON_HOLD_MESSAGE = 'Withdrawals from your wallet are on hold. Please contact GoldWave.';
+
     public function __invoke(Member $member, float $amount, MemberBankDetail $bankDetail): PayoutRequest
     {
+        if ($member->fresh()?->cannotTakeMoneyOut()) {
+            throw ValidationException::withMessages(['amount' => self::ON_HOLD_MESSAGE]);
+        }
+
         $minAmount = (float) $this->rules->value('payout_min_amount', 500);
 
         if ($amount < $minAmount) {

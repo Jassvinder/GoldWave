@@ -1,8 +1,18 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { ArrowLeft } from 'lucide-react';
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 import { EditMemberDialog } from '@/components/edit-member-dialog';
 import { RevertCurrentRateDialog } from '@/components/revert-current-rate-dialog';
 import { ResetMemberPasswordDialog } from '@/components/reset-member-password-dialog';
@@ -11,9 +21,11 @@ import { show as showDirects } from '@/routes/member/directs';
 import {
     bankProof,
     index as membersIndex,
+    recordCashEmi,
     show as showMember,
     verifyBankDetail,
 } from '@/routes/super-admin/members';
+import { index as memberRestrictionsIndex } from '@/routes/super-admin/member-restrictions';
 import { show as showTree } from '@/routes/member/tree';
 
 type Leg = {
@@ -57,6 +69,21 @@ type MemberDetail = {
         side: string;
     }[];
     wallet_balance: string;
+    /** T-231 — Payout Hold / Account Block since, or null. */
+    payout_hold_since: string | null;
+    blocked_since: string | null;
+};
+
+/** T-231 — one Payout Hold or Account Block period. */
+type RestrictionRow = {
+    id: number;
+    type: 'payout_hold' | 'account_block';
+    reason: string;
+    started_on: string | null;
+    started_by: string;
+    ended_on: string | null;
+    ended_by: string | null;
+    end_reason: string | null;
 };
 
 type BankDetails = {
@@ -70,6 +97,14 @@ type BankDetails = {
 
 type Props = {
     member: MemberDetail;
+    restrictions: RestrictionRow[];
+    /** T-231 — the plan EMI Super Admin can record as cash while the member is blocked. */
+    record_cash_emi: {
+        installment_no: number;
+        amount: string;
+        status: string;
+    } | null;
+    can_manage_restrictions: boolean;
     bank_details: BankDetails;
     product_benefits: {
         metal: string | null;
@@ -140,6 +175,9 @@ type Props = {
 /** INSTRUCTIONS.md's Admin Member Management — full member detail: profile, plan, sponsor/placement, EMI, income, wallet, payouts, draw, booster, store-profit, activity. */
 export default function SuperAdminMemberDetail({
     member,
+    restrictions,
+    record_cash_emi,
+    can_manage_restrictions,
     bank_details,
     product_benefits,
     emi,
@@ -171,6 +209,47 @@ export default function SuperAdminMemberDetail({
                     <ArrowLeft />
                     Back
                 </Button>
+
+                {(member.blocked_since || member.payout_hold_since) && (
+                    // T-231 — a restricted member is unmistakable at the top of the page.
+                    <div
+                        className={`flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm ${
+                            member.blocked_since
+                                ? 'border-destructive/40 bg-destructive/10 text-destructive'
+                                : 'border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200'
+                        }`}
+                    >
+                        <span>
+                            {member.blocked_since && (
+                                <span className="font-medium">
+                                    Blocked since{' '}
+                                    {formatDate(member.blocked_since)} — no
+                                    login, no earnings.{' '}
+                                </span>
+                            )}
+                            {member.payout_hold_since && (
+                                <span className="font-medium">
+                                    Payout Hold since{' '}
+                                    {formatDate(member.payout_hold_since)} — no
+                                    withdrawals.
+                                </span>
+                            )}
+                        </span>
+                        {can_manage_restrictions && (
+                            <Button size="sm" variant="outline" asChild>
+                                <Link
+                                    href={memberRestrictionsIndex.url({
+                                        query: {
+                                            customer_id: member.customer_id,
+                                        },
+                                    })}
+                                >
+                                    Manage restrictions
+                                </Link>
+                            </Button>
+                        )}
+                    </div>
+                )}
 
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
@@ -400,11 +479,18 @@ export default function SuperAdminMemberDetail({
 
                 {emi && (
                     <Card>
-                        <CardHeader>
+                        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
                             <CardTitle>
                                 EMI Schedule ({emi.total_installments}{' '}
                                 installments)
                             </CardTitle>
+                            {record_cash_emi && (
+                                <RecordCashEmiDialog
+                                    memberId={member.id}
+                                    customerId={member.customer_id}
+                                    emi={record_cash_emi}
+                                />
+                            )}
                         </CardHeader>
                         <CardContent className="flex flex-col gap-2">
                             <div className="mb-2 flex flex-col gap-2 rounded-md border p-3 text-sm">
@@ -638,6 +724,49 @@ export default function SuperAdminMemberDetail({
                     )}
                 </div>
 
+                {restrictions.length > 0 && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Restriction History</CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex flex-col gap-2">
+                            {restrictions.map((row) => (
+                                <div
+                                    key={row.id}
+                                    className="flex flex-col gap-1 rounded-md border p-3 text-sm"
+                                >
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Badge
+                                            variant={
+                                                row.type === 'account_block'
+                                                    ? 'destructive'
+                                                    : 'secondary'
+                                            }
+                                        >
+                                            {row.type === 'account_block'
+                                                ? 'Account Block'
+                                                : 'Payout Hold'}
+                                        </Badge>
+                                        <span className="text-muted-foreground">
+                                            {formatDate(row.started_on)} by{' '}
+                                            {row.started_by}
+                                            {row.ended_on
+                                                ? ` — ended ${formatDate(row.ended_on)} by ${row.ended_by ?? '—'}`
+                                                : ' — in force'}
+                                        </span>
+                                    </div>
+                                    <div>Reason: {row.reason}</div>
+                                    {row.end_reason && (
+                                        <div className="text-muted-foreground">
+                                            Lifted because: {row.end_reason}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </CardContent>
+                    </Card>
+                )}
+
                 <Card>
                     <CardHeader>
                         <CardTitle>Recent Activity</CardTitle>
@@ -665,6 +794,67 @@ export default function SuperAdminMemberDetail({
                 </Card>
             </div>
         </>
+    );
+}
+
+/**
+ * T-231 (DOMAIN_LOGIC.md §2.3) — a blocked member can't log in to pay an EMI, so Super Admin records the next due one
+ * as cash received. It is settled in the background like an approved cash payment; the member earns nothing from it.
+ */
+function RecordCashEmiDialog({
+    memberId,
+    customerId,
+    emi,
+}: {
+    memberId: number;
+    customerId: string;
+    emi: { installment_no: number; amount: string; status: string };
+}) {
+    const [open, setOpen] = useState(false);
+    const [processing, setProcessing] = useState(false);
+    const amount = `₹${Number(emi.amount).toLocaleString('en-IN')}`;
+
+    const record = () => {
+        router.post(
+            recordCashEmi.url(memberId),
+            {},
+            {
+                preserveScroll: true,
+                onStart: () => setProcessing(true),
+                onFinish: () => setProcessing(false),
+                onSuccess: () => setOpen(false),
+            },
+        );
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+                <Button size="sm" variant="outline">
+                    Record Cash EMI
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Record Cash EMI — {customerId}</DialogTitle>
+                    <DialogDescription>
+                        EMI #{emi.installment_no} ({emi.status}) · {amount}
+                    </DialogDescription>
+                </DialogHeader>
+                <p className="text-sm">
+                    This member is blocked and can&apos;t log in, so the EMI is
+                    recorded here. Record it only after you have received{' '}
+                    <span className="font-medium">{amount}</span> in cash. The
+                    EMI counts as paid; the member earns nothing from it while
+                    blocked.
+                </p>
+                <DialogFooter>
+                    <Button disabled={processing} onClick={record}>
+                        Cash received — record {amount}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 

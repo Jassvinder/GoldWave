@@ -32,7 +32,8 @@ class ReleaseHeldLevelIncome
     /** Returns the total amount released for this member. */
     public function __invoke(Member $member): float
     {
-        if ($member->status !== 'active' || $member->isExcludedFromGeneralIncome()) {
+        // T-231 — income held before a block stays held while blocked, and is released after the unblock.
+        if ($member->status !== 'active' || $member->isExcludedFromGeneralIncome() || $member->isBlocked()) {
             return 0.0;
         }
 

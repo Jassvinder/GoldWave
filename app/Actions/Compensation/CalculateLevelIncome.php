@@ -81,6 +81,13 @@ class CalculateLevelIncome
                     continue;
                 }
 
+                // T-231 (DOMAIN_LOGIC.md §2.3) — a blocked member earns nothing from the block moment; never paid later.
+                if ($beneficiary->isBlocked()) {
+                    $this->recordSkipped($payment, $ruleVersion, $level, $rate, $beneficiary, 'member_blocked');
+
+                    continue;
+                }
+
                 // T-149 — an unassigned dummy (or the seeded company root, never assignable) must never itself become a
                 // paid compensation beneficiary, matching the same guard already applied to Pair entries/Booster.
                 // T-174 — nor does an entry inserted under the root (Pair/Reward and Booster only).

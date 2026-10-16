@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\BoosterPayoutSchedule;
 use App\Services\WalletLedgerService;
+use App\Support\Dates;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -44,6 +45,16 @@ class ProcessBoosterPayouts implements ShouldQueue
 
                     $qualification = $locked->boosterQualification()->firstOrFail();
                     $member = $qualification->member()->firstOrFail();
+
+                    // T-231 (DOMAIN_LOGIC.md §2.3) — a month that falls due during a block is skipped for good. One due
+                    // before the block (still unpaid, e.g. held by an overdue EMI) waits and is paid after the unblock.
+                    if ($member->isBlocked()) {
+                        if (Dates::date($locked->scheduled_date) >= Dates::date($member->blocked_at)) {
+                            $locked->update(['status' => 'skipped']);
+                        }
+
+                        return;
+                    }
 
                     // T-182 — while an EMI is overdue the month stays pending; the first run after it is paid pays it.
                     if ($member->hasOverdueEmi()) {

@@ -85,6 +85,50 @@ The source document never specified this flow (it only listed "Login" and "passw
 
 ---
 
+### 2.3 Member restrictions: Payout Hold and Account Block (T-231 — client requirement 16-10-2026, user answers; built 16-10-2026)
+
+Two separate restrictions, both set and lifted **only by Super Admin**:
+- **Where:** on one dedicated page, never from a quick toggle.
+- **Reason:** mandatory, always.
+- **Confirmation:** Super Admin types the member's Customer ID and re-enters their own password.
+- **Record:** every start and end is kept (who, when, why).
+- **Timing:** each takes effect at the moment it is applied and ends at the moment it is lifted. Nothing before the start is undone, and nothing missed during it is paid later.
+
+**Payout Hold** — the member keeps working normally but can't take money out.
+- Login, the member portal and all earnings carry on, and earnings keep reaching the wallet.
+- **Refused:** a new payout (withdrawal) request, and paying someone's assisted registration from the member's wallet (user answer 2).
+- **When applied:** every pending payout request of the member is cancelled automatically, and its wallet hold is released (answer 1).
+- The Payout page explains that withdrawals are on hold and to contact the company.
+- **When lifted:** requests are allowed again at once.
+
+**Account Block** — the member is switched off from the system.
+- **Login:** refused (Customer ID + password, OTP login, password-reset OTP), with a "your account is blocked — contact GoldWave" message. A session that is already open is ended on its next request.
+- **Wallet:** the balance stays as it is. Every pending payout request is cancelled automatically, and its hold is released (answer 7). Withdrawals and wallet-paid registrations are refused, as under Payout Hold.
+- **Tree:** the member stays in the tree. Their downline keeps counting for every upline, so uplines' earnings are unaffected (answer 3).
+- **Earnings stop from the block moment, never paid later:**
+  - **Level Income:** a level that would reach the blocked member is recorded `skipped` with reason `member_blocked` (like `upline_inactive`). Income that was already `held` before the block (T-179) stays held, and is released after the unblock under the normal rule.
+  - **Pair/Reward:** no Pair entries are created for the blocked member from joinings during the block. The month-end evaluation skips them while blocked. Entries from before the block stay unused for a later month after the unblock.
+  - **Booster:** no new qualification is evaluated for them while blocked; they can qualify on a later joining after the unblock. A monthly payout whose date falls inside the block is marked `skipped` and never paid. Later months are paid as normal after the unblock (answer 5).
+  - **Store income** (purchase/repurchase upline income, store profit distribution): skipped for the blocked member.
+  - **Monthly Draw:** while blocked, the member is not grouped and can't be drawn — automatic pool or manual entry (answer 4b). An upline draw benefit that would go to a blocked sponsor is skipped.
+- **EMI:** the member can still pay EMIs, and receives the product when the plan is complete — only earnings stop (answer 6).
+  - A blocked member can't log in to start a cash EMI, and nobody else can start one: Super Admin and a store can only approve or collect a payment the member has already submitted.
+  - So, on **Member Detail → EMI card**, Super Admin gets a **Record Cash EMI** button, shown only while the member is blocked. It records the next due installment as cash received and settles it like an approved cash payment (background, all or nothing — §10.2). The EMI is paid, the product follows when the plan is complete, the blocked member's own earnings are skipped, and the uplines are unaffected.
+  - Decided 16-10-2026: no new EMI pages; the existing EMI card shows the record.
+- **Lifted (unblock):** login and earnings resume from that moment.
+
+**Who can't be restricted:** the company root and unassigned company entries. They never earn, so a restriction would mean nothing.
+
+**Implementation notes (16-10-2026):**
+- A member blocked while signed in is signed out on their next request (`EnsureMemberNotBlocked`, member side only — a Store Owner's store login is unaffected). Their open sessions are also deleted when the block is applied.
+- The block message ("Your GoldWave account is blocked. Please contact GoldWave.") is shown only after the password or OTP is accepted, or for an OTP request.
+- A blocked member's Level and store income rows are recorded `skipped / member_blocked`. Pair entries and the draw upline benefit are simply not created. A Booster month due during the block becomes `skipped`; a month due before the block waits.
+
+**Both at once:** a member can have both, applied one after the other (e.g. a first warning puts a Payout Hold, a second offence adds a Block).
+- **Unblock lifts only the Block.** A Payout Hold stays only if it was applied separately.
+- In that case the Unblock dialog shows **"Also lift the Payout Hold"**, ticked by default. When the case is fully cleared, one Unblock switches everything back on; untick it to keep the hold (decided 16-10-2026).
+- Each restriction can also be applied or lifted on its own, in any order.
+
 ## 3. Membership / Entry Plans
 
 **(RESOLVED 12-09-2026 — client-provided `GoldWave_Claude_instructions_2.docx`, Version 2.0)** The plan table and product entitlement below supersede the earlier 5-plan table and the "CLIENT CONFIRMATION REQUIRED" note that used to sit here. This is a genuine scope change from the client, not a documentation-only clarification: it adds a new Plan D and a dual Current/Future Rate Booking mechanism that did not exist before. **No code exists yet for this area (T-005 is still Pending), so this is a documentation update only — do not start implementing the schema/EMI-service changes below without the user's separate go-ahead**, per the standing instruction that a resolved item is never itself permission to code.
@@ -463,6 +507,8 @@ Cash and GPay/UPI share the manual-approval status `payments.cash_status` (pendi
 2. Admin/Super Admin verifies the physical receipt.
 3. On approval: mark Paid, continue normal eligibility processing.
 4. On rejection/cancellation: retain the audit trail, generate no compensation.
+
+**No self-service account deletion (T-230, 15-10-2026, user decision).** No role (member, store admin, company Admin, Super Admin) can delete its own account; the starter kit's "Delete account" was removed. There is no member delete action. Payout Hold and Account Block are planned in §2.3 (T-231).
 
 **Approval runs in the background, all or nothing (T-228, 15-10-2026, user decision).** Approving a deep member's payment took seconds (T-227), and only Super Admin / Admin waits on it.
 

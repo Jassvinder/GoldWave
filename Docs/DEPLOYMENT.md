@@ -106,6 +106,38 @@ Each command asks for the root password once per `scp`/`ssh` call. An SSH key re
   7. **In the browser, as Lakhdataar:** set Metal Rates; Payment Settings (UPI ID and QR); Draw Settings (switch off **Automatic draw** if the draw is held in person, and set the prizes); review Rule Versions; set the Landing Page contact details. Then do the remaining section 2 items.
   - **If the staging data is needed again after step 3:** the dump in `/root` holds it. It is a plain SQL dump, so it can only be loaded into an empty `goldwave` database. Plan that restore separately; don't improvise it.
 
+- **Refreshing the database again after live testing (15-10-2026, user decision).** Allowed only while no genuine member has registered. It wipes every test registration, payment and setting. The user runs it by hand; it is never scripted. `migrate:fresh` is blocked while `APP_ENV=production`, so the server goes back to staging for a moment.
+  1. **Switch to staging:**
+     ```bash
+     sed -i 's/^APP_ENV=.*/APP_ENV=staging/' /home/goldwave.life/goldwave/shared/.env
+     grep -n '^APP_ENV' /home/goldwave.life/goldwave/shared/.env    # APP_ENV=staging
+     gwa optimize
+     ```
+  2. **Stop the site and the worker, then wipe and reseed:**
+     ```bash
+     gwa down
+     systemctl stop goldwave-worker
+     gwa migrate:fresh --seed --force
+     ```
+  3. **Run go-live steps 4 and 5 again** (above), exactly as written: create the Super Admin "Lakhdataar" (plus `MetalRateSeeder`), then change the "Shri Shyam" root password. Running them again causes no problem.
+  4. **Set the root login's real email and mobile again,** if they were changed in the database before (the seeder creates `gwl-root@goldwave.invalid` with no mobile). In pgAdmin:
+     ```sql
+     UPDATE users SET email = 'root-email@example.com', mobile = NULL
+     WHERE id = (SELECT user_id FROM members WHERE customer_id = 'GWL-ROOT');
+     ```
+  5. **Switch back to production and start everything:**
+     ```bash
+     sed -i 's/^APP_ENV=.*/APP_ENV=production/' /home/goldwave.life/goldwave/shared/.env
+     grep -n '^APP_ENV' /home/goldwave.life/goldwave/shared/.env    # APP_ENV=production
+     gwa optimize
+     systemctl start goldwave-worker
+     gwa queue:restart
+     gwa up
+     gwa about | grep -i -E 'environment|debug'    # production, OFF
+     ```
+  6. **In the browser, as Lakhdataar,** enter all the settings again, because the wipe removed them: Metal Rates, Payment Settings (UPI ID and QR), Draw Settings (Automatic draw off if the draw is held in person, and prizes), Rule Versions review, and Landing Page contact details.
+  - Mail settings (`MAIL_*`) live in `.env` and are not touched by the wipe.
+
 **Super Admin on the server:** `DatabaseSeeder` creates **no** Super Admin outside `local`/`testing` (`SuperAdminUserSeeder` returns early). From go-live on, the Super Admin is named "Lakhdataar" (go-live step 4 above). `MetalRateSeeder` also skips when there is no Super Admin. On 13-10-2026 the Super Admin was created with `artisan tinker --execute` (`User::updateOrCreate`, role `super_admin`). The email and password were read with `read -s` into environment variables so they stay out of shell history. Then `db:seed --class=MetalRateSeeder --force` added placeholder rates.
 
 ## 1. Hosting — what to buy

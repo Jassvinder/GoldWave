@@ -2,6 +2,7 @@
 
 namespace App\Actions\Auth;
 
+use App\Models\Member;
 use App\Models\User;
 use App\Services\OtpService;
 use App\Support\Portal;
@@ -22,6 +23,10 @@ class VerifyLoginOtp
 
         if (! $user || $user->member?->status !== 'active') {
             throw ValidationException::withMessages(['otp' => 'No active GoldWave membership found.']);
+        }
+
+        if ($user->member->isBlocked()) {
+            throw ValidationException::withMessages(['otp' => Member::BLOCKED_LOGIN_MESSAGE]);
         }
 
         Auth::login($user);

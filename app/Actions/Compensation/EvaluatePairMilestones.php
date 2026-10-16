@@ -52,6 +52,12 @@ class EvaluatePairMilestones
             return;
         }
 
+        // T-231 (DOMAIN_LOGIC.md §2.3) — no reward while blocked; entries from before the block stay unused for a
+        // month-end after the unblock.
+        if ($beneficiary->isBlocked()) {
+            return;
+        }
+
         // T-110 (19-09-2026) — milestone thresholds stay unified/mixed
         // regardless of metal (user's explicit instruction), but the ₹
         // reward no longer comes from one flat rate: a milestone's consumed

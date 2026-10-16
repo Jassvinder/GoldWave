@@ -5,6 +5,7 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Actions\Admin\ResetMemberPassword;
 use App\Actions\Admin\UpdateMemberDetails;
 use App\Actions\Emi\RevertCurrentRateBooking;
+use App\Actions\Members\RecordCashEmiForBlockedMember;
 use App\Actions\Profile\VerifyMemberBankDetail;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\ResetMemberPasswordRequest;
@@ -13,6 +14,7 @@ use App\Http\Requests\SuperAdmin\UpdateMemberDetailsRequest;
 use App\Models\EmiRateBookingEvent;
 use App\Models\EmiSchedule;
 use App\Models\Member;
+use App\Models\MemberRestriction;
 use App\Models\MembershipPlan;
 use App\Services\MemberNetworkSummary;
 use App\Support\Dates;
@@ -56,6 +58,14 @@ class MemberManagementController extends Controller
             $query->whereHas('user.store');
         }
 
+        // T-231 — members under a Payout Hold or an Account Block.
+        match ($request->string('restriction')->toString()) {
+            'payout_hold' => $query->whereNotNull('payout_hold_at'),
+            'blocked' => $query->whereNotNull('blocked_at'),
+            'any' => $query->where(fn ($q) => $q->whereNotNull('payout_hold_at')->orWhereNotNull('blocked_at')),
+            default => null,
+        };
+
         $members = $query->orderByDesc('id')->paginate(25)->withQueryString();
 
         $network = $this->networkSummary->forMany($members->getCollection()->pluck('id')->all());
@@ -72,7 +82,7 @@ class MemberManagementController extends Controller
 
         return Inertia::render('super-admin/member-management', [
             'members' => $members,
-            'filters' => $request->only(['search', 'plan', 'status', 'store_owner']),
+            'filters' => $request->only(['search', 'plan', 'status', 'store_owner', 'restriction']),
             // The filter still submits the stable code; only the name is shown.
             'plan_options' => MembershipPlan::orderBy('code')->get(['code', 'name']),
             'status_options' => ['draft', 'payment_pending', 'payment_confirmed', 'active', 'cancelled'],
@@ -179,6 +189,21 @@ class MemberManagementController extends Controller
                 'entry_date' => Dates::date($b->entry_date),
                 'delivered_at' => Dates::date($b->delivered_at),
             ]),
+            // T-231 — the restriction history, newest first, and (only while blocked) the EMI Super Admin can record.
+            'restrictions' => $member->restrictions()->with(['startedBy', 'endedBy'])->orderByDesc('id')->get()->map(fn (MemberRestriction $r) => [
+                'id' => $r->id,
+                'type' => $r->type,
+                'reason' => $r->reason,
+                'started_on' => Dates::date($r->started_at),
+                'started_by' => $r->startedBy->name,
+                'ended_on' => Dates::date($r->ended_at),
+                'ended_by' => $r->endedBy?->name,
+                'end_reason' => $r->end_reason,
+            ]),
+            'record_cash_emi' => $member->isBlocked() && ($next = RecordCashEmiForBlockedMember::nextDue($member)) !== null
+                ? ['installment_no' => $next->installment_no, 'amount' => (string) $next->amount, 'status' => $next->status]
+                : null,
+            'can_manage_restrictions' => $request->user()?->role === 'super_admin',
             'emi' => $member->emiSchedule ? [
                 'rate_booking' => $this->rateBookingSummary($member->emiSchedule),
                 'total_installments' => $member->emiSchedule->total_installments,
@@ -344,6 +369,9 @@ class MemberManagementController extends Controller
             'sponsor_customer_id' => $member->sponsor?->customer_id,
             'status' => $member->status,
             'activated_at' => Dates::date($member->activated_at),
+            // T-231 — Payout Hold / Account Block since (DD-MM-YYYY on the page), or null.
+            'payout_hold_since' => Dates::date($member->payout_hold_at),
+            'blocked_since' => Dates::date($member->blocked_at),
         ];
     }
 }

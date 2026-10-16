@@ -66,6 +66,8 @@ class Member extends Model
         'pending_fields_submitted_at',
         'wallet_balance',
         'wallet_hold_amount',
+        'payout_hold_at',
+        'blocked_at',
     ];
 
     protected function casts(): array
@@ -81,7 +83,30 @@ class Member extends Model
             'store_income_unlocked_at' => 'datetime',
             'wallet_balance' => 'decimal:2',
             'wallet_hold_amount' => 'decimal:2',
+            'payout_hold_at' => 'datetime',
+            'blocked_at' => 'datetime',
         ];
+    }
+
+    /** T-231 — what a blocked member sees at login. The reason itself is never shown to the member. */
+    public const BLOCKED_LOGIN_MESSAGE = 'Your GoldWave account is blocked. Please contact GoldWave.';
+
+    /** T-231 (DOMAIN_LOGIC.md §2.3) — Account Block: no login, and no earnings from the block moment. */
+    public function isBlocked(): bool
+    {
+        return $this->blocked_at !== null;
+    }
+
+    /** T-231 — no withdrawal and no wallet-paid registration: under a Payout Hold, or blocked. */
+    public function cannotTakeMoneyOut(): bool
+    {
+        return $this->payout_hold_at !== null || $this->blocked_at !== null;
+    }
+
+    /** @return HasMany<MemberRestriction, $this> */
+    public function restrictions(): HasMany
+    {
+        return $this->hasMany(MemberRestriction::class);
     }
 
     /** @return BelongsTo<User, $this> */

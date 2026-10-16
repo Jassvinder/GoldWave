@@ -15,6 +15,7 @@ use App\Http\Controllers\SuperAdmin\FinancialSummaryController;
 use App\Http\Controllers\SuperAdmin\LandingHeroController;
 use App\Http\Controllers\SuperAdmin\MaintenanceController;
 use App\Http\Controllers\SuperAdmin\MemberManagementController;
+use App\Http\Controllers\SuperAdmin\MemberRestrictionController;
 use App\Http\Controllers\SuperAdmin\MetalRateController;
 use App\Http\Controllers\SuperAdmin\PaymentSettingsController;
 use App\Http\Controllers\SuperAdmin\PayoutRequestController;
@@ -81,6 +82,12 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
         // T-174 — System Maintenance (insert an entry directly under the root).
         Route::get('maintenance', [MaintenanceController::class, 'index'])->name('maintenance.index');
         Route::post('maintenance', [MaintenanceController::class, 'store'])->name('maintenance.store');
+
+        // T-231 — Payout Hold and Account Block (DOMAIN_LOGIC.md §2.3). Each change re-asks the password.
+        Route::get('member-restrictions', [MemberRestrictionController::class, 'index'])->name('member-restrictions.index');
+        Route::post('member-restrictions/apply', [MemberRestrictionController::class, 'apply'])->name('member-restrictions.apply');
+        Route::post('member-restrictions/lift', [MemberRestrictionController::class, 'lift'])->name('member-restrictions.lift');
+        Route::post('members/{member}/record-cash-emi', [MemberRestrictionController::class, 'recordCashEmi'])->name('members.record-cash-emi');
     });
 
     // S06 — Draw Master Settings + Admin Draw Management.

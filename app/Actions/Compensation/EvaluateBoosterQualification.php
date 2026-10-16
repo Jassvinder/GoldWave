@@ -83,6 +83,11 @@ class EvaluateBoosterQualification
                     continue;
                 }
 
+                // T-231 (DOMAIN_LOGIC.md §2.3) — not evaluated while blocked; they can qualify on a later joining.
+                if ($link['member']->isBlocked()) {
+                    continue;
+                }
+
                 $id = $link['member']->id;
                 $this->evaluateForAncestor($link['member'], $levels, $ruleVersion, $qualifiedLevels[$id] ?? [], $directCounts[$id] ?? 0);
             }

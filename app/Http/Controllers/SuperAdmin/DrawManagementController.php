@@ -107,7 +107,8 @@ class DrawManagementController extends Controller
 
         // T-221 — who can still be drawn, so the manual-result form can suggest IDs and show the name of each one entered.
         $remaining = $group->status === 'active'
-            ? $group->members()->where('is_winner_removed', false)->with('member.user')->get()
+            // T-231 — a blocked member can't be drawn, so it is not offered.
+            ? $group->members()->where('is_winner_removed', false)->whereHas('member', fn ($member) => $member->whereNull('blocked_at'))->with('member.user')->get()
                 ->map(fn (DrawGroupMember $link): array => ['customer_id' => $link->member->customer_id, 'name' => $link->member->user?->name])
                 ->sortBy('customer_id', SORT_NATURAL)->values()
             : collect();

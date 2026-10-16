@@ -73,6 +73,8 @@ class GenerateDrawGroups
             })
             // T-174 — an entry inserted under the root earns Pair/Reward and Booster only, never the Draw.
             ->where('benefits_limited', false)
+            // T-231 (DOMAIN_LOGIC.md §2.3) — a blocked member is not grouped; they join a later group after the unblock.
+            ->whereNull('blocked_at')
             ->whereDoesntHave('drawGroupMemberships')
             ->with(['membershipPlan', 'emiSchedule.installments'])
             ->orderBy('id')

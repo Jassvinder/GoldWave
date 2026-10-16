@@ -2,6 +2,7 @@
 
 namespace App\Actions\Registration;
 
+use App\Actions\Payout\SubmitPayoutRequest;
 use App\Contracts\SmsGatewayContract;
 use App\Mail\WalletPaymentOtpMail;
 use App\Models\User;
@@ -62,6 +63,11 @@ class SendWalletPaymentOtp
     /** Refuses during the 48-hour hold that follows an email/mobile change. */
     public static function ensureNoHold(User $payer, string $errorKey): void
     {
+        // T-231 (DOMAIN_LOGIC.md §2.3) — a Payout Hold or Account Block also stops wallet-paid registrations.
+        if ($payer->member?->cannotTakeMoneyOut()) {
+            throw ValidationException::withMessages([$errorKey => SubmitPayoutRequest::ON_HOLD_MESSAGE]);
+        }
+
         $holdUntil = $payer->walletPaymentHoldUntil();
 
         if ($holdUntil !== null) {

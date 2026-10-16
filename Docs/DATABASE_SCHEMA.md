@@ -51,6 +51,17 @@ Grouped by migration file (`database/migrations/`). Column-level detail and the 
 | `create_store_sales_tables`                                  | `store_sales`, `invoices`, `store_profit_distributions` (+ deferred FK back onto `income_ledger_calculations`)                                                                                                                                                                                                           | §15, §16.2, §16.4                     |
 | `create_store_activity_logs_table`                           | `store_activity_logs` (polymorphic `affected_reference`)                                                                                                                                                                                                                                                                 | §16.3                                 |
 
+### T-231 additions (Payout Hold and Account Block — 16-10-2026)
+
+Migration `2026_10_16_000001_create_member_restrictions` is a separate, forward-only migration. It is not merged into the create migrations, because the live database is in use.
+- **`members.payout_hold_at`, `members.blocked_at`** (nullable timestamps): the current Payout Hold / Account Block, `null` = none. Every login and earnings check reads these.
+- **`member_restrictions`:** one row per hold or block period.
+  - Columns: `member_id`, `type` (`payout_hold` | `account_block`), `reason`, `started_at`, `started_by` → users, `ended_at`, `ended_by` → users, `end_reason`.
+  - Index: (`member_id`, `type`, `ended_at`).
+  - A row with `ended_at = null` is in force.
+- **`booster_payout_schedules.status`** gains `skipped`: a month that fell due during a block, never paid. On Postgres the CHECK constraint is replaced by hand.
+- Rules: `DOMAIN_LOGIC.md` §2.3.
+
 ### T-014 additions (Store Inventory, Buyback, and sale/delivery wiring)
 
 | Migration                                                        | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Canonical business rule |

@@ -10,6 +10,7 @@ import {
     LayoutTemplate,
     Percent,
     QrCode,
+    ShieldBan,
     Scale,
     Settings2,
     ShieldCheck,
@@ -37,6 +38,7 @@ import { index as dummySettingsIndex } from '@/routes/super-admin/dummy-entry-se
 import { index as financialSummaryIndex } from '@/routes/super-admin/financial-summary';
 import { index as landingHeroIndex } from '@/routes/super-admin/landing-hero';
 import { index as maintenanceIndex } from '@/routes/super-admin/maintenance';
+import { index as memberRestrictionsIndex } from '@/routes/super-admin/member-restrictions';
 import { index as membersIndex } from '@/routes/super-admin/members';
 import { index as notificationsIndex } from '@/routes/super-admin/notifications';
 import { index as metalRatesIndex } from '@/routes/super-admin/metal-rates';
@@ -70,6 +72,12 @@ const overviewItems: NavItem[] = [
 const memberItems: NavItem[] = [
     { title: 'Store Admins', href: adminUsersIndex(), icon: UserCog },
     { title: 'Member Management', href: membersIndex(), icon: Users },
+    {
+        title: 'Member Restrictions',
+        href: memberRestrictionsIndex(),
+        icon: ShieldBan,
+        superAdminOnly: true,
+    },
     {
         title: 'Dummy Entry Settings',
         href: dummySettingsIndex(),

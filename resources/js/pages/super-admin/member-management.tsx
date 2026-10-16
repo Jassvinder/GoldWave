@@ -35,6 +35,9 @@ type MemberRow = {
     team_right: number;
     team_total: number;
     is_store_owner: boolean;
+    /** T-231 — Payout Hold / Account Block since, or null. */
+    payout_hold_since: string | null;
+    blocked_since: string | null;
 };
 
 type Props = {
@@ -44,6 +47,7 @@ type Props = {
         plan?: string;
         status?: string;
         store_owner?: string;
+        restriction?: string;
     };
     plan_options: { code: string; name: string }[];
     status_options: string[];
@@ -77,6 +81,7 @@ export default function SuperAdminMemberManagement({
     const [storeOwner, setStoreOwner] = useState(
         filters.store_owner ? '1' : ANY,
     );
+    const [restriction, setRestriction] = useState(filters.restriction ?? ANY);
 
     const applyFilters = (overrides: Record<string, string | number> = {}) => {
         router.get(
@@ -86,6 +91,7 @@ export default function SuperAdminMemberManagement({
                 plan: plan === ANY ? undefined : plan,
                 status: status === ANY ? undefined : status,
                 store_owner: storeOwner === ANY ? undefined : 1,
+                restriction: restriction === ANY ? undefined : restriction,
                 ...overrides,
             },
             { preserveState: true },
@@ -102,6 +108,7 @@ export default function SuperAdminMemberManagement({
         setPlan(ANY);
         setStatus(ANY);
         setStoreOwner(ANY);
+        setRestriction(ANY);
         router.get(index.url(), {}, { preserveState: true });
     };
 
@@ -173,12 +180,22 @@ export default function SuperAdminMemberManagement({
             key: 'status',
             header: 'Status',
             render: (row) => (
-                <Badge
-                    variant={statusVariant[row.status] ?? 'outline'}
-                    className="capitalize"
-                >
-                    {row.status.replace('_', ' ')}
-                </Badge>
+                <div className="flex flex-col items-start gap-1">
+                    <Badge
+                        variant={statusVariant[row.status] ?? 'outline'}
+                        className="capitalize"
+                    >
+                        {row.status.replace('_', ' ')}
+                    </Badge>
+                    {row.blocked_since && (
+                        <Badge variant="destructive">Blocked</Badge>
+                    )}
+                    {row.payout_hold_since && (
+                        <Badge className="border-amber-500/40 bg-amber-500/15 text-amber-800 dark:text-amber-300">
+                            Payout Hold
+                        </Badge>
+                    )}
+                </div>
             ),
         },
     ];
@@ -265,6 +282,20 @@ export default function SuperAdminMemberManagement({
                         <SelectContent>
                             <SelectItem value={ANY}>All Members</SelectItem>
                             <SelectItem value="1">Store Owners only</SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <Select value={restriction} onValueChange={setRestriction}>
+                        <SelectTrigger className="w-full sm:w-44">
+                            <SelectValue placeholder="Any restriction" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={ANY}>Any restriction</SelectItem>
+                            <SelectItem value="any">Restricted</SelectItem>
+                            <SelectItem value="blocked">Blocked</SelectItem>
+                            <SelectItem value="payout_hold">
+                                Payout Hold
+                            </SelectItem>
                         </SelectContent>
                     </Select>
                 </FilterBar>

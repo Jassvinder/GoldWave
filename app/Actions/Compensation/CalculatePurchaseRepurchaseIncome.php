@@ -73,6 +73,9 @@ class CalculatePurchaseRepurchaseIncome
             // T-174 — an entry inserted under the root earns Pair/Reward and Booster only, not even its own 2%.
             if ($payer->benefits_limited) {
                 $this->recordSkipped($storeSale, $ruleVersion, null, $selfRate, $payer, 'benefits_limited');
+            } elseif ($payer->isBlocked()) {
+                // T-231 (DOMAIN_LOGIC.md §2.3) — a blocked member earns nothing, not even on their own purchase.
+                $this->recordSkipped($storeSale, $ruleVersion, null, $selfRate, $payer, 'member_blocked');
             } else {
                 $this->payBeneficiary($storeSale, $payer, $ruleVersion, null, $selfRate, $baseAmount, "Self Purchase/Repurchase Income on {$payer->customer_id}'s own purchase");
             }
@@ -92,6 +95,13 @@ class CalculatePurchaseRepurchaseIncome
                 // T-174 — nor does an entry inserted under the root (Pair/Reward and Booster only).
                 if ($beneficiary->isExcludedFromGeneralIncome()) {
                     $this->recordSkipped($storeSale, $ruleVersion, $level, $rate, $beneficiary, $beneficiary->generalIncomeSkipReason());
+
+                    continue;
+                }
+
+                // T-231 — a blocked upline earns nothing from the block moment; never paid later.
+                if ($beneficiary->isBlocked()) {
+                    $this->recordSkipped($storeSale, $ruleVersion, $level, $rate, $beneficiary, 'member_blocked');
 
                     continue;
                 }

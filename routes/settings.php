@@ -13,7 +13,8 @@ Route::middleware(['auth'])->group(function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::delete('settings/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    // 15-10-2026 (user decision) — no self-service "Delete account" for any role: a member's account is tied to the
+    // network, wallet and income records, and deleting the Super Admin would lock the company out.
 
     Route::get('settings/security', [SecurityController::class, 'edit'])
         ->middleware(RequirePassword::class)

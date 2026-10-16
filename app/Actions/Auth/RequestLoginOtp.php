@@ -2,6 +2,7 @@
 
 namespace App\Actions\Auth;
 
+use App\Models\Member;
 use App\Models\User;
 use App\Services\OtpService;
 use Illuminate\Validation\ValidationException;
@@ -23,6 +24,10 @@ class RequestLoginOtp
             throw ValidationException::withMessages([
                 'identifier' => 'No active GoldWave membership found for this mobile number or email.',
             ]);
+        }
+
+        if ($user->member->isBlocked()) {
+            throw ValidationException::withMessages(['identifier' => Member::BLOCKED_LOGIN_MESSAGE]);
         }
 
         $this->otp->request($identifier, 'login');

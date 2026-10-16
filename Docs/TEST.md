@@ -619,6 +619,46 @@ Total distributed: ₹750 (15% of ₹5,000). **Edge case:** if the chain is shor
 
 **Regression:** cash and GPay/UPI assisted registrations need no code. A Store Admin's store-wallet registration (A07) needs no code.
 
+### 44. Payout Hold (NEW 16-10-2026 — client requirement, DOMAIN_LOGIC.md §2.3, T-231)
+
+**Given** member M has ₹5,000 in the wallet and a pending payout request of ₹2,000 (₹2,000 held, so ₹3,000 available).
+**When** Super Admin applies a Payout Hold with the reason "KYC under review" (Customer ID typed, password re-entered).
+**Then:**
+- The ₹2,000 request becomes `cancelled`, and ₹5,000 is available again.
+- M can still log in.
+- A new payout request of ₹1,000 is refused with a "withdrawals are on hold" message.
+- Paying an assisted registration from M's wallet is refused.
+- A joining under M still credits M's Level Income to the wallet as normal.
+- The hold is listed with Super Admin's name, the time and the reason.
+
+**When** Super Admin lifts the hold. **Then** M's ₹1,000 payout request is accepted.
+
+**Refused without a change:** applying a hold with an empty reason, or with a wrong Customer ID or password. Any role other than Super Admin gets 403.
+
+### 45. Account Block (NEW 16-10-2026 — client requirement, DOMAIN_LOGIC.md §2.3, T-231)
+
+**Given** member B (wallet ₹8,000, a pending ₹3,000 payout request, an active Booster L1 schedule with month 4 due inside the block) sits in the tree under upline U. B's own sponsor is S.
+**When** Super Admin blocks B with a reason.
+
+**Then — login and money:**
+- B's open session is logged out on the next request. Password login and OTP login are refused with the "blocked" message.
+- The ₹3,000 request is cancelled. The ₹8,000 stays in the wallet.
+
+**During the block** a new member N joins under B (B is N's sponsor and placement parent):
+- **Level Income:** B's level is recorded `skipped / member_blocked`. U's levels above B are paid as normal.
+- **Pair:** no Pair entry is created for B. U gets their Pair entry as normal.
+- **Booster:** B is not evaluated for qualification. U is.
+- **Booster payout:** B's month-4 payout is marked `skipped` on its date, and B's wallet stays ₹8,000.
+- **Draw:** B is not grouped or drawn. If N wins a draw, the upline benefit for B is skipped.
+- **EMI:** Super Admin uses **Record Cash EMI** on B's Member Detail page, and B's next installment becomes paid. When B's plan is fully paid, B's product is still released. The button is not shown for a member who is not blocked.
+
+**When** Super Admin unblocks B (B also had a separate Payout Hold, and "Also lift the Payout Hold" stays ticked). **Then:**
+- Both restrictions end, and B can request a payout again. With the box unticked, the Payout Hold would stay.
+- B can log in.
+- B's month-5 Booster payout is paid on its date.
+- The next joining under B credits B as normal.
+- Nothing from the block period is ever paid.
+
 ## Concurrency Verification (T-020, 15-09-2026)
 
 A separate PHPUnit testsuite, `tests/Concurrency/`, verifies genuine parallel-access safety for the financial critical sections `Docs/TEST.md`'s Risk-based Coverage table calls out by name: Store Wallet deduction (§16.1), Store Inventory decrement (§16.8), and the Booster Payout Processor (§19). It is **not** part of the default `php artisan test` run and never runs against SQLite — see `DOMAIN_LOGIC.md` §21's T-020 pre-coding entry for why (SQLite `:memory:` can't even be shared across two connections, so a real race can't be produced against it; the code's actual `lockForUpdate()` behavior is Postgres-specific). Run it explicitly, against the real dev Postgres database, with:

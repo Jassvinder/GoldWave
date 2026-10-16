@@ -66,7 +66,10 @@ class CalculateStoreProfitDistribution
         $chain = $this->sponsorChain->ancestors($ownerMember, self::SPONSOR_LEVELS);
 
         DB::transaction(function () use ($storeSale, $ownerMember, $ruleVersion, $rates, $baseAmount, $chain) {
-            $this->payBeneficiary($storeSale, 'store_owner', $ownerMember, (float) ($rates['store_owner'] ?? 0), $baseAmount, $ruleVersion->id);
+            // T-231 (DOMAIN_LOGIC.md §2.3) — a blocked store owner or sponsor gets no share from the block moment.
+            if (! $ownerMember->isBlocked()) {
+                $this->payBeneficiary($storeSale, 'store_owner', $ownerMember, (float) ($rates['store_owner'] ?? 0), $baseAmount, $ruleVersion->id);
+            }
 
             for ($level = 1; $level <= self::SPONSOR_LEVELS; $level++) {
                 $beneficiary = $chain[$level - 1] ?? null;
@@ -78,7 +81,7 @@ class CalculateStoreProfitDistribution
                 // T-149 — an unassigned dummy (or the seeded company root, never assignable) must never itself become a
                 // paid compensation beneficiary, matching the same guard already applied to Pair entries/Booster.
                 // T-174 — nor an entry inserted under the root (Pair/Reward and Booster only).
-                if ($beneficiary->isExcludedFromGeneralIncome()) {
+                if ($beneficiary->isExcludedFromGeneralIncome() || $beneficiary->isBlocked()) {
                     continue;
                 }
 

@@ -67,6 +67,11 @@ class CreatePairEntries
                     continue;
                 }
 
+                // T-231 (DOMAIN_LOGIC.md §2.3) — a joining during a block never counts for the blocked member.
+                if ($link['member']->isBlocked()) {
+                    continue;
+                }
+
                 PairEntry::create([
                     'member_id' => $link['member']->id,
                     'side' => $link['side'],

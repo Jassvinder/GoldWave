@@ -28,7 +28,7 @@ _(none — the clear items of the 28-09-2026 feedback batch, T-157…T-162, are 
 
 ## Pending
 
-_No pending task._ (Both 30-09-2026 batches, T-192…T-196 and T-198…T-200, are done; T-197 waits for the user's flow — see Blocked.)
+_No pending task._ (T-197 waits for the user's flow — see Blocked.)
 
 ## Blocked
 
@@ -142,6 +142,35 @@ _No pending task._ (Both 30-09-2026 batches, T-192…T-196 and T-198…T-200, ar
 - [x] **T-160 — Store invoice: view, Print, Share via WhatsApp** · Completed: 28-09-2026 · Verified: full suite 363/363; new test covers a store opening its own sale's invoice (store, customer = walk-in, item, total 30,900 incl. GST) and another store getting 404. New route `admin.sales.invoice` and standalone page `invoices/show` (no portal layout, `app.tsx`). The Recent Sales invoice number links to it. Print uses the browser dialog (also Save as PDF); Share opens `wa.me` with a text summary. Not included: store GSTIN (not stored) and a print/share activity-log entry. No manual browser check.
 - [x] **T-161 — Store Sales: Store Wallet removed as a sale payment source** · Completed: 28-09-2026 · Verified: full suite 363/363. New test: `store_wallet` is rejected, and neither stock nor wallet changes. The existing inventory-sale test now pays Cash and asserts the Store Wallet is untouched. Form offers Cash / Other only; `RecordStoreSaleRequest` allows `cash,other`. DB enum and `ConfirmStoreSale`'s wallet branch are unchanged, because historic rows still use them (DOMAIN_LOGIC §16.2 note). The member cash-collection-via-Store-Wallet feature (§12.2) is untouched. No manual browser check.
 - [x] **T-163 — Company Wallet manual top-up; balance never below zero** · Completed: 28-09-2026 · Verified: new test covering a top-up (balance +5,000, `manual_topup` credit with the note), a 0 amount rejected, a debit larger than the balance refused with nothing changed, and a debit within the balance allowed; Pint / Larastan 0 / `tsc` / `vp check` (1 file) clean; fresh `vp build`. Changes: `CompanyWalletService::topUp()` and a guarded `debit()`, route `super-admin.company-wallet.top-up`, a Top Up card and a Source column on the page. No manual browser check.
+- [x] **T-231 — Payout Hold and Account Block, Super Admin only, with a reason (client requirement, 15/16-10-2026)** · Completed: 16-10-2026 · Verified: new `tests/Feature/Members/MemberRestrictionTest.php`, 8 tests from `TEST.md` scenarios 44–45:
+  - Only Super Admin, with a reason, the typed Customer ID and the password; the root can't be restricted.
+  - A hold cancels pending payouts and stops withdrawals and wallet registrations, while login and earnings carry on; lifting it restores requests.
+  - A block ends the open session, refuses password and OTP login, cancels payouts and keeps the wallet.
+  - While blocked: Level Income is `member_blocked` for the member and paid for the upline; no Pair entry for the member, the upline gets theirs; the member earns again after the unblock.
+  - Booster: a month due inside the block is `skipped`; one due before it waits and is paid after; later months are paid.
+  - Draw: no grouping, no manual or random draw, and the group stays active.
+  - Record Cash EMI works only while blocked. Unblock with or without "Also lift the Payout Hold".
+  - Full suite 478/478, then Members, Auth, Compensation and Jobs 123/123 again after the Larastan tidy-up. Pint and Larastan clean; `gw types`, `gw check` on the 5 pages, `gw build` OK. No browser check.
+  - **Rules:** `DOMAIN_LOGIC.md` §2.3. **Scenarios:** `TEST.md` 44–45. **UI:** `INSTRUCTIONS.md` "Member Restrictions". **Schema:** `DATABASE_SCHEMA.md` "T-231 additions". New migration `2026_10_16_000001_create_member_restrictions`, forward-only. `gw deploy` runs it on the live server.
+  - **Client/user decisions:**
+    - Two restrictions: Payout Hold (withdrawals only) and Account Block (login and earnings, from the moment applied).
+    - Hold and block cancel pending payouts. No wallet-paid registration under either.
+    - A blocked member stays in the tree; the uplines are unaffected.
+    - Draw option (b): a blocked member is not grouped or drawn.
+    - Booster months inside a block are skipped; later ones continue.
+    - EMIs continue and the product is still delivered: a Record Cash EMI button on Member Detail, no new pages.
+    - Unblock has "Also lift the Payout Hold" (ticked by default).
+  - **Code:**
+    - New: `Models/MemberRestriction`; `Actions/Members/ApplyMemberRestriction`, `LiftMemberRestriction`, `RecordCashEmiForBlockedMember`; `SuperAdmin/MemberRestrictionController` + `ChangeMemberRestrictionRequest`; middleware `EnsureMemberNotBlocked`; page `super-admin/member-restrictions`.
+    - Checks added in: the 4 login/OTP actions, `SubmitPayoutRequest`, `SendWalletPaymentOtp::ensureNoHold`, `CalculateLevelIncome`, `ReleaseHeldLevelIncome`, `CreatePairEntries`, `EvaluatePairMilestones`, `EvaluateBoosterQualification`, `ProcessBoosterPayouts`, `CalculatePurchaseRepurchaseIncome`, `CalculateStoreProfitDistribution`, `GenerateDrawGroups` and `ExecuteMonthlyDraw` (pool, manual entry, upline benefit).
+  - **History of the decision:** the first idea was one "block", with option (A) skip earnings or (B) block login and zero earnings at unblock. The client chose both restrictions instead, with the block working like (A).
+- [x] **T-230 — "Delete account" removed for every role; database-refresh steps for after live testing (user request, chat)** · Completed: 15-10-2026 · Verified: new `ProfileUpdateTest` case (a member and a Super Admin get 405 on `DELETE /settings/profile`, still exist, and route `profile.destroy` is gone); Settings tests 10/10; Pint and Larastan clean; `gw types`, `gw check` on the page, `gw build` OK.
+  - Removed: the route, `ProfileController::destroy()`, `ProfileDeleteRequest`, `components/delete-user.tsx` (and its use on Settings → Profile), and the two starter-kit delete tests.
+  - Why: a member's account is tied to the network, wallet and income, and its user row would leave a member without a login. A deleted Super Admin would lock the company out.
+  - Checked, not changed: there is **no** block / deactivate / suspend option for a member. `members.status` has draft / payment_pending / payment_confirmed / active / cancelled, but no screen sets a member to anything after activation.
+  - Earnings for a non-active member: Level Income skips them (`upline_inactive`, lapses, never paid later). Pair entries and Booster do not look at status, only at dummies. A future block feature must decide those two.
+  - Overdue EMI (T-182) holds earnings and releases them later; it does not skip them.
+  - Refresh steps: `DEPLOYMENT.md` §0 "Refreshing the database again after live testing".
 - [x] **T-229 — Every other payment settlement runs in the background too, all or nothing: store cash collection, wallet-funded registration, online confirmation (user request, chat)** · Completed: 15-10-2026 · Verified:
   - New tests: a failing store collection rolls back with the Store Wallet not charged and the store admin alerted (`AdminPortalTest`). A failing wallet registration rolls back with the payer not charged and alerted, and its status page is not "processing" (`MemberPortalTest`).
   - The short-wallet test now expects no member at all.

@@ -79,7 +79,14 @@ class ExecuteMonthlyDraw
             }
 
             $cycleMonthNo = ((int) $group->executions()->max('cycle_month_no')) + 1;
-            $pool = $group->members()->where('is_winner_removed', false)->with('member')->orderBy('id')->get();
+            $remaining = $group->members()->where('is_winner_removed', false)->with('member')->orderBy('id')->get();
+            // T-231 (DOMAIN_LOGIC.md §2.3) — a blocked member stays in the group but can't be drawn while blocked.
+            $pool = $remaining->reject(fn (DrawGroupMember $link): bool => $link->member->isBlocked())->values();
+
+            if ($pool->isEmpty()) {
+                throw ValidationException::withMessages(['customer_ids' => "No member of Group #{$group->group_no} can be drawn right now."]);
+            }
+
             $prize = $this->prizes->snapshot($group, $cycleMonthNo);
             $expected = min(max(1, (int) $prize->winners_count), $pool->count());
 
@@ -90,6 +97,8 @@ class ExecuteMonthlyDraw
             }
 
             $byCustomerId = $pool->keyBy(fn (DrawGroupMember $link): string => strtoupper((string) $link->member->customer_id));
+            $blockedIds = $remaining->filter(fn (DrawGroupMember $link): bool => $link->member->isBlocked())
+                ->map(fn (DrawGroupMember $link): string => strtoupper((string) $link->member->customer_id))->all();
             $errors = [];
 
             foreach ($customerIds as $index => $customerId) {
@@ -97,6 +106,8 @@ class ExecuteMonthlyDraw
                     $errors["customer_ids.{$index}"] = 'Enter the Customer ID drawn.';
                 } elseif (array_search($customerId, $customerIds, true) !== $index) {
                     $errors["customer_ids.{$index}"] = "{$customerId} is entered twice.";
+                } elseif (in_array($customerId, $blockedIds, true)) {
+                    $errors["customer_ids.{$index}"] = "{$customerId} is blocked and can't be drawn now.";
                 } elseif (! $byCustomerId->has($customerId)) {
                     $errors["customer_ids.{$index}"] = "{$customerId} is not in Group #{$group->group_no}'s draw (not in this group, or has already won).";
                 }
@@ -121,7 +132,7 @@ class ExecuteMonthlyDraw
                 $executions[] = $this->recordWinner($group, $cycleMonthNo, $index + 1, $byCustomerId->get($customerId), (string) $proof);
             }
 
-            $this->completeIfFinished($group, $cycleMonthNo, $pool->count() - $expected);
+            $this->completeIfFinished($group, $cycleMonthNo, $remaining->count() - $expected);
 
             return $executions;
         });
@@ -157,13 +168,15 @@ class ExecuteMonthlyDraw
             return []; // Already executed this month — idempotent no-op.
         }
 
-        $pool = $group->members()->where('is_winner_removed', false)->orderBy('id')->get();
+        $remaining = $group->members()->where('is_winner_removed', false)->with('member')->orderBy('id')->get();
+        // T-231 (DOMAIN_LOGIC.md §2.3) — a blocked member stays in the group but can't be drawn while blocked.
+        $pool = $remaining->reject(fn (DrawGroupMember $link): bool => $link->member->isBlocked())->values();
 
         if ($pool->isEmpty()) {
             return [];
         }
 
-        $executions = DB::transaction(function () use ($group, $cycleMonthNo, $pool) {
+        $executions = DB::transaction(function () use ($group, $cycleMonthNo, $pool, $remaining) {
             $prize = $this->prizes->snapshot($group, $cycleMonthNo);
             $winnersToPick = min(max(1, (int) $prize->winners_count), $pool->count());
             $executions = [];
@@ -184,7 +197,8 @@ class ExecuteMonthlyDraw
                 $pool = $pool->forget($index)->values();
             }
 
-            $this->completeIfFinished($group, $cycleMonthNo, $pool->count());
+            // Blocked members still count as left in the group, so it never completes on them.
+            $this->completeIfFinished($group, $cycleMonthNo, $remaining->count() - $winnersToPick);
 
             return $executions;
         });
@@ -205,7 +219,8 @@ class ExecuteMonthlyDraw
 
         // The company root / an unassigned dummy never receives it (it is never a beneficiary), and since T-174 nor
         // does an entry inserted under the root (Pair/Reward and Booster only).
-        if ($sponsor && ! $sponsor->isExcludedFromGeneralIncome() && $sponsor->directs()->count() >= 10) {
+        // T-231 — nor does a blocked sponsor.
+        if ($sponsor && ! $sponsor->isExcludedFromGeneralIncome() && ! $sponsor->isBlocked() && $sponsor->directs()->count() >= 10) {
             $uplineBenefitMemberId = $sponsor->id;
         }
 
