@@ -134,7 +134,7 @@ export default function InvoiceShow({ invoice, back_url }: Props) {
                         <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-5">
                             <div className="flex items-center gap-3">
                                 <img
-                                    src="/Images/Logo.webp"
+                                    src="/Images/Logo.webp?v=2"
                                     alt="GoldWave"
                                     className="size-12 rounded-full object-cover"
                                 />

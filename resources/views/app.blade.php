@@ -30,8 +30,9 @@
             }
         </style>
 
-        <link rel="icon" href="/Logo.ico" sizes="any">
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+        {{-- ?v=: bump when the logo files change, so Cloudflare/WhatsApp caches fetch the new image --}}
+        <link rel="icon" href="/Logo.ico?v=2" sizes="any">
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2">
 
         {{-- Link-preview (WhatsApp/Facebook/Telegram) metadata: these crawlers don't run JS, so it must be server-rendered --}}
         <meta name="description" content="GoldWave — Gold & Silver Jewellery Membership">

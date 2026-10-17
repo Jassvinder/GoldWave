@@ -10,7 +10,7 @@ export function PublicLogoLink() {
             aria-label="GoldWave home"
         >
             <img
-                src="/Images/Logo.webp"
+                src="/Images/Logo.webp?v=2"
                 alt="GoldWave"
                 className="size-14 rounded-full object-cover"
             />
