@@ -164,8 +164,9 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
 
 ### Shared-link preview (T-232, 17-10-2026, user-requested)
 
-- When any GoldWave link (for example a `/join?ref=…` registration link) is shared on WhatsApp, Facebook or Telegram, the preview shows the **GoldWave logo**, title "GoldWave" and "GoldWave — Gold & Silver Jewellery Membership". It never shows the Laravel logo.
-- The tags (`og:*`, `twitter:*`, `description`) are server-rendered in `resources/views/app.blade.php` for every page, because these crawlers do not run JavaScript. The image is `public/Images/og-logo.jpg`, a 400×400 JPEG of about 27 KB made from `Logo.png`. WhatsApp showed no thumbnail with the 238 KB PNG, so keep this image small. `public/apple-touch-icon.png` is a 180×180 copy of the same logo.
+- When any GoldWave link (for example a `/join?ref=…` registration link) is shared on WhatsApp, the preview shows the **GoldWave logo**, title "GoldWave" and "GoldWave — Gold & Silver Jewellery Membership". It never shows the Laravel logo.
+- The thumbnail comes from `public/apple-touch-icon.png`, a 180×180 copy of `Images/Logo.png`. WhatsApp uses this icon when the page has **no `og:image`**. Do not add an `og:image`: on 17-10-2026 WhatsApp showed no image at all with one set, first with `Logo.png` and then with a small JPEG.
+- The text tags (`og:title`, `og:description`, `description`, etc.) are server-rendered in `resources/views/app.blade.php` for every page, because these crawlers do not run JavaScript.
 - WhatsApp caches a preview per URL. A link that was already shared may keep showing the old logo for a while, but newly shared links show the new one.
 
 ### Registration page
