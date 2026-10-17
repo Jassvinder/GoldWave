@@ -40,11 +40,15 @@
         <meta property="og:title" content="GoldWave">
         <meta property="og:description" content="GoldWave — Gold & Silver Jewellery Membership">
         <meta property="og:url" content="{{ url()->current() }}">
-        <meta property="og:image" content="{{ asset('Images/Logo.png') }}">
-        <meta property="og:image:width" content="564">
-        <meta property="og:image:height" content="569">
+        {{-- Small (~27 KB) JPEG: WhatsApp drops the thumbnail when the image is too large --}}
+        <meta property="og:image" content="{{ asset('Images/og-logo.jpg') }}">
+        <meta property="og:image:secure_url" content="{{ asset('Images/og-logo.jpg') }}">
+        <meta property="og:image:type" content="image/jpeg">
+        <meta property="og:image:width" content="400">
+        <meta property="og:image:height" content="400">
+        <meta property="og:image:alt" content="GoldWave logo">
         <meta name="twitter:card" content="summary">
-        <meta name="twitter:image" content="{{ asset('Images/Logo.png') }}">
+        <meta name="twitter:image" content="{{ asset('Images/og-logo.jpg') }}">
 
         @fonts
 
