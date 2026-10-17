@@ -162,6 +162,12 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
   - The refund page states in a red box: **no refunds, no returns, no cancellation for a refund** for plans, EMIs, store purchases or payouts (§0, §16.7). It also explains that a buyback is not a refund.
   - Links: a **Legal** column in the home page footer, and a line under "Continue to Payment" on `/join` ("By continuing you agree to the Terms & Conditions, Privacy Policy and No-Refund Policy", each opening in a new tab).
 
+### Shared-link preview (T-232, 17-10-2026, user-requested)
+
+- When any GoldWave link (for example a `/join?ref=…` registration link) is shared on WhatsApp, Facebook or Telegram, the preview shows the **GoldWave logo**, title "GoldWave" and "GoldWave — Gold & Silver Jewellery Membership". It never shows the Laravel logo.
+- The tags (`og:*`, `twitter:*`, `description`) are server-rendered in `resources/views/app.blade.php` for every page, because these crawlers do not run JavaScript. The image is `public/Images/Logo.png`. `public/apple-touch-icon.png` is a 180×180 copy of the same logo.
+- WhatsApp caches a preview per URL. A link that was already shared may keep showing the old logo for a while, but newly shared links show the new one.
+
 ### Registration page
 
 - Invitation/Sponsor Code input; validated sponsor name displayed directly under the code input.

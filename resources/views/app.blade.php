@@ -33,6 +33,19 @@
         <link rel="icon" href="/Logo.ico" sizes="any">
         <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 
+        {{-- Link-preview (WhatsApp/Facebook/Telegram) metadata: these crawlers don't run JS, so it must be server-rendered --}}
+        <meta name="description" content="GoldWave — Gold & Silver Jewellery Membership">
+        <meta property="og:type" content="website">
+        <meta property="og:site_name" content="GoldWave">
+        <meta property="og:title" content="GoldWave">
+        <meta property="og:description" content="GoldWave — Gold & Silver Jewellery Membership">
+        <meta property="og:url" content="{{ url()->current() }}">
+        <meta property="og:image" content="{{ asset('Images/Logo.png') }}">
+        <meta property="og:image:width" content="564">
+        <meta property="og:image:height" content="569">
+        <meta name="twitter:card" content="summary">
+        <meta name="twitter:image" content="{{ asset('Images/Logo.png') }}">
+
         @fonts
 
         @viteReactRefresh
