@@ -40,9 +40,15 @@
         <meta property="og:site_name" content="GoldWave">
         <meta property="og:title" content="GoldWave">
         <meta property="og:description" content="GoldWave — Gold & Silver Jewellery Membership">
-        <meta property="og:url" content="{{ url()->current() }}">
-        {{-- No og:image on purpose: WhatsApp then shows the apple-touch-icon (the GoldWave logo) as the thumbnail.
-             With an og:image set, WhatsApp showed no image at all (17-10-2026). --}}
+        <meta property="og:url" content="{{ url()->full() }}">
+        {{-- Large 1200x630 baseline JPEG (~80 KB): WhatsApp shows it as a big, sharp banner. Without an og:image it
+             shrinks the apple-touch-icon into a tiny blurry thumbnail. Keep it a JPEG under 300 KB. --}}
+        <meta property="og:image" content="{{ asset('Images/og-banner.jpg') }}?v=1">
+        <meta property="og:image:type" content="image/jpeg">
+        <meta property="og:image:width" content="1200">
+        <meta property="og:image:height" content="630">
+        <meta property="og:image:alt" content="GoldWave logo">
+        <meta name="twitter:card" content="summary_large_image">
 
         @fonts
 
