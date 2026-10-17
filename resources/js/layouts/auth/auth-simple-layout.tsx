@@ -17,7 +17,7 @@ export default function AuthSimpleLayout({
                             className="flex flex-col items-center gap-2 font-medium"
                         >
                             <img
-                                src="/Images/Logo.webp?v=2"
+                                src="/Images/Logo.webp?v=3"
                                 alt="GoldWave"
                                 className="mb-1 size-16 rounded-full object-cover"
                             />

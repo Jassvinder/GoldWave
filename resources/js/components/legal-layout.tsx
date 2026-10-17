@@ -48,7 +48,7 @@ export function LegalLayout({
                     <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 px-4 py-3">
                         <Link href={home()} className="flex items-center gap-2">
                             <img
-                                src="/Images/Logo.webp?v=2"
+                                src="/Images/Logo.webp?v=3"
                                 alt="GoldWave"
                                 className="size-9 rounded-full object-cover ring-2 ring-amber-300"
                             />

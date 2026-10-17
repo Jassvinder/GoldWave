@@ -237,7 +237,7 @@ export default function Welcome({ hero, contact, plans, stores }: Props) {
                     <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3">
                         <a href="#top" className="flex items-center gap-2">
                             <img
-                                src="/Images/Logo.webp?v=2"
+                                src="/Images/Logo.webp?v=3"
                                 alt="GoldWave"
                                 className="size-10 rounded-full object-cover ring-2 ring-amber-300"
                             />
@@ -626,7 +626,7 @@ export default function Welcome({ hero, contact, plans, stores }: Props) {
                         <div className="flex flex-col gap-3 lg:col-span-2">
                             <div className="flex items-center gap-2">
                                 <img
-                                    src="/Images/Logo.webp?v=2"
+                                    src="/Images/Logo.webp?v=3"
                                     alt=""
                                     className="size-9 rounded-full object-cover"
                                 />
