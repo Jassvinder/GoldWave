@@ -43,7 +43,7 @@
         <meta property="og:url" content="{{ url()->full() }}">
         {{-- Large 1200x630 baseline JPEG (~80 KB): WhatsApp shows it as a big, sharp banner. Without an og:image it
              shrinks the apple-touch-icon into a tiny blurry thumbnail. Keep it a JPEG under 300 KB. --}}
-        <meta property="og:image" content="{{ asset('Images/og-banner.jpg') }}?v=1">
+        <meta property="og:image" content="{{ asset('Images/og-banner.jpg') }}?v=2">
         <meta property="og:image:type" content="image/jpeg">
         <meta property="og:image:width" content="1200">
         <meta property="og:image:height" content="630">
