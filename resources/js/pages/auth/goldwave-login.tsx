@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { password as loginWithPassword } from '@/routes/member/login';
 import * as otp from '@/routes/member/login/otp';
 import { reset as passwordResetRoute } from '@/routes/member/password';
+import { show as registrationPage } from '@/routes/registration';
 
 type Props = {
     status?: string;
@@ -200,6 +201,13 @@ export default function GoldWaveLogin({ status }: Props) {
                         {status}
                     </p>
                 )}
+
+                <p className="text-muted-foreground border-t pt-4 text-center text-sm">
+                    New to GoldWave?{' '}
+                    <TextLink href={registrationPage.url()} tabIndex={5}>
+                        Register here
+                    </TextLink>
+                </p>
             </div>
         </>
     );

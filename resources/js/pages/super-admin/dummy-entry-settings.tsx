@@ -20,15 +20,10 @@ import {
 type Props = {
     enabled: boolean;
     daily_count: number;
-    plan_code: 'A' | 'B' | 'C' | 'D';
+    plan_code: string;
+    /** T-237 — active EMI plans, from Membership Plans. */
+    plans: { code: string; label: string }[];
     stats: { generated: number; unassigned: number; assigned: number };
-};
-
-const PLAN_LABELS: Record<string, string> = {
-    A: 'Silver Start — ₹1,000 × 20 (100gm Silver)',
-    B: 'Silver Prime — ₹3,000 × 10 (100gm Silver)',
-    C: 'Gold Rise — ₹5,000 × 10 (5gm Gold)',
-    D: 'Gold Elite — ₹10,000 × 10 (10gm Gold)',
 };
 
 /** INSTRUCTIONS.md S04 — daily count, enable/disable, generation controls. */
@@ -36,6 +31,7 @@ export default function SuperAdminDummyEntrySettings({
     enabled,
     daily_count,
     plan_code,
+    plans,
     stats,
 }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
@@ -129,24 +125,20 @@ export default function SuperAdminDummyEntrySettings({
                             </Label>
                             <Select
                                 value={data.plan_code}
-                                onValueChange={(v) =>
-                                    setData(
-                                        'plan_code',
-                                        v as Props['plan_code'],
-                                    )
-                                }
+                                onValueChange={(v) => setData('plan_code', v)}
                             >
                                 <SelectTrigger id="plan_code">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {(['A', 'B', 'C', 'D'] as const).map(
-                                        (code) => (
-                                            <SelectItem key={code} value={code}>
-                                                {PLAN_LABELS[code]}
-                                            </SelectItem>
-                                        ),
-                                    )}
+                                    {plans.map((plan) => (
+                                        <SelectItem
+                                            key={plan.code}
+                                            value={plan.code}
+                                        >
+                                            {plan.label}
+                                        </SelectItem>
+                                    ))}
                                 </SelectContent>
                             </Select>
                             <p className="text-muted-foreground text-xs">

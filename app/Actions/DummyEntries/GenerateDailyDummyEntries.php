@@ -122,6 +122,9 @@ class GenerateDailyDummyEntries
             'rate_booking_method' => 'future_rate',
             'installment_amount' => $rateBooking['installment_amount'],
             'future_commitment_amount' => $rateBooking['future_commitment_amount'],
+            // T-237 — kept so a later plan edit never changes this entry (DOMAIN_LOGIC.md §3.3).
+            'plan_installment_amount' => $plan->amount,
+            'plan_fixed_weight_grams' => $plan->fixed_weight_grams,
         ]);
 
         // Deliberately created directly as `paid`, never through InitiateEmiInstallmentPayment/ApproveCashPayment, so

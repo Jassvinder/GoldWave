@@ -8,6 +8,7 @@ import {
     Gem,
     LayoutGrid,
     LayoutTemplate,
+    Package,
     Percent,
     QrCode,
     ShieldBan,
@@ -39,6 +40,7 @@ import { index as financialSummaryIndex } from '@/routes/super-admin/financial-s
 import { index as landingHeroIndex } from '@/routes/super-admin/landing-hero';
 import { index as maintenanceIndex } from '@/routes/super-admin/maintenance';
 import { index as memberRestrictionsIndex } from '@/routes/super-admin/member-restrictions';
+import { index as membershipPlansIndex } from '@/routes/super-admin/membership-plans';
 import { index as membersIndex } from '@/routes/super-admin/members';
 import { index as notificationsIndex } from '@/routes/super-admin/notifications';
 import { index as metalRatesIndex } from '@/routes/super-admin/metal-rates';
@@ -97,6 +99,12 @@ const compensationItems: NavItem[] = [
         title: 'Rule Versions',
         href: ruleVersionsIndex(),
         icon: Percent,
+        superAdminOnly: true,
+    },
+    {
+        title: 'Membership Plans',
+        href: membershipPlansIndex(),
+        icon: Package,
         superAdminOnly: true,
     },
     {

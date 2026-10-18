@@ -2,6 +2,7 @@
 
 namespace App\Actions\Registration;
 
+use App\Models\EmiSchedule;
 use App\Models\MembershipPlan;
 use App\Models\MetalRate;
 use App\Services\RuleVersionService;
@@ -96,13 +97,38 @@ class CalculateEmiRateBooking
     /** @return RateBooking */
     private function currentRate(MembershipPlan $plan, int $paidInstallments, float $paidAmount): array
     {
-        if (! $plan->fixed_weight_grams) {
+        return $this->currentRateWith($plan, (float) $plan->fixed_weight_grams, (int) $plan->installment_count, $paidInstallments, $paidAmount);
+    }
+
+    /**
+     * T-237 (DOMAIN_LOGIC.md §3.3) — an existing member's Current Rate booking uses their own schedule: the weight kept
+     * when they joined and their own EMI count, never the live plan, so a later plan edit cannot change it.
+     *
+     * @return RateBooking
+     */
+    public function currentRateForSchedule(EmiSchedule $schedule, int $paidInstallments, float $paidAmount): array
+    {
+        $plan = $schedule->membershipPlan;
+
+        if ($plan === null || ! $plan->isEmiPlan()) {
+            throw ValidationException::withMessages([
+                'rate_booking_method' => 'Rate booking only applies to EMI plans.',
+            ]);
+        }
+
+        return $this->currentRateWith($plan, (float) $schedule->joinedPlanWeightGrams(), (int) $schedule->total_installments, $paidInstallments, $paidAmount);
+    }
+
+    /** @return RateBooking */
+    private function currentRateWith(MembershipPlan $plan, float $weightGrams, int $totalInstallments, int $paidInstallments, float $paidAmount): array
+    {
+        if ($weightGrams <= 0) {
             throw ValidationException::withMessages([
                 'rate_booking_method' => 'This plan has no fixed jewellery weight configured for Current Rate Booking.',
             ]);
         }
 
-        $pendingInstallments = (int) $plan->installment_count - $paidInstallments;
+        $pendingInstallments = $totalInstallments - $paidInstallments;
 
         if ($pendingInstallments < 1) {
             throw ValidationException::withMessages([
@@ -110,7 +136,7 @@ class CalculateEmiRateBooking
             ]);
         }
 
-        return $this->currentRateFor((string) $plan->product_category, (float) $plan->fixed_weight_grams, $pendingInstallments, $paidAmount);
+        return $this->currentRateFor((string) $plan->product_category, $weightGrams, $pendingInstallments, $paidAmount);
     }
 
     /**

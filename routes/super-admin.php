@@ -16,6 +16,7 @@ use App\Http\Controllers\SuperAdmin\LandingHeroController;
 use App\Http\Controllers\SuperAdmin\MaintenanceController;
 use App\Http\Controllers\SuperAdmin\MemberManagementController;
 use App\Http\Controllers\SuperAdmin\MemberRestrictionController;
+use App\Http\Controllers\SuperAdmin\MembershipPlanController;
 use App\Http\Controllers\SuperAdmin\MetalRateController;
 use App\Http\Controllers\SuperAdmin\PaymentSettingsController;
 use App\Http\Controllers\SuperAdmin\PayoutRequestController;
@@ -59,6 +60,11 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
         Route::middleware('password.confirm:password.confirm,300')->group(function () {
             Route::get('rule-versions', [RuleVersionController::class, 'index'])->name('rule-versions.index');
             Route::post('rule-versions', [RuleVersionController::class, 'store'])->name('rule-versions.store');
+
+            // T-237 — Membership Plans (DOMAIN_LOGIC.md §3.3): prices are as sensitive as the compensation rules.
+            Route::get('membership-plans', [MembershipPlanController::class, 'index'])->name('membership-plans.index');
+            Route::post('membership-plans', [MembershipPlanController::class, 'store'])->name('membership-plans.store');
+            Route::patch('membership-plans/{plan}', [MembershipPlanController::class, 'update'])->name('membership-plans.update');
         });
 
         // T-196 — company GPay/UPI details (UPI ID + QR) shown on every payment step.

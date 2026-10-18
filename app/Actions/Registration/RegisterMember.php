@@ -139,6 +139,9 @@ class RegisterMember
                     'maintenance_cost' => $rateBooking['maintenance_cost'],
                     'rule_version_id' => $rateBooking['rule_version_id'],
                     'future_commitment_amount' => $rateBooking['future_commitment_amount'],
+                    // T-237 — kept so a later plan edit never changes this member (DOMAIN_LOGIC.md §3.3).
+                    'plan_installment_amount' => $plan->amount,
+                    'plan_fixed_weight_grams' => $plan->fixed_weight_grams,
                 ]);
 
                 $registrationAmount = $rateBooking['installment_amount'];

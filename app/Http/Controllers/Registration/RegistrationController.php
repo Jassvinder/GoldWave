@@ -101,11 +101,12 @@ class RegistrationController extends Controller
 
     public function status(Member $member): Response
     {
-        $member->load(['payments', 'emiSchedule', 'membershipPlan']);
+        $member->load(['payments', 'emiSchedule', 'membershipPlan', 'user']);
 
         return Inertia::render('registration/status', [
             'member' => [
                 'id' => $member->id,
+                'name' => $member->user?->name,
                 'customer_id' => $member->customer_id,
                 'status' => $member->status,
                 'plan' => $member->membershipPlan?->name,

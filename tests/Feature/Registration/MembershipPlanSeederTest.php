@@ -24,3 +24,16 @@ test('a fresh install seeds all eight plans with their current names', function 
         ->and((float) MembershipPlan::where('code', 'G')->value('amount'))->toBe(30000.0)
         ->and((float) MembershipPlan::where('code', 'H')->value('amount'))->toBe(100000.0);
 });
+
+test('T-237: re-running the seeder never overwrites a plan Super Admin edited', function () {
+    $this->seed(MembershipPlanSeeder::class);
+    MembershipPlan::where('code', 'B')->update(['name' => 'Silver Prime Plus', 'amount' => 2000, 'is_active' => false]);
+
+    $this->seed(MembershipPlanSeeder::class);
+
+    $plan = MembershipPlan::where('code', 'B')->firstOrFail();
+    expect($plan->name)->toBe('Silver Prime Plus')
+        ->and((float) $plan->amount)->toBe(2000.0)
+        ->and($plan->is_active)->toBeFalse()
+        ->and(MembershipPlan::count())->toBe(8);
+});

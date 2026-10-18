@@ -1,4 +1,5 @@
 import { Head, usePoll } from '@inertiajs/react';
+import { CheckCircle2, PartyPopper, XCircle } from 'lucide-react';
 import { useEffect } from 'react';
 import { PublicLogoLink } from '@/components/public-logo-link';
 import { Badge } from '@/components/ui/badge';
@@ -11,11 +12,13 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
+import { login as memberLogin } from '@/routes/member';
 
 type Props = {
     member: {
         id: number;
         customer_id: string | null;
+        name: string | null;
         status: string;
         plan: string | null;
     };
@@ -66,6 +69,9 @@ export default function RegistrationStatus({
     pay_url,
     payment_error,
 }: Props) {
+    const isActive = member.status === 'active';
+    const isCancelled = member.status === 'cancelled';
+
     // T-229 — refresh every few seconds while the payment is confirmed in the background.
     const { start, stop } = usePoll(3000, {}, { autoStart: false });
 
@@ -86,16 +92,36 @@ export default function RegistrationStatus({
             <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center gap-6 px-4 py-10">
                 <PublicLogoLink />
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-2xl">
-                            Registration Status
+                <Card className="gap-0 overflow-hidden pt-0">
+                    {/* T-236 — welcome header with the member's name */}
+                    <CardHeader className="bg-linear-to-br from-amber-500 via-yellow-500 to-amber-600 px-6 py-8 text-center text-white">
+                        <div className="mx-auto mb-3 flex size-14 items-center justify-center rounded-full bg-white/20 ring-4 ring-white/30">
+                            {isActive ? (
+                                <PartyPopper className="size-7" aria-hidden />
+                            ) : isCancelled ? (
+                                <XCircle className="size-7" aria-hidden />
+                            ) : (
+                                <CheckCircle2 className="size-7" aria-hidden />
+                            )}
+                        </div>
+                        <CardTitle className="font-display text-2xl leading-tight break-words sm:text-3xl">
+                            {isCancelled ? 'Hello' : 'Welcome to GoldWave'}
+                            {member.name ? `, ${member.name}` : ''}!
                         </CardTitle>
-                        <CardDescription>
-                            {member.plan ?? 'GoldWave Membership'}
+                        <CardDescription className="mx-auto mt-2 max-w-sm text-white/90">
+                            {isActive
+                                ? "Your membership is active — we're glad to have you in the GoldWave family."
+                                : isCancelled
+                                  ? 'This registration was cancelled. Please contact GoldWave for help.'
+                                  : 'Thank you for joining us. Your registration has been received.'}
                         </CardDescription>
+                        {member.plan && (
+                            <span className="mx-auto mt-4 inline-block rounded-full bg-white/20 px-3 py-1 text-sm font-medium">
+                                {member.plan}
+                            </span>
+                        )}
                     </CardHeader>
-                    <CardContent className="flex flex-col gap-4">
+                    <CardContent className="flex flex-col gap-4 pt-6">
                         <div className="flex items-center justify-between">
                             <span className="text-muted-foreground text-sm">
                                 Status
@@ -199,12 +225,18 @@ export default function RegistrationStatus({
                                 </p>
                             )}
 
-                        {member.status === 'active' && (
-                            <p className="text-sm text-green-600">
-                                Your membership is active. Use your Customer ID
-                                to log in — your initial password is your
-                                Customer ID itself.
-                            </p>
+                        {isActive && (
+                            <div className="flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-950">
+                                <p className="text-sm text-green-800 dark:text-green-200">
+                                    Use your Customer ID to log in — your
+                                    initial password is your Customer ID itself.
+                                </p>
+                                <Button asChild className="w-full sm:w-auto">
+                                    <a href={memberLogin.url()}>
+                                        Go to Member Login
+                                    </a>
+                                </Button>
+                            </div>
                         )}
                     </CardContent>
                 </Card>

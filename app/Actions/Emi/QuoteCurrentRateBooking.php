@@ -79,7 +79,8 @@ class QuoteCurrentRateBooking
         $paidInstallments = $paid->count();
         $paidAmount = round((float) $paid->sum('amount'), 2);
 
-        $booking = ($this->calculate)($schedule->membershipPlan, 'current_rate', $paidInstallments, $paidAmount);
+        // T-237 — the member's own weight and EMI count, never the live plan (DOMAIN_LOGIC.md §3.3).
+        $booking = $this->calculate->currentRateForSchedule($schedule, $paidInstallments, $paidAmount);
 
         $installmentAmount = $booking['installment_amount'];
         $pending = (int) $booking['pending_installments'];

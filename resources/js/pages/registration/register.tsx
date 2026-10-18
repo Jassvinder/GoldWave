@@ -12,6 +12,7 @@ import {
     type PaymentOptions,
 } from '@/components/payment-mode-picker';
 import { PublicLogoLink } from '@/components/public-logo-link';
+import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -24,6 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { privacy, refund, terms } from '@/routes/legal';
+import { login as memberLogin } from '@/routes/member';
 import { store, validateSponsor } from '@/routes/registration';
 
 type Props = {
@@ -395,6 +397,11 @@ export default function Register({
                         </form>
                     </CardContent>
                 </Card>
+
+                <p className="text-muted-foreground text-center text-sm">
+                    Already a member?{' '}
+                    <TextLink href={memberLogin.url()}>Log in</TextLink>
+                </p>
             </div>
         </>
     );

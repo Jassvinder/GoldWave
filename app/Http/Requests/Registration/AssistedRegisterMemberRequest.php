@@ -34,7 +34,8 @@ class AssistedRegisterMemberRequest extends FormRequest
             'gender' => ['required', 'in:male,female,other'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'mobile' => ['required', 'digits:10', 'unique:users,mobile'],
-            'membership_plan_id' => ['required', 'integer', 'exists:membership_plans,id'],
+            // T-237 — a plan switched Off on Membership Plans cannot be joined (DOMAIN_LOGIC.md §3.3).
+            'membership_plan_id' => ['required', 'integer', Rule::exists('membership_plans', 'id')->where('is_active', true)],
             'payment_mode' => ['required', Rule::in(PaymentModes::offered(withWallet: true))],
             ...PaymentModes::upiProofRules('payment_mode'),
         ];

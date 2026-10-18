@@ -35,6 +35,9 @@ class EmiSchedule extends Model
         'current_rate_booked_at',
         'installments_paid_at_booking',
         'amount_paid_at_booking',
+        // T-237 — the plan's EMI amount and Current Rate Booking weight when the member joined (DOMAIN_LOGIC.md §3.3).
+        'plan_installment_amount',
+        'plan_fixed_weight_grams',
     ];
 
     protected function casts(): array
@@ -47,7 +50,28 @@ class EmiSchedule extends Model
             'future_commitment_amount' => 'decimal:2',
             'current_rate_booked_at' => 'datetime',
             'amount_paid_at_booking' => 'decimal:2',
+            'plan_installment_amount' => 'decimal:2',
+            'plan_fixed_weight_grams' => 'decimal:3',
         ];
+    }
+
+    /**
+     * T-237 (DOMAIN_LOGIC.md §3.3) — the plan's EMI amount when the member joined, so a later plan edit never changes
+     * this member. Falls back to the live plan only for a row created without the snapshot.
+     */
+    public function joinedPlanInstallmentAmount(): ?float
+    {
+        $amount = $this->plan_installment_amount ?? $this->membershipPlan?->amount;
+
+        return $amount === null ? null : (float) $amount;
+    }
+
+    /** T-237 — the Current Rate Booking weight when the member joined (same fallback as above). */
+    public function joinedPlanWeightGrams(): ?float
+    {
+        $weight = $this->plan_fixed_weight_grams ?? $this->membershipPlan?->fixed_weight_grams;
+
+        return $weight === null ? null : (float) $weight;
     }
 
     /** @return BelongsTo<Member, $this> */

@@ -558,7 +558,9 @@ test('T-229: a failing background wallet registration keeps nothing — the paye
 
     // The status page says no wallet was charged, instead of showing a spinner.
     $this->get(RegistrationController::signedStatusUrl($newMember))
-        ->assertInertia(fn ($page) => $page->where('processing', false)->where('payment.mode', 'wallet')->where('payment.status', 'pending'));
+        ->assertInertia(fn ($page) => $page->where('processing', false)->where('payment.mode', 'wallet')->where('payment.status', 'pending')
+            // T-236 — the status page greets the new member by name.
+            ->where('member.name', 'Rolled Back Member'));
 });
 
 test('assisted registration still supports cash, unaffected by the wallet option (T-153 regression)', function () {

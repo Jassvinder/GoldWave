@@ -7,6 +7,7 @@ use App\Actions\Settings\PublishRuleVersion;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\UpdateDummyEntrySettingsRequest;
 use App\Models\Member;
+use App\Models\MembershipPlan;
 use App\Services\RuleVersionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,6 +23,13 @@ class DummyEntrySettingsController extends Controller
             'enabled' => (bool) $rules->value('dummy_entry_enabled', false),
             'daily_count' => (int) $rules->value('dummy_entry_daily_count', 0),
             'plan_code' => (string) $rules->value('dummy_entry_plan_code', 'A'),
+            // T-237 — the choices come from the plans themselves (active EMI plans), not a hard-coded A–D list.
+            'plans' => MembershipPlan::where('is_active', true)->whereNotNull('installment_count')->orderBy('id')
+                ->get(['code', 'name', 'amount', 'installment_count'])
+                ->map(fn (MembershipPlan $plan): array => [
+                    'code' => $plan->code,
+                    'label' => "{$plan->name} — ₹".number_format((float) $plan->amount)." × {$plan->installment_count}",
+                ]),
             // `is_company_root` (the seeded placement anchor) is also flagged
             // `is_company_dummy=true` but is never a real daily-generated
             // entry — excluded here so these stats reflect actual generation.

@@ -37,12 +37,16 @@ class MembershipController extends Controller
             'plan' => $member->membershipPlan ? [
                 'code' => $member->membershipPlan->code,
                 'name' => $member->membershipPlan->name,
-                'amount' => $member->membershipPlan->amount,
-                'installment_count' => $member->membershipPlan->installment_count,
+                // T-237 (DOMAIN_LOGIC.md §3.3) — the member's own figures, so a later plan edit never shows here: their
+                // EMI amount and count at joining, or the one-time amount they actually paid.
+                'amount' => $schedule
+                    ? number_format((float) $schedule->joinedPlanInstallmentAmount(), 2, '.', '')
+                    : ($member->payments()->where('type', 'registration')->value('amount') ?? $member->membershipPlan->amount),
+                'installment_count' => $schedule ? $schedule->total_installments : $member->membershipPlan->installment_count,
                 'product_category' => $member->membershipPlan->product_category,
                 // T-116 — a Future Rate member has no weight yet (it depends on the rate at delivery); the weight is
                 // shown only once booked at the Current Rate. One-time plans have no fixed weight at all.
-                'fixed_weight_grams' => $isCurrentRate ? $member->membershipPlan->fixed_weight_grams : null,
+                'fixed_weight_grams' => $isCurrentRate ? $schedule->fixed_weight_grams : null,
             ] : null,
             'rate_booking' => $schedule ? $this->rateBooking($schedule) : null,
             // T-166 — while a request waits for Super Admin, the page shows that instead of the button.

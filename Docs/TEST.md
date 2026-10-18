@@ -659,6 +659,34 @@ Total distributed: ₹750 (15% of ₹5,000). **Edge case:** if the chain is shor
 - The next joining under B credits B as normal.
 - Nothing from the block period is ever paid.
 
+### 46. Editing a plan never changes an existing member (NEW 18-10-2026 — user decision, DOMAIN_LOGIC.md §3.3, T-237)
+
+**Given** member M joined Silver Prime (B) at ₹3,000 × 10, with a Current Rate Booking weight of 100gm. M has paid 2 EMIs (₹6,000) and is on Future Rate. Today's silver rate is ₹350/gm with 0% making (the seeded rate).
+**When** Super Admin edits Silver Prime to ₹2,000 × 12 with a weight of 66gm.
+**Then:**
+- M's 8 unpaid installments are still ₹3,000 each, and M's schedule still has 10 EMIs.
+- M's Membership Plan page shows "₹3,000 × 10 months".
+- **Booking at the Current Rate** uses M's own 100gm and 10 EMIs. Total = 100 × 350 = ₹35,000; remaining = 35,000 − 6,000 = ₹29,000; 8 pending EMIs; first EMI = 29,000 ÷ 8 + 1% of 29,000 = 3,625 + 290 = ₹3,915. It does **not** use 66gm or 12 EMIs: with those it would be 66 × 350 = ₹23,100, with 10 pending.
+- After that booking, a Super Admin **revert** puts the unpaid installments back to **₹3,000**, not ₹2,000.
+- A new member N registering on Silver Prime gets ₹2,000 × 12 and a 66gm booking weight.
+- The plan name change (if any) shows for both M and N.
+- `membership_plan_changes` has one row: who, when, before {3000, 10, 100} → after {2000, 12, 66}.
+
+**Plan Off:** Silver Prime switched Off → it is not offered on `/join` or the assisted registration pages; posting its id is refused with a validation error; M's EMIs and plan page are unchanged. Switching off the Daily Dummy Entries plan is refused.
+
+### 47. Adding a plan (NEW 18-10-2026 — user decision, DOMAIN_LOGIC.md §3.3, T-237)
+
+**Given** plans A–H exist and the active rule version has `pair_qualification_emis` = {A: 6, B: 2, C: 2, D: 1}.
+**When** Super Admin adds "Silver Mini", Silver, EMI, ₹500 × 24, weight 50gm, Pair EMIs 4, Draw EMIs 4.
+**Then:**
+- The plan gets code **I** and appears in the Silver dropdown on `/join`.
+- A new rule version is published with `pair_qualification_emis.I = 4` and `draw_eligibility_emis.I = 4`, while every other value is carried forward unchanged.
+- A member who joins on I and has paid 4 EMIs is Pair-qualified; with 3 paid they are not.
+
+**When** Super Admin adds "Gold Max Direct", Gold, Direct, ₹2,00,000. **Then** it gets code **J**, no rule version is published, and its member is Pair-eligible on registration.
+
+**Refused without a change:** an EMI plan without its EMI count, weight, Pair EMIs or Draw EMIs; an amount ≤ 0; changing code, type or metal (the fields are not accepted); any role other than Super Admin (403).
+
 ## Concurrency Verification (T-020, 15-09-2026)
 
 A separate PHPUnit testsuite, `tests/Concurrency/`, verifies genuine parallel-access safety for the financial critical sections `Docs/TEST.md`'s Risk-based Coverage table calls out by name: Store Wallet deduction (§16.1), Store Inventory decrement (§16.8), and the Booster Payout Processor (§19). It is **not** part of the default `php artisan test` run and never runs against SQLite — see `DOMAIN_LOGIC.md` §21's T-020 pre-coding entry for why (SQLite `:memory:` can't even be shared across two connections, so a real race can't be produced against it; the code's actual `lockForUpdate()` behavior is Postgres-specific). Run it explicitly, against the real dev Postgres database, with:

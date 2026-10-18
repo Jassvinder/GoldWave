@@ -37,8 +37,10 @@ class MembershipPlanSeeder extends Seeder
             ['code' => 'H', 'name' => 'Gold Elite Direct', 'amount' => 100000, 'installment_count' => null, 'product_category' => 'gold', 'fixed_weight_grams' => null],
         ];
 
+        // T-237 (DOMAIN_LOGIC.md §3.3) — only creates a missing plan. Super Admin owns the live values on the Membership
+        // Plans page, so re-running the seeder must never overwrite an edited name, price or On/Off state.
         foreach ($plans as $plan) {
-            MembershipPlan::updateOrCreate(['code' => $plan['code']], [...$plan, 'is_active' => true]);
+            MembershipPlan::firstOrCreate(['code' => $plan['code']], [...$plan, 'is_active' => true]);
         }
     }
 }

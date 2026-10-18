@@ -72,7 +72,8 @@ class RevertCurrentRateBooking
                 throw ValidationException::withMessages(['revert' => $blocker]);
             }
 
-            $planAmount = (float) $schedule->membershipPlan->amount;
+            // T-237 — the EMI amount the member joined at, never the live plan's (DOMAIN_LOGIC.md §3.3).
+            $planAmount = (float) $schedule->joinedPlanInstallmentAmount();
 
             $before = [
                 'installment_amount' => (float) $schedule->installment_amount,

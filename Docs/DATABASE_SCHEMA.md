@@ -51,6 +51,18 @@ Grouped by migration file (`database/migrations/`). Column-level detail and the 
 | `create_store_sales_tables`                                  | `store_sales`, `invoices`, `store_profit_distributions` (+ deferred FK back onto `income_ledger_calculations`)                                                                                                                                                                                                           | §15, §16.2, §16.4                     |
 | `create_store_activity_logs_table`                           | `store_activity_logs` (polymorphic `affected_reference`)                                                                                                                                                                                                                                                                 | §16.3                                 |
 
+### T-237 additions (Membership Plans managed by Super Admin — 18-10-2026)
+
+Migration `2026_10_18_000001_add_plan_snapshot_and_plan_changes` is forward-only, like T-231's.
+- **`emi_schedules.plan_installment_amount`** (decimal 14,2, nullable) and **`emi_schedules.plan_fixed_weight_grams`** (decimal 8,3, nullable): the plan's EMI amount and Current Rate Booking weight when the member joined. They are set for `kind = membership` schedules at creation, and stay null for store repurchase schedules.
+  - The migration back-fills them from each schedule's plan. This is exact, because no plan had been edited before.
+  - Current Rate Booking, Revert to Future Rate and the member plan page read these, never the live plan.
+- **`membership_plan_changes`:** one row per create or edit on the Membership Plans page.
+  - Columns: `membership_plan_id`, `changed_by` → users, `action` (`created` | `updated`), `before` json (null on create), `after` json.
+  - Index: (`membership_plan_id`, `created_at`).
+- `membership_plans.code` stays `string(5)`. New codes are I, J, … then AA, AB, …
+- Rules: `DOMAIN_LOGIC.md` §3.3.
+
 ### T-231 additions (Payout Hold and Account Block — 16-10-2026)
 
 Migration `2026_10_16_000001_create_member_restrictions` is a separate, forward-only migration. It is not merged into the create migrations, because the live database is in use.

@@ -144,6 +144,8 @@ Two separate restrictions, both set and lifted **only by Super Admin**:
 | G **(added 09-10-2026)**                  | Silver Prime Direct    | ₹30,000       | One-time        | Choice of Silver Jewellery at the applicable current silver rate |
 | H **(added 09-10-2026)**                  | Gold Elite Direct      | ₹1,00,000     | One-time        | Choice of Gold Jewellery at the applicable current gold rate     |
 
+**18-10-2026 (T-237):** the table above is the seeded starting data. Live plan values are managed on the Super Admin Membership Plans page, and a later change there is the source of truth (§3.3). For example, the client asked for Silver Prime at ₹2,000 × 10, which Super Admin sets on that page.
+
 **09-10-2026 (user decision):** G and H were added as the one-time versions of B and D (same total value, paid upfront). E and F were renamed to Silver Start Direct and Gold Rise Direct to match A and C. All four were changed only on the dev DB at first. On 14-10-2026 they were moved into `MembershipPlanSeeder`, after the first live deploy came up without them.
 
 All benefits are **jewellery items, not solid/bullion metal**. Plans E, F, G and H are one-time (no EMI, no rate-booking choice — the applicable rate is simply the rate on the date the one-time payment is confirmed).
@@ -200,6 +202,57 @@ All benefits are **jewellery items, not solid/bullion metal**. Plans E, F, G and
 - Unique, sequential/company-controlled identifier (e.g. `GWL01`, `GWL10`, `GWL11`).
 - Never recycled.
 - Displayed on member profile, draw lists, reports, and search.
+
+### 3.3 Membership Plans managed by Super Admin (T-237 — user decision 18-10-2026)
+
+The plan table in §3 is the starting data (`MembershipPlanSeeder`). From T-237 on, the live values belong to the Super Admin's **Membership Plans** page. The client may keep changing prices, so plans are data and not code. The first use is Silver Prime ₹3,000 → ₹2,000 × 10.
+
+**Who and where:** Super Admin only, on the Membership Plans page. The page needs the password re-entered within 5 minutes, like Rule Versions, because plan prices are as sensitive as compensation rules.
+
+**Editable on an existing plan:**
+- name
+- amount (EMI plans: the monthly EMI; Direct plans: the one-time amount)
+- EMI count (EMI plans only)
+- **Current Rate Booking weight** (EMI plans only; `fixed_weight_grams`; §3.0)
+- On/Off (`is_active`)
+- for EMI plans, "EMIs needed for Pair" and "EMIs needed for Draw"
+
+**Never editable:** the code (A, B, …), EMI vs Direct, and the metal. Pair and Draw rules are keyed to the code (`pair_qualification_emis`, `draw_eligibility_emis`), and a member's EMI schedule, delivery and income logic depend on the type and metal.
+
+**No delete.** A plan is switched **Off** instead. An Off plan:
+- disappears from every registration form (public, member-assisted, store-assisted) and from the home page;
+- is refused by the server even if its id is posted directly;
+- keeps working for every member already on it.
+
+Switching off the plan used by Daily Dummy Entries (`dummy_entry_plan_code`) is refused, with a message to choose another dummy plan first, because the dummy run needs an active plan.
+
+**Adding a plan:** Super Admin gives the name, metal (Silver/Gold), type (EMI/Direct) and amount. For EMI plans they also give the EMI count, the Current Rate Booking weight, and **EMIs needed for Pair** and **EMIs needed for Draw** (both required).
+- The code is the next free letter after the highest existing one (I, J, …). After Z it continues AA, AB, … The code is never reused.
+- An EMI plan's Pair and Draw numbers are written into a newly published rule version (`PublishRuleVersion`, carried forward like any settings change). Without them, members of the new plan would silently never qualify for Pair or Draw, because a missing code means "never".
+- Direct plans need neither: a fully paid Direct member is Pair-eligible on registration and Draw-eligible once active (§7.3, §8.7).
+- Changing an existing EMI plan's Pair or Draw number from this page also publishes a new rule version. If neither number changed, no version is published.
+
+**Existing members are never changed by a plan edit.** Every value that decides a member's money is kept on the member's own records:
+- registration payment amount (`payments`);
+- EMI amount, EMI count and each installment (`emi_schedules`, `emi_installments`);
+- **new in T-237:** the plan's EMI amount and Current Rate Booking weight **as they were when the member joined** (`emi_schedules.plan_installment_amount`, `plan_fixed_weight_grams`).
+
+These three places used to read the live plan and now read the member's own values:
+1. **Current Rate Booking** (§3.0): the weight is `plan_fixed_weight_grams`; the pending EMIs come from the schedule's own `total_installments`.
+2. **Super Admin "Revert to Future Rate"** (§3.0): the unpaid installments go back to `plan_installment_amount`, the amount the member joined at.
+3. **Member Membership Plan page (M05):** shows the member's own EMI amount and count, or their own paid one-time amount.
+
+Schedules created before T-237 are back-filled from their plan's current values. This is exact, because no plan amount or weight had ever been edited before T-237. Live on 18-10-2026: 34 Silver Start members and the root on Silver Start Direct.
+
+**What a plan edit does change for existing members:**
+- **The plan name**, shown wherever the plan is shown (user decision: the same plan was relabelled, so everyone sees the new label).
+- **Pair and Draw EMI numbers**, which are rule values and apply from the new rule version on, like any other rule change.
+
+**Weight is not shown on registration** (T-220 unchanged). The registration plan picker and home page stay as they are. The weight is only stored on the plan and used by Current Rate Booking.
+
+**Audit:** every create and edit is written to `membership_plan_changes` (who, when, before/after values) and listed on the page.
+
+Worked examples: `Docs/TEST.md` scenarios 46–47.
 
 ---
 
