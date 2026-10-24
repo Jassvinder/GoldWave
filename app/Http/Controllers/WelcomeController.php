@@ -2,9 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Draw\ExecuteMonthlyDraw;
+use App\Models\DrawExecution;
 use App\Models\MembershipPlan;
 use App\Models\Store;
 use App\Services\RuleVersionService;
+use App\Support\Dates;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -31,7 +35,58 @@ class WelcomeController extends Controller
                 'id', 'name', 'amount', 'installment_count', 'product_category', 'fixed_weight_grams',
             ]),
             'stores' => Store::where('status', 'active')->orderBy('name')->get(['id', 'name', 'location']),
+            'latest_draw' => self::latestDraw(),
         ]);
+    }
+
+    /**
+     * T-239 — every winner of the latest calendar month that had a draw (automatic or manual, DOMAIN_LOGIC.md §8.4),
+     * with the Sponsor named only when they also received the prize (§8.5). Older months stay behind member login.
+     *
+     * @return array{month: string, winners: array<int, array<string, mixed>>}|null
+     */
+    private static function latestDraw(): ?array
+    {
+        $drawn = DrawExecution::whereIn('status', ['executed', 'reconciled']);
+        $latest = (clone $drawn)->max('executed_at');
+
+        if ($latest === null) {
+            return null;
+        }
+
+        $month = Carbon::parse($latest);
+
+        $winners = $drawn
+            ->whereBetween('executed_at', [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()])
+            ->with(['drawGroup.monthConfigs', 'winner.user', 'uplineBenefitMember.user'])
+            ->get()
+            ->sortBy([
+                fn (DrawExecution $a, DrawExecution $b): int => $a->drawGroup->group_no <=> $b->drawGroup->group_no,
+                ['cycle_month_no', 'asc'],
+                ['winner_no', 'asc'],
+            ])
+            ->values()
+            ->map(function (DrawExecution $execution): array {
+                $prize = $execution->drawGroup->monthConfigs->firstWhere('cycle_month_no', $execution->cycle_month_no);
+
+                return [
+                    'id' => $execution->id,
+                    'group_no' => $execution->drawGroup->group_no,
+                    'cycle_month_no' => $execution->cycle_month_no,
+                    'cycle_months' => ExecuteMonthlyDraw::CYCLE_MONTHS,
+                    'executed_at' => Dates::date($execution->executed_at),
+                    'prize_name' => $prize?->prize_name,
+                    'prize_value' => $prize?->prize_value,
+                    'metal' => $prize?->metal_type,
+                    'winner_name' => $execution->winner->user?->name,
+                    'winner_customer_id' => $execution->winner->customer_id,
+                    'upline_name' => $execution->uplineBenefitMember?->user?->name,
+                    'upline_customer_id' => $execution->uplineBenefitMember?->customer_id,
+                ];
+            })
+            ->all();
+
+        return ['month' => $month->format('F Y'), 'winners' => $winners];
     }
 
     /**

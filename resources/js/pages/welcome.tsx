@@ -18,7 +18,9 @@ import {
     ShieldCheck,
     Sparkles,
     Store as StoreIcon,
+    Trophy,
     UserPlus,
+    Users,
     Wallet,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -26,7 +28,7 @@ import type { ReactNode } from 'react';
 import { JewellerySlider } from '@/components/jewellery-slider';
 import type { Slide } from '@/components/jewellery-slider';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
 import { dashboard, login as staffLogin } from '@/routes';
 import { privacy, refund, terms } from '@/routes/legal';
 import { login as memberLogin } from '@/routes/member';
@@ -57,11 +59,29 @@ type Plan = {
 
 type PublicStore = { id: number; name: string; location: string | null };
 
+type DrawWinner = {
+    id: number;
+    group_no: number;
+    cycle_month_no: number;
+    cycle_months: number;
+    executed_at: string;
+    prize_name: string | null;
+    prize_value: string | null;
+    metal: 'gold' | 'silver' | null;
+    winner_name: string | null;
+    winner_customer_id: string;
+    upline_name: string | null;
+    upline_customer_id: string | null;
+};
+
+type LatestDraw = { month: string; winners: DrawWinner[] };
+
 type Props = {
     hero: Hero;
     contact: Contact;
     plans: Plan[];
     stores: PublicStore[];
+    latest_draw: LatestDraw | null;
 };
 
 /** T-210 — gold jewellery banners in `public/Images/slider/` (WebP, 1920px wide). Add or replace files and list them here. */
@@ -71,6 +91,7 @@ const JEWELLERY_SLIDES: Slide[] = [1, 2, 3].map((n) => ({
 }));
 
 const NAV = [
+    { href: '#winners', label: 'Winners' },
     { href: '#plans', label: 'Plans' },
     { href: '#how-it-works', label: 'How it works' },
     { href: '#rewards', label: 'Rewards' },
@@ -218,7 +239,13 @@ function entitlement(plan: Plan): string {
 }
 
 /** T-104 — public landing page at `/`. Hero copy editable since T-115; colourful redesign (no photos yet) with plans, stores, FAQ and Super-Admin-editable contact details on 02-10-2026. */
-export default function Welcome({ hero, contact, plans, stores }: Props) {
+export default function Welcome({
+    hero,
+    contact,
+    plans,
+    stores,
+    latest_draw,
+}: Props) {
     const { auth } = usePage().props;
     const goldPlan = plans.find(
         (plan) => plan.product_category === 'gold' && plan.installment_count,
@@ -247,7 +274,11 @@ export default function Welcome({ hero, contact, plans, stores }: Props) {
                         </a>
 
                         <nav className="hidden items-center gap-6 text-sm font-medium text-slate-600 lg:flex">
-                            {NAV.map((item) => (
+                            {NAV.filter(
+                                (item) =>
+                                    item.href !== '#winners' ||
+                                    latest_draw !== null,
+                            ).map((item) => (
                                 <a
                                     key={item.href}
                                     href={item.href}
@@ -375,6 +406,56 @@ export default function Welcome({ hero, contact, plans, stores }: Props) {
                 <div className="mx-auto w-full max-w-6xl px-4 pt-10">
                     <JewellerySlider slides={JEWELLERY_SLIDES} />
                 </div>
+
+                {/* Latest Monthly Draw winners — latest month only; older draws are for members (T-239) */}
+                {latest_draw && (
+                    <section
+                        id="winners"
+                        className="mx-auto w-full max-w-6xl scroll-mt-20 px-4 pt-16"
+                    >
+                        <SectionHeading
+                            eyebrow={`Monthly Draw · ${latest_draw.month}`}
+                            title="Congratulations to our winners"
+                            description="One lucky member from every draw group wins jewellery each month."
+                        />
+                        <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                            {latest_draw.winners.map((winner) => (
+                                <DrawWinnerCard
+                                    key={winner.id}
+                                    winner={winner}
+                                />
+                            ))}
+                        </div>
+                        {!auth.user && (
+                            <div className="mt-8 flex flex-col items-center justify-between gap-4 rounded-2xl border border-fuchsia-100 bg-fuchsia-50/60 px-6 py-5 text-center sm:flex-row sm:text-left">
+                                <p className="text-sm text-slate-700">
+                                    Past draw results are available to members.
+                                    Log in to see them, or join GoldWave to take
+                                    part in the next draw.
+                                </p>
+                                <div className="flex shrink-0 gap-2">
+                                    <Button
+                                        variant="outline"
+                                        className="border-fuchsia-200 text-fuchsia-700 hover:bg-fuchsia-50 hover:text-fuchsia-800"
+                                        asChild
+                                    >
+                                        <Link href={memberLogin()}>
+                                            Member Login
+                                        </Link>
+                                    </Button>
+                                    <Button
+                                        className="bg-linear-to-r from-fuchsia-600 to-rose-500 text-white hover:opacity-90"
+                                        asChild
+                                    >
+                                        <Link href={registerShow()}>
+                                            Join Now
+                                        </Link>
+                                    </Button>
+                                </div>
+                            </div>
+                        )}
+                    </section>
+                )}
 
                 {/* Why GoldWave */}
                 <section className="mx-auto w-full max-w-6xl px-4 py-16">
@@ -853,6 +934,82 @@ function PlanCard({ plan, showJoin }: { plan: Plan; showJoin: boolean }) {
                         <Link href={registerShow()}>Join with {plan.name}</Link>
                     </Button>
                 )}
+            </div>
+        </div>
+    );
+}
+
+/** T-239 — one winner of the latest month's draw; the Sponsor is named only when they also received the prize (DOMAIN_LOGIC.md §8.5). */
+function DrawWinnerCard({ winner }: { winner: DrawWinner }) {
+    const gold = winner.metal === 'gold';
+
+    return (
+        <div className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-lg ring-1 shadow-slate-200/70 ring-slate-100">
+            <div
+                className={cn(
+                    'flex items-center justify-between gap-3 bg-linear-to-r px-5 py-3 text-white',
+                    gold
+                        ? 'from-amber-400 via-orange-500 to-rose-500'
+                        : 'from-sky-400 via-indigo-500 to-violet-500',
+                )}
+            >
+                <p className="text-sm font-semibold">
+                    Group {winner.group_no}
+                    <span className="font-normal text-white/80">
+                        {' '}
+                        · Draw {winner.cycle_month_no} of {winner.cycle_months}
+                    </span>
+                </p>
+                <Trophy className="size-5 shrink-0 text-yellow-200" />
+            </div>
+            <div className="flex flex-1 flex-col gap-4 p-5">
+                <div className="flex flex-col gap-1">
+                    <h3 className="font-display text-xl font-bold break-words text-slate-900">
+                        {winner.winner_name ?? winner.winner_customer_id}
+                    </h3>
+                    <p className="text-sm text-slate-500">
+                        Customer ID{' '}
+                        <span className="font-mono font-medium text-slate-700">
+                            {winner.winner_customer_id}
+                        </span>
+                    </p>
+                </div>
+                {winner.prize_name && (
+                    <p
+                        className={cn(
+                            'flex items-start gap-2 rounded-lg px-3 py-2 text-sm font-medium',
+                            gold
+                                ? 'bg-amber-50 text-amber-800'
+                                : 'bg-indigo-50 text-indigo-800',
+                        )}
+                    >
+                        <Gift className="mt-0.5 size-4 shrink-0" />
+                        <span>
+                            {winner.prize_name}
+                            {winner.prize_value &&
+                                ` · worth ${rupees(winner.prize_value)}`}
+                        </span>
+                    </p>
+                )}
+                {winner.upline_customer_id && (
+                    <p className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        <Users className="mt-0.5 size-4 shrink-0" />
+                        <span>
+                            Upline also won:{' '}
+                            <span className="font-semibold">
+                                {winner.upline_name ??
+                                    winner.upline_customer_id}
+                            </span>{' '}
+                            <span className="font-mono text-xs">
+                                ({winner.upline_customer_id})
+                            </span>
+                        </span>
+                    </p>
+                )}
+                <p className="mt-auto flex items-center gap-1.5 text-xs text-slate-500">
+                    <CalendarClock className="size-3.5" />
+                    Drawn on {formatDate(winner.executed_at)}
+                </p>
             </div>
         </div>
     );

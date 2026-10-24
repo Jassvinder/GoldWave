@@ -468,3 +468,39 @@ test('Draw Settings saves the automatic draw switch (T-221)', function () {
 
     expect(ExecuteMonthlyDraw::autoDrawEnabled(app(RuleVersionService::class)))->toBeFalse();
 });
+
+test('the home page shows only the latest month\'s winners, naming the upline only when they also won (T-239)', function () {
+    $this->get('/')->assertInertia(fn ($page) => $page->where('latest_draw', null));
+
+    $sponsor = drawMember('DHP-SPONSOR');
+    RuleValue::where('key', 'draw_group_size')->update(['value' => 1]);
+    app(GenerateDrawGroups::class)();
+    for ($i = 1; $i <= 10; $i++) {
+        drawMember(sprintf('DHP-SPONSOR-D%02d', $i), $sponsor);
+    }
+    RuleValue::where('key', 'draw_group_size')->update(['value' => 10]);
+    $group = app(GenerateDrawGroups::class)()[0];
+    DrawGroup::whereKeyNot($group->id)->update(['status' => 'completed']);
+
+    $lastMonth = app(ExecuteMonthlyDraw::class)()[0];
+    $lastMonth->update(['executed_at' => now()->subMonthNoOverflow()]);
+    $latest = app(ExecuteMonthlyDraw::class)(oncePerCalendarMonth: false)[0];
+
+    $this->get('/')->assertInertia(fn ($page) => $page
+        ->where('latest_draw.month', now()->format('F Y'))
+        ->has('latest_draw.winners', 1)
+        ->where('latest_draw.winners.0.winner_customer_id', $latest->winner->customer_id)
+        ->where('latest_draw.winners.0.winner_name', $latest->winner->user->name)
+        ->where('latest_draw.winners.0.group_no', $group->group_no)
+        ->where('latest_draw.winners.0.cycle_month_no', 2)
+        ->where('latest_draw.winners.0.prize_name', 'Silver Jewellery')
+        ->where('latest_draw.winners.0.metal', 'silver')
+        ->where('latest_draw.winners.0.upline_customer_id', 'DHP-SPONSOR')
+        ->where('latest_draw.winners.0.upline_name', $sponsor->user->name));
+
+    // A sponsor with fewer than 10 directs gets no benefit, so the card names no upline.
+    DrawExecution::query()->update(['upline_benefit_member_id' => null]);
+    $this->get('/')->assertInertia(fn ($page) => $page
+        ->where('latest_draw.winners.0.upline_customer_id', null)
+        ->where('latest_draw.winners.0.upline_name', null));
+});

@@ -687,6 +687,14 @@ Total distributed: ₹750 (15% of ₹5,000). **Edge case:** if the chain is shor
 
 **Refused without a change:** an EMI plan without its EMI count, weight, Pair EMIs or Draw EMIs; an amount ≤ 0; changing code, type or metal (the fields are not accepted); any role other than Super Admin (403).
 
+### 48. Latest draw winners on the home page (NEW 24-10-2026 — user decision, DOMAIN_LOGIC.md §8.4, T-239)
+
+**Given** no draw has ever been held. **Then** `/` sends `latest_draw` = null and the Winners section and its header link are hidden.
+**Given** sponsor S has 10 directs, all in one group. Last month's draw (month 1) was won by one of them, and this month's draw (month 2) was won by another, D.
+**Then** `/` shows only this month (label "October 2026" style): one card for D with full name and Customer ID, Group no., "Draw 2 of 20", "Silver Jewellery · worth ₹20,000", "Drawn on DD-MM-YYYY", and "Upline also won: S's name (S's Customer ID)". Last month's winner is not shown.
+**When** the sponsor did not receive the benefit (fewer than 10 directs), the card names no upline.
+A visitor who is not logged in sees "Past draw results are available to members" with Member Login and Join Now.
+
 ## Concurrency Verification (T-020, 15-09-2026)
 
 A separate PHPUnit testsuite, `tests/Concurrency/`, verifies genuine parallel-access safety for the financial critical sections `Docs/TEST.md`'s Risk-based Coverage table calls out by name: Store Wallet deduction (§16.1), Store Inventory decrement (§16.8), and the Booster Payout Processor (§19). It is **not** part of the default `php artisan test` run and never runs against SQLite — see `DOMAIN_LOGIC.md` §21's T-020 pre-coding entry for why (SQLite `:memory:` can't even be shared across two connections, so a real race can't be produced against it; the code's actual `lockForUpdate()` behavior is Postgres-specific). Run it explicitly, against the real dev Postgres database, with:

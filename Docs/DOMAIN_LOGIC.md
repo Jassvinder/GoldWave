@@ -467,6 +467,8 @@ The Settings module must expose, at minimum: milestone-wise minimum Direct Membe
 - **Limits:** one draw per group per calendar month (§8.3) still applies. A saved result can't be edited. As with every draw, a correction is a note added through "Mark as Verified".
 - **Switching modes:** manual entry is refused while the automatic draw is on, so the two can never both run for the same month.
 
+**Public display (24-10-2026, user decision, T-239).** The public home page shows the winners of the latest calendar month that had a draw, with full name and Customer ID, and names the Sponsor only when they also received the §8.5 benefit. Older months are shown only to logged-in members (`/member/draw`). Details: `INSTRUCTIONS.md` "Home page".
+
 ### 8.5 Upline draw benefit
 
 If the winner's Sponsor/Direct (the member who personally sponsored/joined them) has **at least 10 Direct Members**, that one direct Sponsor receives the same item/benefit. No additional upline levels receive the draw benefit. If there is no qualifying upline, the winner still receives their own prize and the upline benefit is simply skipped.

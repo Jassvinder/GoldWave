@@ -28,8 +28,19 @@ _(none — the clear items of the 28-09-2026 feedback batch, T-157…T-162, are 
 
 ## Pending
 
-_No pending task._ (T-197 waits for the user's flow — see Blocked.)
+(T-197 waits for the user's flow — see Blocked.)
 
+- [ ] **T-238 — Super Admin "Upline Earnings Trace": pick any member and see every earning that went up their network because of them** · Status: Pending · Depends on: none (questions answered 24-10-2026) · Estimate: ~1–1.5 days (service + page + tests + docs)
+  - Requested 24-10-2026 by the user. Read-only page; nothing is written or corrected.
+  - Search by Customer ID / name / mobile, then list, per beneficiary upline member (level no., Customer ID, name): what they earned, from which source, amount, status, date (DD-MM-YYYY). Totals per upline and per income type. Filters: income type, date range.
+  - Sources, all already traceable in the data:
+    - Level Income — `income_ledger_calculations` whose `source_payment_id` is a payment of this member (§6).
+    - Purchase/Repurchase upline income — `income_ledger_calculations` whose `source_store_sale_id` is this member's sale (§15).
+    - Store Profit Distribution — `store_profit_distributions` of this member's store sales (§16).
+    - Upline draw benefit — `draw_executions` where this member won and `upline_benefit_member_id` is set (§8.5).
+    - Pair entries — `pair_entries` created in uplines' legs from this member's payments (entries, not rupees, see questions).
+  - Worked example to accept: member X pays an EMI of ₹1,000 → the page lists each upline's Level Income row for that payment with its level, rate and amount; a row skipped (inactive / directs gate) shows "Skipped" with its reason; a held row (T-182) shows "Held".
+  - Decided 24-10-2026 by the user: (1) show every row — paid, skipped (with reason) and held — with a status badge and a status filter; (2) Pair: show the pair entries this member's payments created in each upline's leg (side, metal, status / used for which milestone), no rupee split; (3) Income Booster is left out; (4) no CSV export.
 ## Blocked
 
 - [ ] **T-197 — Monthly Draw live waiting screen, slot-machine animation and highlighted winner number** · Status: Blocked · Depends on: user's full flow description (30-09-2026: "is task ko abhi open rakho, pura flow baad me btaunga")
@@ -38,6 +49,11 @@ _No pending task._ (T-197 waits for the user's flow — see Blocked.)
 (T-164, the member serial number, was dropped by the user because the Customer ID's number serves that purpose.)
 
 ## Completed
+
+- [x] **T-239 — Latest Monthly Draw winners on the public home page** · Completed: 24-10-2026 · Verified: new `DrawTest` case (`TEST.md` scenario 48) — no draw → `latest_draw` null; only the latest month's winner is sent, with prize, metal, and the Sponsor only when the §8.5 benefit applied. `DrawTest.php` + `ExampleTest` 17/17 pass; Larastan 0 on `WelcomeController`; Pint clean; `.\gw types` OK; `.\gw check` on `welcome.tsx` clean; `.\gw build` OK. No browser check.
+  - `WelcomeController::latestDraw()` sends `latest_draw` {month, winners[]} — every `executed`/`reconciled` draw of the latest calendar month that had one (automatic and manual alike), ordered by group, cycle month, winner no.
+  - `welcome.tsx`: Winners section below the slider (`DrawWinnerCard`), "Winners" header link, members-only prompt for logged-out visitors; all hidden before the first draw.
+  - User decisions (24-10-2026): full name + Customer ID unmasked; latest month only; "Upline also won" only when the Sponsor received the prize. Rules: `DOMAIN_LOGIC.md` §8.4 "Public display". Page: `INSTRUCTIONS.md` "Home page" item 3a.
 
 - [x] **T-000 — Consolidate `GoldWave_Claude_instructions.docx` into `Docs/` (DOMAIN_LOGIC, INSTRUCTIONS, DATABASE_SCHEMA, SECURITY, PERFORMANCE_GUIDE, TEST, FLOWCHART, TASKS, PROGRESS, SEO_STRATEGY, AGENTS.md, README)** · Completed: 09-09-2026 · Verified: manual review of all `.docx` paragraphs and tables against the new docs; no section left unmapped.
 - [x] **T-001 — Scaffold Laravel + Inertia.js + React + PostgreSQL project skeleton** · Completed: 09-09-2026 · Verified: `laravel new --react --database=pgsql --pest --npm --no-boost` scaffolded (Laravel 13, PHP ^8.3, React 19 + TS + Tailwind v4 + Radix/shadcn, Fortify auth, Pest/Pint/Larastan); merged into repo root; enabled `pdo_pgsql`/`pgsql` PHP extensions (were present but disabled in WAMP's `php.ini`); created local `goldwave` Postgres role/DB (user-provisioned, not the `postgres` superuser); `.env`/`.env.example` pointed at it; `php artisan migrate --force` ran clean (5 starter-kit migrations); `npm run build` succeeded; `php artisan test` — 39/39 passed; `php artisan serve` returned HTTP 200 on `/` and `/login`. `git init` run (branch `main`) but nothing committed yet — no commit requested.

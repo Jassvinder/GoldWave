@@ -154,6 +154,11 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
      - Rounded and inside the page width, right below the hero: 5:2 on desktop, 16:9 on phones (anchored right, where the jewellery is).
      - Auto-advances every 5 s and pauses on hover or focus. Previous/next arrows, no dots.
      - Images: `public/Images/slider/slide-1…3.webp`, made from the old `Images/hero` PNGs at 1920px (about 400 KB in total). To change them, replace the files and update `JEWELLERY_SLIDES` in `welcome.tsx`.
+  3a. **Latest draw winners (T-239, 24-10-2026, user request):** below the slider, header link "Winners". Shows every winner of the **latest calendar month that had a draw** (automatic or manual), one card each, ordered by group:
+     - Group no. and "Draw N of 20" on a Silver (blue) or Gold (amber) band, the winner's **full name and Customer ID** (unmasked, user decision), the prize name and value, and "Drawn on DD-MM-YYYY".
+     - "Upline also won: name (Customer ID)" only when the Sponsor received the §8.5 benefit; otherwise nothing about the Sponsor.
+     - Older months are not public. A logged-out visitor sees "Past draw results are available to members" with Member Login and Join Now.
+     - The section and the header link are hidden until the first draw is held.
   4. Why GoldWave, Plans (active `membership_plans`, marketing names, amount × months or one-time, jewellery entitlement, "Join with …"), How it works (4 steps), Member Rewards (ends with "No income is guaranteed").
   5. Stores (active stores, name + location; hidden when there are none), FAQ, Contact + Join band, footer (Member Login and Staff / Store Login).
   - Contact details (phone, WhatsApp, email, address) are edited by the Super Admin on the **Landing Page** screen (same screen as the hero copy). A blank field is hidden; phone, WhatsApp and email are clickable.
