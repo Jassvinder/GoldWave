@@ -28,19 +28,8 @@ _(none — the clear items of the 28-09-2026 feedback batch, T-157…T-162, are 
 
 ## Pending
 
-(T-197 waits for the user's flow — see Blocked.)
+_No pending task._ (T-197 waits for the user's flow — see Blocked.)
 
-- [ ] **T-238 — Super Admin "Upline Earnings Trace": pick any member and see every earning that went up their network because of them** · Status: Pending · Depends on: none (questions answered 24-10-2026) · Estimate: ~1–1.5 days (service + page + tests + docs)
-  - Requested 24-10-2026 by the user. Read-only page; nothing is written or corrected.
-  - Search by Customer ID / name / mobile, then list, per beneficiary upline member (level no., Customer ID, name): what they earned, from which source, amount, status, date (DD-MM-YYYY). Totals per upline and per income type. Filters: income type, date range.
-  - Sources, all already traceable in the data:
-    - Level Income — `income_ledger_calculations` whose `source_payment_id` is a payment of this member (§6).
-    - Purchase/Repurchase upline income — `income_ledger_calculations` whose `source_store_sale_id` is this member's sale (§15).
-    - Store Profit Distribution — `store_profit_distributions` of this member's store sales (§16).
-    - Upline draw benefit — `draw_executions` where this member won and `upline_benefit_member_id` is set (§8.5).
-    - Pair entries — `pair_entries` created in uplines' legs from this member's payments (entries, not rupees, see questions).
-  - Worked example to accept: member X pays an EMI of ₹1,000 → the page lists each upline's Level Income row for that payment with its level, rate and amount; a row skipped (inactive / directs gate) shows "Skipped" with its reason; a held row (T-182) shows "Held".
-  - Decided 24-10-2026 by the user: (1) show every row — paid, skipped (with reason) and held — with a status badge and a status filter; (2) Pair: show the pair entries this member's payments created in each upline's leg (side, metal, status / used for which milestone), no rupee split; (3) Income Booster is left out; (4) no CSV export.
 ## Blocked
 
 - [ ] **T-197 — Monthly Draw live waiting screen, slot-machine animation and highlighted winner number** · Status: Blocked · Depends on: user's full flow description (30-09-2026: "is task ko abhi open rakho, pura flow baad me btaunga")
@@ -49,6 +38,12 @@ _(none — the clear items of the 28-09-2026 feedback batch, T-157…T-162, are 
 (T-164, the member serial number, was dropped by the user because the Customer ID's number serves that purpose.)
 
 ## Completed
+
+- [x] **T-238 — Super Admin "Upline Earnings": pick any member and see every earning that went up their network because of them** · Completed: 25-10-2026 · Verified: new `tests/Feature/SuperAdmin/UplineEarningsTest.php` (6 tests, `TEST.md` scenario 49), full suite 496/496 (parallel); Larastan 0 and Pint clean on the new/changed PHP; `.\gw types` OK; `.\gw check` on the 3 changed frontend files clean; `.\gw build` OK. A read-only run of the service on the dev Postgres DB (GWL1623: 563 rows, 551 pair entries + 12 level rows) worked, including the case-insensitive search. No browser check.
+  - `App\Services\UplineEarningsTrace` collects the rows: Level Income, Purchase/Repurchase (incl. Self), Store Profit share, the Sponsor's draw prize, and Pair entries. Statuses are Paid / Held (directs, or a pending wallet credit for an overdue EMI) / Skipped + reason / Pair made / Pair pending. `SuperAdmin\UplineEarningsController` handles search, filters and 50-per-page; the totals and summary always cover the whole history.
+  - Page `super-admin/upline-earnings.tsx` at `/super-admin/upline-earnings`: Super Admin only (the company Admin gets 403). Sidebar Compensation → Upline Earnings, plus an "Upline Earnings" button in Member Detail's Network card (`can_view_upline_earnings`).
+  - Found while checking on the dev DB: a deep binary tree gives hundreds of uplines a single Pair entry. Those uplines (outside the Sponsor chain, nothing else received) are counted, not listed, in the summary, with a "Show Pair entries" link.
+  - User decisions (24-10-2026): show every status; Pair as entries, not rupees; no Income Booster; no export. Rules: `DOMAIN_LOGIC.md` §12.3. Page: `INSTRUCTIONS.md` S18.
 
 - [x] **T-239 — Latest Monthly Draw winners on the public home page** · Completed: 24-10-2026 · Verified: new `DrawTest` case (`TEST.md` scenario 48) — no draw → `latest_draw` null; only the latest month's winner is sent, with prize, metal, and the Sponsor only when the §8.5 benefit applied. `DrawTest.php` + `ExampleTest` 17/17 pass; Larastan 0 on `WelcomeController`; Pint clean; `.\gw types` OK; `.\gw check` on `welcome.tsx` clean; `.\gw build` OK. No browser check.
   - `WelcomeController::latestDraw()` sends `latest_draw` {month, winners[]} — every `executed`/`reconciled` draw of the latest calendar month that had one (automatic and manual alike), ordered by group, cycle month, winner no.

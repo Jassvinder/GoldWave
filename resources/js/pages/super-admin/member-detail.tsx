@@ -26,6 +26,7 @@ import {
     verifyBankDetail,
 } from '@/routes/super-admin/members';
 import { index as memberRestrictionsIndex } from '@/routes/super-admin/member-restrictions';
+import { index as uplineEarningsIndex } from '@/routes/super-admin/upline-earnings';
 import { show as showTree } from '@/routes/member/tree';
 
 type Leg = {
@@ -105,6 +106,7 @@ type Props = {
         status: string;
     } | null;
     can_manage_restrictions: boolean;
+    can_view_upline_earnings: boolean;
     bank_details: BankDetails;
     product_benefits: {
         metal: string | null;
@@ -178,6 +180,7 @@ export default function SuperAdminMemberDetail({
     restrictions,
     record_cash_emi,
     can_manage_restrictions,
+    can_view_upline_earnings,
     bank_details,
     product_benefits,
     emi,
@@ -374,6 +377,17 @@ export default function SuperAdminMemberDetail({
                                     View Tree
                                 </Link>
                             </Button>
+                            {can_view_upline_earnings && (
+                                <Button variant="outline" size="sm" asChild>
+                                    <Link
+                                        href={uplineEarningsIndex.url({
+                                            query: { member: member.id },
+                                        })}
+                                    >
+                                        Upline Earnings
+                                    </Link>
+                                </Button>
+                            )}
                         </div>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-4 text-sm">

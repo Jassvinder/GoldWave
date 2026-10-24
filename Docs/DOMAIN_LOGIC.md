@@ -671,6 +671,27 @@ Two related but distinct new payment mechanisms, both funding a `payments` row (
 
 **Rule:** never update a wallet balance without an associated ledger transaction. Balance may be cached for performance, but the ledger remains the audit source of truth.
 
+### 12.3 Upline Earnings trace — what went up the network because of one member (24-10-2026, user request, T-238)
+
+A read-only Super Admin view (`App\Services\UplineEarningsTrace`, page `INSTRUCTIONS.md` S18). For member X it lists every row that X's own activity created for someone else:
+
+| Source | Rows | Who receives |
+| --- | --- | --- |
+| Level Income (§6) | `income_ledger_calculations` (`level_income`) of X's payments | X's Sponsor/Direct chain, levels 1–12 |
+| Purchase/Repurchase (§15) | `income_ledger_calculations` (`purchase_repurchase`) of X's store purchases | X ("Self") and X's chain, levels 1–12 |
+| Store Profit Distribution (§16.4) | `store_profit_distributions` of X's store purchases | the store's owner and the **owner's** chain L1–3, not X's |
+| Upline draw benefit (§8.5) | `draw_executions` won by X with a Sponsor benefit | X's Sponsor (10+ directs) |
+| Pair entries (§7) | `pair_entries` created by X's payments | X's **Binary Position** uplines, per leg; no rupee amount, because a Pair Reward is paid per milestone and can't be split to one downline (user decision) |
+
+- **Statuses (user decision: show all):**
+  - **Paid**.
+  - **Held**: waiting for qualified directs (T-186), or paid but the wallet credit is still pending for an overdue EMI (T-182).
+  - **Skipped**, with its reason.
+  - **Pair made** (used in milestone N), or **Pair pending**.
+- Income Booster is left out, because it is never triggered by one downline's payment (user decision).
+- There is no export.
+- Store Profit and Purchase income that lapse without a row (e.g. an owner-chain sponsor short of the T-183 unlock) can't be shown, because nothing is recorded for them.
+
 ---
 
 ## 13. Profile & Post-Registration Pending Fields

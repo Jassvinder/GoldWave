@@ -695,6 +695,26 @@ Total distributed: ₹750 (15% of ₹5,000). **Edge case:** if the chain is shor
 **When** the sponsor did not receive the benefit (fewer than 10 directs), the card names no upline.
 A visitor who is not logged in sees "Past draw results are available to members" with Member Login and Join Now.
 
+### 49. Upline Earnings trace (NEW 24-10-2026 — user decision, DOMAIN_LOGIC.md §12.3, T-238)
+
+**Given** A ← B ← X (Sponsor/Direct chain), all Plan E. Level 2 needs 4 qualified directs, and A has 1. X's ₹20,000 registration is calculated at the seeded rates: L1 5%, L2 2%.
+**Then** `/super-admin/upline-earnings?member=X` shows:
+- B, Level 1: ₹1,000, Paid.
+- A, Level 2: ₹400, **Held** ("Waiting for qualified directs").
+- Levels 3–12: 10 rows **Skipped** ("No upline at this level", no receiver).
+- Totals: paid ₹1,000, held ₹400, skipped 10.
+
+**And** X won a draw and B received the Sponsor benefit (Silver Jewellery ₹20,000). B gets a "Draw Prize (Sponsor)" row, and B's summary shows 1 prize.
+**And** X's payment created a consumed Left entry for B (milestone 1) and an unused Right entry for A. These show as "Pair made" and "Pair pending", with no amount. In total there are 15 rows.
+**Filters:** status = Held → only A's ₹400 row, while the totals still cover everything. Type = Pair Entry → 2 rows.
+**Binary-only upline:** add a Pair entry from X's payment for BIN, who is not in X's Sponsor chain. The summary still lists 2 receivers, `pair_only_count` = 1, the pair-entry total is 3, and there are 16 rows.
+**Store purchase:** at a store owned by O, with Purchase rates self 2% / L1 1% and store-owner 2%, X buys a ₹10,000 silver item. The page then shows:
+- Self ₹200, Paid. X is listed first in the summary as "Self".
+- B's Level 1: Skipped ("Store income not unlocked …", T-183).
+- Store Profit: one row, O "Store owner" ₹200 on base ₹10,000.
+
+**Search:** "uet-x" (any case) opens X. "UET-" lists the 3 matching members. **Access:** the company Admin gets 403.
+
 ## Concurrency Verification (T-020, 15-09-2026)
 
 A separate PHPUnit testsuite, `tests/Concurrency/`, verifies genuine parallel-access safety for the financial critical sections `Docs/TEST.md`'s Risk-based Coverage table calls out by name: Store Wallet deduction (§16.1), Store Inventory decrement (§16.8), and the Booster Payout Processor (§19). It is **not** part of the default `php artisan test` run and never runs against SQLite — see `DOMAIN_LOGIC.md` §21's T-020 pre-coding entry for why (SQLite `:memory:` can't even be shared across two connections, so a real race can't be produced against it; the code's actual `lockForUpdate()` behavior is Postgres-specific). Run it explicitly, against the real dev Postgres database, with:

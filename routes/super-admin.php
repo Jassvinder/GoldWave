@@ -30,6 +30,7 @@ use App\Http\Controllers\SuperAdmin\RuleVersionController;
 use App\Http\Controllers\SuperAdmin\StoreEmiBookingController;
 use App\Http\Controllers\SuperAdmin\StoreManagementController;
 use App\Http\Controllers\SuperAdmin\StoreWalletManagementController;
+use App\Http\Controllers\SuperAdmin\UplineEarningsController;
 use Illuminate\Support\Facades\Route;
 
 // DOMAIN_LOGIC.md §2 (29-09-2026): the company portal is shared by Super Admin and the company Admin; the few
@@ -81,6 +82,9 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
         Route::post('dummy-entry-assignment', [DummyEntryAssignmentController::class, 'store'])->name('dummy-entry-assignment.store');
 
         Route::get('financial-summary', [FinancialSummaryController::class, 'index'])->name('financial-summary.index');
+
+        // T-238 — Upline Earnings: every earning that went up the network because of one member (DOMAIN_LOGIC.md §12.3).
+        Route::get('upline-earnings', [UplineEarningsController::class, 'index'])->name('upline-earnings.index');
 
         // Only a Super Admin can create a company Admin.
         Route::post('company-admins', [AdminUserController::class, 'storeCompanyAdmin'])->name('company-admins.store');

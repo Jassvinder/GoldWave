@@ -204,6 +204,8 @@ class MemberManagementController extends Controller
                 ? ['installment_no' => $next->installment_no, 'amount' => (string) $next->amount, 'status' => $next->status]
                 : null,
             'can_manage_restrictions' => $request->user()?->role === 'super_admin',
+            // T-238 — the Upline Earnings page is Super Admin only.
+            'can_view_upline_earnings' => $request->user()?->role === 'super_admin',
             'emi' => $member->emiSchedule ? [
                 'rate_booking' => $this->rateBookingSummary($member->emiSchedule),
                 'total_installments' => $member->emiSchedule->total_installments,

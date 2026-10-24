@@ -8,6 +8,7 @@ import {
     Gem,
     LayoutGrid,
     LayoutTemplate,
+    Network,
     Package,
     Percent,
     QrCode,
@@ -58,6 +59,7 @@ import { index as storeEmiBookingsIndex } from '@/routes/super-admin/store-emi-b
 import { index as ruleVersionsIndex } from '@/routes/super-admin/rule-versions';
 import { index as storeManagementIndex } from '@/routes/super-admin/store-management';
 import { index as storeWalletsIndex } from '@/routes/super-admin/store-wallets';
+import { index as uplineEarningsIndex } from '@/routes/super-admin/upline-earnings';
 import type { NavGroup, NavItem } from '@/types';
 
 const overviewItems: NavItem[] = [
@@ -116,6 +118,12 @@ const compensationItems: NavItem[] = [
         title: 'Earnings Verification',
         href: earningsVerificationIndex(),
         icon: ShieldCheck,
+    },
+    {
+        title: 'Upline Earnings',
+        href: uplineEarningsIndex(),
+        icon: Network,
+        superAdminOnly: true,
     },
 ];
 
