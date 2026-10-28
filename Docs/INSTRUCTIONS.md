@@ -87,6 +87,8 @@ Super Admin also gets: full Admin Dashboard (see below), Admin Member Management
 
 **Mobile sidebar (all portals, 01-10-2026, user-reported):** on a phone the sidebar opens as a sheet. Tapping any link now closes the sheet and its dark overlay as the new page starts loading (`CloseMobileSidebarOnNavigate` in `components/app-shell.tsx`). Before this fix the page changed underneath, but the sheet and overlay stayed on screen.
 
+**Sidebar toggle icon (all portals, 28-10-2026, user-requested):** the header's sidebar toggle shows a three-line **hamburger** icon (`MenuIcon`) in every state, replacing the panel-with-arrow icon.
+
 ---
 
 ## Registration & Onboarding (Public/Auth)
@@ -318,7 +320,7 @@ Full behavioral rule: `DOMAIN_LOGIC.md` §4.1. (Back button and search added 13-
 - **Cards are rectangular; only the avatar inside is a circle (T-119, 19-09-2026) — no circular nodes.**
 - **Compact card redesign (T-208, 02-10-2026; supersedes the T-119 layout above, per `Docs/Screenshots/MemberCard.png`).** The client found the old card too big, so size had to be as small as possible. Changes:
   - **Size:** about 160 × 60 px (was 192 × ~72).
-  - **Layout:** white card with a gold border and rounded corners. Left side: the round, gold-ringed avatar, with the **Customer ID in a small gold chip under the avatar** (the user's change to the mockup). Right side: the name (one line, full name on hover), "👤 Sp: <sponsor name>", and the member's **Left / Right Binary team size** as two small badges, "L n" and "R n".
+  - **Layout:** white card with a gold border and rounded corners. Left side: the round, gold-ringed avatar, with the **Customer ID in a small gold chip under the avatar** (the user's change to the mockup). The Customer ID is **never truncated** (28-10-2026): the avatar column widens to fit the full ID and the name side truncates instead. Right side: the name (one line, full name on hover), "👤 Sp: <sponsor name>", and the member's **Left / Right Binary team size** as two small badges, "L n" and "R n".
   - **Kept from before:** the avatar rules and the inactive red dot.
   - **Where:** the same card in Tree View and Directs View. Tree View's Empty slot was shrunk to the same size.
   - **Data:** the L/R numbers are the same leg totals as the Team strip. They come for every card on the page from **one** batched query (`NetworkNodeCard::forMany` → `MemberNetworkSummary::forMany`), never one query per card. Tree View also now loads both children of a node in one query, instead of one query per side.

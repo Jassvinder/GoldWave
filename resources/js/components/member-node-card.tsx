@@ -45,11 +45,12 @@ export function MemberNodeCard({ member, href, className = '' }: Props) {
 
     const body = (
         <>
-            <div className="flex w-11 shrink-0 flex-col items-center">
+            <div className="flex min-w-11 shrink-0 flex-col items-center">
                 <Avatar member={member} />
+                {/* Never truncate the Customer ID (28-10-2026) — the column widens to fit it; the name side truncates instead. */}
                 <span
                     title={member.customer_id ?? undefined}
-                    className="max-w-full truncate rounded bg-amber-100 px-1 text-[10px] leading-4 font-semibold text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                    className="rounded bg-amber-100 px-1 text-[10px] leading-4 font-semibold whitespace-nowrap text-amber-900 dark:bg-amber-950 dark:text-amber-200"
                 >
                     {member.customer_id ?? '—'}
                 </span>
