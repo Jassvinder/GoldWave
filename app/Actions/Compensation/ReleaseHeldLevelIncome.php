@@ -52,7 +52,7 @@ class ReleaseHeldLevelIncome
                 return 0.0;
             }
 
-            $directs = $this->qualifiedDirects->count($member);
+            $directs = $this->qualifiedDirects->countForLevelIncome($member);
             $released = 0.0;
 
             foreach ($held as $row) {

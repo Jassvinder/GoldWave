@@ -6,6 +6,7 @@ use App\Http\Controllers\SuperAdmin\CashPaymentApprovalController;
 use App\Http\Controllers\SuperAdmin\CompanyDeliveryController;
 use App\Http\Controllers\SuperAdmin\CompanyWalletController;
 use App\Http\Controllers\SuperAdmin\CompensationManagementController;
+use App\Http\Controllers\SuperAdmin\DashboardNoticeController;
 use App\Http\Controllers\SuperAdmin\DrawManagementController;
 use App\Http\Controllers\SuperAdmin\DrawSettingsController;
 use App\Http\Controllers\SuperAdmin\DummyEntryAssignmentController;
@@ -36,6 +37,9 @@ use Illuminate\Support\Facades\Route;
 // DOMAIN_LOGIC.md §2 (29-09-2026): the company portal is shared by Super Admin and the company Admin; the few
 // Super-Admin-only pages sit in the nested `role:super_admin` groups below.
 Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->name('super-admin.')->group(function () {
+    // T-244 — the Hinglish Help / Guide (Super-Admin-only topics hidden for the company Admin on the page).
+    Route::inertia('help', 'super-admin/help')->name('help');
+
     Route::get('cash-payments', [CashPaymentApprovalController::class, 'index'])->name('cash-payments.index');
     Route::post('cash-payments/{payment}/approve', [CashPaymentApprovalController::class, 'approve'])->name('cash-payments.approve');
     Route::post('cash-payments/{payment}/reject', [CashPaymentApprovalController::class, 'reject'])->name('cash-payments.reject');
@@ -97,7 +101,6 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
         Route::get('member-restrictions', [MemberRestrictionController::class, 'index'])->name('member-restrictions.index');
         Route::post('member-restrictions/apply', [MemberRestrictionController::class, 'apply'])->name('member-restrictions.apply');
         Route::post('member-restrictions/lift', [MemberRestrictionController::class, 'lift'])->name('member-restrictions.lift');
-        Route::post('members/{member}/record-cash-emi', [MemberRestrictionController::class, 'recordCashEmi'])->name('members.record-cash-emi');
     });
 
     // S06 — Draw Master Settings + Admin Draw Management.
@@ -119,6 +122,12 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
     // T-115 — Public landing page's editable hero copy.
     Route::get('landing-hero', [LandingHeroController::class, 'index'])->name('landing-hero.index');
     Route::post('landing-hero', [LandingHeroController::class, 'update'])->name('landing-hero.update');
+
+    // T-245 — offers, events and notices on the member dashboard (Super Admin and company Admin).
+    Route::get('dashboard-notices', [DashboardNoticeController::class, 'index'])->name('dashboard-notices.index');
+    Route::post('dashboard-notices', [DashboardNoticeController::class, 'store'])->name('dashboard-notices.store');
+    Route::patch('dashboard-notices/{notice}', [DashboardNoticeController::class, 'update'])->name('dashboard-notices.update');
+    Route::delete('dashboard-notices/{notice}', [DashboardNoticeController::class, 'destroy'])->name('dashboard-notices.destroy');
 
     // S09 — Store Management.
     Route::get('store-management', [StoreManagementController::class, 'index'])->name('store-management.index');
@@ -148,6 +157,8 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
     Route::get('members/{member}', [MemberManagementController::class, 'show'])->name('members.show');
     Route::patch('members/{member}', [MemberManagementController::class, 'update'])->name('members.update');
     Route::patch('members/{member}/reset-password', [MemberManagementController::class, 'resetPassword'])->name('members.reset-password');
+    // T-242 — Super Admin or the company Admin records a member's cash EMI received at the office.
+    Route::post('members/{member}/record-cash-emi', [MemberManagementController::class, 'recordCashEmi'])->name('members.record-cash-emi');
     Route::post('members/{member}/verify-bank-detail', [MemberManagementController::class, 'verifyBankDetail'])->name('members.verify-bank-detail');
     Route::post('members/{member}/revert-current-rate', [MemberManagementController::class, 'revertCurrentRate'])->name('members.revert-current-rate');
 

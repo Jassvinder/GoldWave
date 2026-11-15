@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Admin\StoreDashboardController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
 use App\Models\BoosterQualification;
+use App\Models\DashboardNotice;
 use App\Models\DrawExecution;
 use App\Models\DrawGroupMember;
 use App\Models\Member;
+use App\Models\MetalRate;
 use App\Models\Store;
 use App\Services\MemberNetworkSummary;
 use App\Services\PairPoolBreakdown;
@@ -173,7 +175,49 @@ class DashboardController extends Controller
             // T-199 — draws this member won, and prizes received as a winner's Sponsor (upline benefit).
             'draw' => $this->drawSummary($member),
             'alerts' => $alerts,
+            // T-245 — the top section: today's gold/silver rate and the offers/events/notices running today.
+            'todays_rates' => $this->todaysRates(),
+            'notices' => DashboardNotice::showingToday()
+                ->orderByRaw("case kind when 'offer' then 0 when 'event' then 1 else 2 end")
+                ->orderByDesc('id')
+                ->get()
+                ->map(fn (DashboardNotice $notice): array => [
+                    'id' => $notice->id,
+                    'kind' => $notice->kind,
+                    'title' => $notice->title,
+                    'body' => $notice->body,
+                    'ends_on' => Dates::date($notice->ends_on),
+                ])
+                ->all(),
         ]);
+    }
+
+    /**
+     * T-245 — the rate in force today per metal (Rate Settings, latest `effective_from` on or before today).
+     *
+     * @return list<array{metal: string, rate_per_gram: string, effective_from: string|null}>
+     */
+    private function todaysRates(): array
+    {
+        $rates = [];
+
+        foreach (['gold', 'silver'] as $metal) {
+            $rate = MetalRate::where('metal', $metal)
+                ->whereDate('effective_from', '<=', now()->toDateString())
+                ->orderByDesc('effective_from')
+                ->orderByDesc('id')
+                ->first();
+
+            if ($rate !== null) {
+                $rates[] = [
+                    'metal' => $metal,
+                    'rate_per_gram' => (string) $rate->rate_per_gram,
+                    'effective_from' => Dates::date($rate->effective_from),
+                ];
+            }
+        }
+
+        return $rates;
     }
 
     /** @return array{wins: array<int, array{group_no: int, cycle_month_no: int, executed_at: string|null, prize_name: string|null, prize_value: string|null}>, won: int, upline_benefits: int, latest_upline: array{prize_name: string|null, prize_value: string|null, winner_customer_id: string|null}|null} */

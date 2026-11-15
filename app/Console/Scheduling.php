@@ -5,6 +5,7 @@ namespace App\Console;
 use App\Jobs\EvaluateMonthlyPairMilestones;
 use App\Jobs\ProcessBoosterPayouts;
 use App\Jobs\ProcessEmiDueStatuses;
+use App\Jobs\PurgeUnpaidRegistrationsJob;
 use App\Jobs\RunDailyDummyEntryGeneration;
 use App\Jobs\RunDrawGroupGeneration;
 use App\Jobs\RunMonthlyDrawExecution;
@@ -94,6 +95,12 @@ class Scheduling
         // activated on.
         $schedule->job(new ProcessBoosterPayouts)
             ->dailyAt('00:45')
+            ->timezone($timezone)
+            ->withoutOverlapping();
+
+        // T-243 (DOMAIN_LOGIC.md §2.2a) — delete registrations still unpaid one month later; 01:00, after the jobs above.
+        $schedule->job(new PurgeUnpaidRegistrationsJob)
+            ->dailyAt('01:00')
             ->timezone($timezone)
             ->withoutOverlapping();
 

@@ -8,8 +8,10 @@ use App\Models\Member;
 use App\Models\MembershipPlan;
 use App\Models\Payment;
 use App\Models\User;
+use App\Notifications\CashPaymentAwaitingApproval;
 use App\Services\Payments\FakePaymentGateway;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 
 /**
  * DOMAIN_LOGIC.md §5 items 7-8, §10, Docs/TEST.md scenario 12. T-005: full
@@ -113,18 +115,53 @@ test('re-activation (idempotency) never duplicates the installment schedule', fu
     expect(EmiInstallment::where('emi_schedule_id', $schedule->id)->count())->toBe(20);
 });
 
-test('a member can only pay their single next-due installment, never skip ahead', function () {
+test('a member can only pay their earliest unpaid installment, never skip one', function () {
     $member = registerPlanAViaCash('ordering@example.test', '9876510003');
     advanceToInstallment2Due();
     $schedule = EmiSchedule::where('member_id', $member->id)->firstOrFail();
     $installment3 = EmiInstallment::where('emi_schedule_id', $schedule->id)->where('installment_no', 3)->firstOrFail();
 
-    // Installment #2 is now 'due', but #3 (still 'upcoming') must not be payable ahead of it.
+    // Installment #2 is now 'due' and unpaid, so #3 cannot be paid before it.
     $this->actingAs($member->user)
         ->post("/member/emi/{$installment3->id}/pay", ['mode' => 'cash'])
         ->assertSessionHasErrors('installment');
 
     expect($installment3->fresh()->payment_id)->toBeNull();
+});
+
+test('T-241: a member can pay upcoming EMIs in advance, one at a time, and the due dates do not move', function () {
+    $member = registerPlanAViaCash('advance@example.test', '9876510009');
+    $schedule = EmiSchedule::where('member_id', $member->id)->firstOrFail();
+    $installment = fn (int $no) => EmiInstallment::where('emi_schedule_id', $schedule->id)->where('installment_no', $no)->firstOrFail();
+    $superAdmin = User::where('role', 'super_admin')->firstOrFail();
+
+    // 17-02-2026: #2 is not due until 17-03-2026, but it is the earliest unpaid EMI, so it can be paid now.
+    expect($installment(2)->status)->toBe('upcoming');
+
+    foreach ([2, 3] as $no) {
+        // The one after it cannot be paid first.
+        $this->actingAs($member->user)
+            ->post("/member/emi/{$installment($no + 1)->id}/pay", ['mode' => 'cash'])
+            ->assertSessionHasErrors('installment');
+
+        $this->actingAs($member->user)
+            ->post("/member/emi/{$installment($no)->id}/pay", ['mode' => 'cash'])
+            ->assertRedirect(route('member.emi.index'));
+
+        $this->actingAs($superAdmin)
+            ->post('/super-admin/cash-payments/'.$installment($no)->payment_id.'/approve')
+            ->assertRedirect();
+
+        expect($installment($no)->status)->toBe('paid');
+    }
+
+    // The daily status job on #2's due date leaves the paid EMIs alone; #4 keeps its own date.
+    advanceToInstallment2Due();
+
+    expect($installment(2)->status)->toBe('paid')
+        ->and($installment(3)->status)->toBe('paid')
+        ->and($installment(4)->status)->toBe('upcoming')
+        ->and($installment(4)->due_date->toDateString())->toBe('2026-05-17');
 });
 
 test('cash Payment In flow confirms installment #2 and advances the next-due installment to #3', function () {
@@ -219,4 +256,57 @@ test('ProcessEmiDueStatuses transitions upcoming to due and due to overdue with 
 
     // Installment #3 (due 17-04-2026) is unaffected by installment #2's lateness.
     expect($installment3->fresh()->status)->toBe('upcoming');
+});
+
+test('T-242: the company Admin records cash EMIs for a member who never logged in, in advance and one by one', function () {
+    $member = registerPlanAViaCash('office-cash@example.test', '9876510010');
+    Notification::fake(); // after the registration's own cash alert.
+    $schedule = EmiSchedule::where('member_id', $member->id)->firstOrFail();
+    $installment = fn (int $no) => EmiInstallment::where('emi_schedule_id', $schedule->id)->where('installment_no', $no)->firstOrFail();
+    $companyAdmin = User::factory()->create(['role' => 'admin']);
+
+    // 17-02-2026: #2 is not due yet, but it is the earliest unpaid EMI, so it is offered as an advance.
+    $this->actingAs($companyAdmin)->get("/super-admin/members/{$member->id}")
+        ->assertInertia(fn ($page) => $page->where('record_cash_emi.installment_no', 2)
+            ->where('record_cash_emi.status', 'upcoming')
+            ->where('record_cash_emi.awaiting_approval', false)
+            ->where('record_cash_emi.blocked', false));
+
+    foreach ([2, 3] as $no) {
+        $this->actingAs($companyAdmin)->post("/super-admin/members/{$member->id}/record-cash-emi")->assertSessionHasNoErrors();
+
+        $payment = Payment::find($installment($no)->payment_id);
+        expect($installment($no)->status)->toBe('paid')
+            ->and($payment->mode)->toBe('cash')
+            ->and($payment->cash_status)->toBe('approved')
+            ->and($payment->verified_by)->toBe($companyAdmin->id);
+    }
+
+    // No "awaiting approval" alert for cash the staff settled themselves.
+    Notification::assertNothingSentTo(User::where('role', 'super_admin')->get(), CashPaymentAwaitingApproval::class);
+
+    // The member's own submitted (pending) payment for #4 is the one that gets approved — no second payment.
+    $this->actingAs($member->user)->post("/member/emi/{$installment(4)->id}/pay", ['mode' => 'cash'])->assertRedirect();
+    $memberPayment = $installment(4)->payment_id;
+    $this->actingAs($companyAdmin)->get("/super-admin/members/{$member->id}")
+        ->assertInertia(fn ($page) => $page->where('record_cash_emi.awaiting_approval', true));
+    $this->actingAs($companyAdmin)->post("/super-admin/members/{$member->id}/record-cash-emi")->assertSessionHasNoErrors();
+
+    expect($installment(4)->payment_id)->toBe($memberPayment)
+        ->and($installment(4)->status)->toBe('paid')
+        ->and(Payment::where('member_id', $member->id)->where('type', 'emi_installment')->count())->toBe(3);
+
+    // A Store Admin cannot use it.
+    $storeAdmin = User::factory()->create(['role' => 'store_admin']);
+    $this->actingAs($storeAdmin)->post("/super-admin/members/{$member->id}/record-cash-emi")->assertForbidden();
+});
+
+test('T-242: nothing to record once every EMI is paid', function () {
+    $member = registerPlanAViaCash('all-paid@example.test', '9876510011');
+    EmiInstallment::whereHas('emiSchedule', fn ($q) => $q->where('member_id', $member->id))->update(['status' => 'paid']);
+    $superAdmin = User::where('role', 'super_admin')->firstOrFail();
+
+    $this->actingAs($superAdmin)->get("/super-admin/members/{$member->id}")
+        ->assertInertia(fn ($page) => $page->where('record_cash_emi', null));
+    $this->actingAs($superAdmin)->post("/super-admin/members/{$member->id}/record-cash-emi")->assertSessionHasErrors('emi');
 });

@@ -20,6 +20,9 @@ Route::middleware(['auth', 'role:store_admin', 'store-owner'])->prefix('admin')-
     Route::get('notifications', [NotificationController::class, 'index'])->defaults('portal', 'admin')->name('notifications.index');
 
     // T-153 — Assisted Registration (DOMAIN_LOGIC.md §12.2(b)).
+    // T-244 — the Hinglish Help / Guide.
+    Route::inertia('help', 'admin/help')->name('help');
+
     Route::get('register-new', [AssistedRegistrationController::class, 'show'])->name('assisted-registration.show');
     Route::post('register-new', [AssistedRegistrationController::class, 'store'])->name('assisted-registration.store');
 

@@ -245,3 +245,11 @@ test('every Tree and Directs card carries its own Left/Right team size, fetched 
         ->where('directs.0.right_count', 2)
         ->where('directs.1.left_count', 0));
 });
+
+test('a non-numeric {member} segment is a 404, not a database error', function () {
+    $admin = User::factory()->create(['role' => 'super_admin']);
+
+    $this->actingAs($admin)->get('/super-admin/members/%7Bmember%7D')->assertNotFound();
+    $this->actingAs($admin)->get('/member/tree/%7Bmember%7D')->assertNotFound();
+    $this->actingAs($admin)->get('/member/directs/abc')->assertNotFound();
+});

@@ -118,9 +118,9 @@ const STATUS_VARIANT: Record<
 /**
  * INSTRUCTIONS.md M06 — full EMI Schedule: installment list, paid
  * date/reference/mode, Pay action, and the Pair/Reward eligibility indicator
- * (DOMAIN_LOGIC.md §5/§7.3). Only the earliest unpaid (due/overdue)
- * installment is payable (§5 item 8) — the Pay action only ever appears next
- * to that one row.
+ * (DOMAIN_LOGIC.md §5/§7.3). Only the earliest unpaid installment is payable
+ * (§5 item 8), including a not-yet-due one in advance (T-241) — the Pay
+ * action only ever appears next to that one row.
  */
 export default function Emi({
     schedule,
@@ -358,9 +358,12 @@ function PayAllCard({
  * shared by the plan schedule and a store Repurchase on EMI (T-185a).
  */
 function InstallmentTable({ installments }: { installments: Installment[] }) {
+    // T-241 — the earliest unpaid EMI, even when its date has not come yet (advance payment, one at a time).
     const nextPayable = installments.find(
         (installment) =>
-            installment.status === 'due' || installment.status === 'overdue',
+            installment.status === 'due' ||
+            installment.status === 'overdue' ||
+            installment.status === 'upcoming',
     );
 
     const columns: DataTableColumn<Installment>[] = [
@@ -443,14 +446,23 @@ function InstallmentTable({ installments }: { installments: Installment[] }) {
                     );
                 }
 
+                const inAdvance = row.status === 'upcoming';
+
                 return (
                     <div className="flex flex-col items-end gap-1">
                         <EmiPayDialog
                             url={payInstallment.url(row.id)}
                             amount={row.amount}
-                            title={`Pay EMI #${row.installment_no}`}
-                            description={`Due ${formatDate(row.due_date)}. Cash and GPay/UPI payments are confirmed by the company first.`}
-                            trigger={<Button size="sm">Pay</Button>}
+                            title={`Pay EMI #${row.installment_no}${inAdvance ? ' in advance' : ''}`}
+                            description={`${inAdvance ? 'Not due yet — due' : 'Due'} ${formatDate(row.due_date)}. Cash and GPay/UPI payments are confirmed by the company first.`}
+                            trigger={
+                                <Button
+                                    size="sm"
+                                    variant={inAdvance ? 'outline' : 'default'}
+                                >
+                                    {inAdvance ? 'Pay in advance' : 'Pay'}
+                                </Button>
+                            }
                         />
                         {row.payment_state === 'rejected' && (
                             <span className="text-destructive text-xs">

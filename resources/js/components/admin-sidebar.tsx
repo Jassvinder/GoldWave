@@ -1,5 +1,6 @@
 import {
     Bell,
+    BookOpen,
     Boxes,
     FileText,
     History,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react';
 import { PortalSidebar } from '@/components/portal-sidebar';
 import { dashboard } from '@/routes';
+import { help as storeHelp } from '@/routes/admin';
 import { show as showAssistedRegistration } from '@/routes/admin/assisted-registration';
 import { index as inventoryIndex } from '@/routes/admin/inventory';
 import { index as notificationsIndex } from '@/routes/admin/notifications';
@@ -54,6 +56,7 @@ const sections: NavGroup[] = [
                 href: notificationsIndex(),
                 icon: Bell,
             },
+            { title: 'Help / Guide', href: storeHelp(), icon: BookOpen },
         ],
     },
 ];

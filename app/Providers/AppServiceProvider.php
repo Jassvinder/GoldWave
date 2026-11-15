@@ -11,6 +11,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use RuntimeException;
@@ -62,6 +63,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+
+        // A `{member}` route segment is always the numeric members.id. A non-numeric value (e.g. a hand-typed
+        // `/super-admin/members/{member}`, seen live on 30-10-2026) must be a 404, not a PostgreSQL bigint error (500).
+        Route::pattern('member', '[0-9]+');
     }
 
     /**

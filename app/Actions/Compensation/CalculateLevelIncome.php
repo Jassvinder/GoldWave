@@ -104,7 +104,7 @@ class CalculateLevelIncome
                 // once the directs are met (DOMAIN_LOGIC.md §6, Docs/TEST.md scenario 36).
                 $requiredDirects = (int) ($minDirects[(string) $level] ?? 0);
 
-                if ($requiredDirects > 0 && $this->qualifiedDirects->count($beneficiary) < $requiredDirects) {
+                if ($requiredDirects > 0 && $this->qualifiedDirects->countForLevelIncome($beneficiary) < $requiredDirects) {
                     IncomeLedgerCalculation::create([
                         'type' => 'level_income',
                         'source_payment_id' => $payment->id,

@@ -4,6 +4,7 @@ use App\Console\Scheduling;
 use App\Jobs\EvaluateMonthlyPairMilestones;
 use App\Jobs\ProcessBoosterPayouts;
 use App\Jobs\ProcessEmiDueStatuses;
+use App\Jobs\PurgeUnpaidRegistrationsJob;
 use App\Jobs\RunDailyDummyEntryGeneration;
 use App\Jobs\RunDrawGroupGeneration;
 use App\Jobs\RunMonthlyDrawExecution;
@@ -43,8 +44,8 @@ function scheduledEvent(Schedule $schedule, string $jobClass)
     return collect($schedule->events())->first(fn ($event) => $event->getSummaryForDisplay() === $jobClass);
 }
 
-test('exactly the 7 recurring jobs (§19 plus the T-142 EMI reminders) are registered, none more', function () {
-    expect(registeredSchedule()->events())->toHaveCount(7);
+test('exactly the 8 recurring jobs (§19 plus the T-142 EMI reminders and the T-243 unpaid-registration purge) are registered, none more', function () {
+    expect(registeredSchedule()->events())->toHaveCount(8);
 });
 
 test('every scheduled job runs with an explicit Asia/Kolkata timezone and withoutOverlapping', function () {
@@ -87,6 +88,7 @@ test('the EMI Due Processor and Booster Payout Processor run daily', function ()
 
     expect(scheduledEvent($schedule, ProcessEmiDueStatuses::class)->getExpression())->toBe('5 0 * * *');
     expect(scheduledEvent($schedule, ProcessBoosterPayouts::class)->getExpression())->toBe('45 0 * * *');
+    expect(scheduledEvent($schedule, PurgeUnpaidRegistrationsJob::class)->getExpression())->toBe('0 1 * * *');
 });
 
 test('the Pair/Reward Monthly Evaluator runs on the last day of the current month', function () {

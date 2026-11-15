@@ -650,7 +650,7 @@ Total distributed: ₹750 (15% of ₹5,000). **Edge case:** if the chain is shor
 - **Booster:** B is not evaluated for qualification. U is.
 - **Booster payout:** B's month-4 payout is marked `skipped` on its date, and B's wallet stays ₹8,000.
 - **Draw:** B is not grouped or drawn. If N wins a draw, the upline benefit for B is skipped.
-- **EMI:** Super Admin uses **Record Cash EMI** on B's Member Detail page, and B's next installment becomes paid. When B's plan is fully paid, B's product is still released. The button is not shown for a member who is not blocked.
+- **EMI:** Super Admin uses **Record Cash EMI** on B's Member Detail page, and B's next installment becomes paid. When B's plan is fully paid, B's product is still released. (Since T-242 the button is also shown for a member who is not blocked — see `EmiScheduleTest` "T-242".)
 
 **When** Super Admin unblocks B (B also had a separate Payout Hold, and "Also lift the Payout Hold" stays ticked). **Then:**
 - Both restrictions end, and B can request a payout again. With the box unticked, the Payout Hold would stay.

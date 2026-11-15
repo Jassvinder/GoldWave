@@ -2,7 +2,13 @@
 
 Keep only information needed to continue current work. Move durable decisions to their canonical document; remove stale entries when the task closes.
 
-## LATEST (13-10-2026): deployed to `goldwave.life` in staging mode for live testing
+## LATEST (15-11-2026): client batch of 6 tasks, to be deployed together
+
+- Live check done (read-only, see T-240). T-240…T-246 are all done locally and verified (full suite 506/506, build OK), **not committed**.
+- Next: the user commits and runs `.\gw deploy` once. It runs 2 migrations: `dashboard_notices` table, and the T-246 release of held Level Income (check `laravel.log` for "T-246: held Level Income released on deploy" — on 15-11-2026 live had 211 held rows, ₹8,400). Then `php artisan earnings:verify` on the server should still pass.
+- Open question for the user (T-243): an unpaid registration with a paid member placed under it is never deleted today. Decide what should happen.
+
+## Earlier (13-10-2026): deployed to `goldwave.life` in staging mode for live testing
 
 - The server setup, the rollback and the go-live steps are in `Docs/DEPLOYMENT.md` §0.
 - Done: site live, PostgreSQL 17, queue worker and scheduler.

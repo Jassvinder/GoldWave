@@ -9,11 +9,24 @@ use App\Models\Member;
  * milestone's "Min. Direct Members" total. A direct counts once it is `active` and has a full Pair-eligible joining:
  * a one-time plan once its registration payment is paid, an EMI plan once its paid installments reach that plan's
  * `pair_qualification_emis` (the same thresholds `CreatePairEntries` uses to fan out the direct's own pair entries).
- * Also gates Level Income per level (`CalculateLevelIncome`, `level_income_min_directs`, T-179, DOMAIN_LOGIC.md §6).
+ * Level Income's per-level gate (`level_income_min_directs`, T-179) counts with `countForLevelIncome()` instead (T-246).
  */
 class PairQualifiedDirects
 {
     public function __construct(private readonly RuleVersionService $rules) {}
+
+    /**
+     * T-246 (DOMAIN_LOGIC.md §6, client via user 15-11-2026) — for Level Income a direct counts as soon as it is `active`
+     * with its registration paid, on any plan: the Pair Qualification EMIs are ignored here (they still apply to
+     * Pair/Reward and the store income unlock, `count()`).
+     */
+    public function countForLevelIncome(Member $member): int
+    {
+        return $member->directs()
+            ->where('status', 'active')
+            ->whereHas('payments', fn ($q) => $q->where('type', 'registration')->where('status', 'paid'))
+            ->count();
+    }
 
     public function count(Member $member): int
     {

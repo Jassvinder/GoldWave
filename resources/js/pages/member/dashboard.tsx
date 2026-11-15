@@ -9,6 +9,11 @@ import {
     Users,
     WalletCards,
 } from 'lucide-react';
+import {
+    DashboardHighlights,
+    type DashboardNoticeItem,
+    type TodaysRate,
+} from '@/components/dashboard-highlights';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { StatCard, StatGrid } from '@/components/stat-card';
@@ -87,6 +92,9 @@ type Props = {
         } | null;
     };
     alerts: string[];
+    /** T-245 — top section: today's gold/silver rate and the offers/events/notices running today. */
+    todays_rates: TodaysRate[];
+    notices: DashboardNoticeItem[];
 };
 
 /** Indian-grouped rupee amount, e.g. ₹14,500.00. */
@@ -125,6 +133,8 @@ export default function Dashboard({
     draw_active,
     draw,
     alerts,
+    todays_rates,
+    notices,
 }: Props) {
     const notInWallet = [
         {
@@ -157,6 +167,8 @@ export default function Dashboard({
                         <Badge variant="secondary">{member.status}</Badge>
                     </p>
                 </div>
+
+                <DashboardHighlights rates={todays_rates} notices={notices} />
 
                 {alerts.map((alert, index) => (
                     <Alert key={index}>

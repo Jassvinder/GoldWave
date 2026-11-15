@@ -16,16 +16,30 @@ use Illuminate\Validation\ValidationException;
 /**
  * DOMAIN_LOGIC.md §5 item 8 / §10 — creates the `payments` row (type =
  * `emi_installment`) that starts either the Online or Cash "Payment In" flow
- * for a specific installment. Enforces the "next-due only" ordering rule
- * (§5 item 8, RESOLVED 13-09-2026): a member may only initiate payment for
- * their schedule's single earliest-unpaid installment, never skip ahead to a
- * later `upcoming` one. Reuses an already-pending payment for the same
- * installment instead of creating a duplicate row if the member re-attempts
- * (e.g. after a failed/abandoned gateway session).
+ * for a specific installment. Ordering rule (§5 item 8): only the schedule's
+ * single earliest-unpaid installment can be paid. T-241 (15-11-2026) — that
+ * may be an `upcoming` one (advance payment), so a member can pay ahead one
+ * EMI at a time, up to the whole schedule. Reuses an already-pending payment
+ * for the same installment instead of creating a duplicate row if the member
+ * re-attempts (e.g. after a failed/abandoned gateway session).
  */
 class InitiateEmiInstallmentPayment
 {
-    public function __invoke(Member $member, EmiInstallment $installment, string $mode): Payment
+    /** Statuses of an installment that is not paid yet and can be paid (in installment order). */
+    public const PAYABLE_STATUSES = ['overdue', 'due', 'upcoming'];
+
+    /** The schedule's earliest unpaid installment — the only one that can be paid now (§5 item 8). */
+    public static function nextPayable(int $scheduleId, bool $lock = false): ?EmiInstallment
+    {
+        $query = EmiInstallment::where('emi_schedule_id', $scheduleId)
+            ->whereIn('status', self::PAYABLE_STATUSES)
+            ->orderBy('installment_no');
+
+        return ($lock ? $query->lockForUpdate() : $query)->first();
+    }
+
+    /** `$notifyApprovers` is false when company staff record the cash themselves and settle it at once (T-242). */
+    public function __invoke(Member $member, EmiInstallment $installment, string $mode, bool $notifyApprovers = true): Payment
     {
         $newCashPayment = null;
 
@@ -45,15 +59,11 @@ class InitiateEmiInstallmentPayment
                 ]);
             }
 
-            $nextPayable = EmiInstallment::where('emi_schedule_id', $schedule->id)
-                ->whereIn('status', ['due', 'overdue'])
-                ->orderBy('installment_no')
-                ->lockForUpdate()
-                ->first();
+            $nextPayable = self::nextPayable($schedule->id, lock: true);
 
             if (! $nextPayable || $nextPayable->id !== $installment->id) {
                 throw ValidationException::withMessages([
-                    'installment' => 'Only your next-due installment can be paid — no advance/skip-ahead payment.',
+                    'installment' => 'EMIs are paid in order — pay your earliest unpaid EMI first.',
                 ]);
             }
 
@@ -92,7 +102,7 @@ class InitiateEmiInstallmentPayment
 
         // T-141 — a new cash payment waits for the Super Admin's approval, so the Super Admin is told (bell + page).
         // Re-using an already-pending payment above never notifies a second time.
-        if ($newCashPayment !== null) {
+        if ($newCashPayment !== null && $notifyApprovers) {
             Notifier::toSuperAdmins(new CashPaymentAwaitingApproval($newCashPayment));
         }
 

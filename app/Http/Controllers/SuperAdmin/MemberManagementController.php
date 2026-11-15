@@ -5,7 +5,7 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Actions\Admin\ResetMemberPassword;
 use App\Actions\Admin\UpdateMemberDetails;
 use App\Actions\Emi\RevertCurrentRateBooking;
-use App\Actions\Members\RecordCashEmiForBlockedMember;
+use App\Actions\Members\RecordCashEmiByStaff;
 use App\Actions\Profile\VerifyMemberBankDetail;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\ResetMemberPasswordRequest;
@@ -200,8 +200,16 @@ class MemberManagementController extends Controller
                 'ended_by' => $r->endedBy?->name,
                 'end_reason' => $r->end_reason,
             ]),
-            'record_cash_emi' => $member->isBlocked() && ($next = RecordCashEmiForBlockedMember::nextDue($member)) !== null
-                ? ['installment_no' => $next->installment_no, 'amount' => (string) $next->amount, 'status' => $next->status]
+            // T-242 — any active member's earliest unpaid EMI (even one not due yet), for Super Admin or the company Admin.
+            'record_cash_emi' => $member->status === 'active' && ($next = RecordCashEmiByStaff::nextPayable($member)) !== null
+                ? [
+                    'installment_no' => $next->installment_no,
+                    'amount' => (string) $next->amount,
+                    'status' => $next->status,
+                    'due_date' => Dates::date($next->due_date),
+                    'awaiting_approval' => $next->payment?->status === 'pending',
+                    'blocked' => $member->isBlocked(),
+                ]
                 : null,
             'can_manage_restrictions' => $request->user()?->role === 'super_admin',
             // T-238 — the Upline Earnings page is Super Admin only.
@@ -340,6 +348,14 @@ class MemberManagementController extends Controller
 
         return redirect()->route('super-admin.members.show', $member)
             ->with('status', "{$member->customer_id}'s EMI schedule is back on Future Rate.");
+    }
+
+    /** T-242 (DOMAIN_LOGIC.md §5 item 10) — the member's earliest unpaid EMI, received in cash at the office. */
+    public function recordCashEmi(Member $member, Request $request, RecordCashEmiByStaff $record): RedirectResponse
+    {
+        $payment = $record($member, $request->user());
+
+        return back()->with('status', 'Cash EMI of ₹'.number_format((float) $payment->amount, 2).' recorded. It is settled in the background within a few seconds.');
     }
 
     /** DOMAIN_LOGIC.md §11.2 point 8 — verifies the member's latest bank detail row, so it can be used for a payout request. */

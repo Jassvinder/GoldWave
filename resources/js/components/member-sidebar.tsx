@@ -2,6 +2,7 @@ import {
     Award,
     Bell,
     Banknote,
+    BookOpen,
     Dices,
     FileEdit,
     FileText,
@@ -23,6 +24,7 @@ import { show as showMembership } from '@/routes/member/membership';
 import { index as bookerIndex } from '@/routes/member/booster';
 import { index as changeRequestsIndex } from '@/routes/member/change-requests';
 import { show as showDirects } from '@/routes/member/directs';
+import { help as memberHelp } from '@/routes/member';
 import { index as drawIndex } from '@/routes/member/draw';
 import { index as emiIndex } from '@/routes/member/emi';
 import { index as levelIncomeIndex } from '@/routes/member/level-income';
@@ -111,6 +113,7 @@ const sections: NavGroup[] = [
                 href: notificationsIndex(),
                 icon: Bell,
             },
+            { title: 'Help / Guide', href: memberHelp(), icon: BookOpen },
         ],
     },
 ];

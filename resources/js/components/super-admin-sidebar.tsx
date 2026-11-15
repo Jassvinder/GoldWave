@@ -1,6 +1,7 @@
 import {
     Banknote,
     Bell,
+    BookOpen,
     ClipboardEdit,
     ClipboardList,
     Coins,
@@ -8,6 +9,7 @@ import {
     Gem,
     LayoutGrid,
     LayoutTemplate,
+    Megaphone,
     Network,
     Package,
     Percent,
@@ -30,6 +32,7 @@ import {
 import { usePage } from '@inertiajs/react';
 import { PortalSidebar } from '@/components/portal-sidebar';
 import { dashboard } from '@/routes';
+import { help as staffHelp } from '@/routes/super-admin';
 import { index as adminUsersIndex } from '@/routes/super-admin/admin-users';
 import { audit as compensationAudit } from '@/routes/super-admin/compensation';
 import { index as earningsVerificationIndex } from '@/routes/super-admin/earnings-verification';
@@ -38,6 +41,7 @@ import { index as drawSettingsIndex } from '@/routes/super-admin/draw-settings';
 import { index as dummyAssignmentIndex } from '@/routes/super-admin/dummy-entry-assignment';
 import { index as dummySettingsIndex } from '@/routes/super-admin/dummy-entry-settings';
 import { index as financialSummaryIndex } from '@/routes/super-admin/financial-summary';
+import { index as dashboardNoticesIndex } from '@/routes/super-admin/dashboard-notices';
 import { index as landingHeroIndex } from '@/routes/super-admin/landing-hero';
 import { index as maintenanceIndex } from '@/routes/super-admin/maintenance';
 import { index as memberRestrictionsIndex } from '@/routes/super-admin/member-restrictions';
@@ -71,6 +75,7 @@ const overviewItems: NavItem[] = [
         superAdminOnly: true,
     },
     { title: 'Notifications', href: notificationsIndex(), icon: Bell },
+    { title: 'Help / Guide', href: staffHelp(), icon: BookOpen },
 ];
 
 const memberItems: NavItem[] = [
@@ -164,6 +169,11 @@ const settingsItems: NavItem[] = [
         href: paymentSettingsIndex(),
         icon: QrCode,
         superAdminOnly: true,
+    },
+    {
+        title: 'Dashboard Notices',
+        href: dashboardNoticesIndex(),
+        icon: Megaphone,
     },
     {
         title: 'Landing Page',

@@ -99,12 +99,8 @@ type BankDetails = {
 type Props = {
     member: MemberDetail;
     restrictions: RestrictionRow[];
-    /** T-231 — the plan EMI Super Admin can record as cash while the member is blocked. */
-    record_cash_emi: {
-        installment_no: number;
-        amount: string;
-        status: string;
-    } | null;
+    /** T-242 — the member's earliest unpaid plan EMI, which company staff can record as cash received. */
+    record_cash_emi: RecordCashEmi | null;
     can_manage_restrictions: boolean;
     can_view_upline_earnings: boolean;
     bank_details: BankDetails;
@@ -812,9 +808,19 @@ export default function SuperAdminMemberDetail({
 }
 
 /**
- * T-231 (DOMAIN_LOGIC.md §2.3) — a blocked member can't log in to pay an EMI, so Super Admin records the next due one
- * as cash received. It is settled in the background like an approved cash payment; the member earns nothing from it.
+ * T-242 (DOMAIN_LOGIC.md §5 item 10) — Super Admin or the company Admin records the member's earliest unpaid EMI as cash
+ * received at the office (any member; a not-yet-due one is an advance). It is settled in the background like an
+ * approved cash payment. A blocked member (T-231) earns nothing from it.
  */
+type RecordCashEmi = {
+    installment_no: number;
+    amount: string;
+    status: string;
+    due_date: string | null;
+    awaiting_approval: boolean;
+    blocked: boolean;
+};
+
 function RecordCashEmiDialog({
     memberId,
     customerId,
@@ -822,11 +828,12 @@ function RecordCashEmiDialog({
 }: {
     memberId: number;
     customerId: string;
-    emi: { installment_no: number; amount: string; status: string };
+    emi: RecordCashEmi;
 }) {
     const [open, setOpen] = useState(false);
     const [processing, setProcessing] = useState(false);
     const amount = `₹${Number(emi.amount).toLocaleString('en-IN')}`;
+    const inAdvance = emi.status === 'upcoming';
 
     const record = () => {
         router.post(
@@ -852,16 +859,31 @@ function RecordCashEmiDialog({
                 <DialogHeader>
                     <DialogTitle>Record Cash EMI — {customerId}</DialogTitle>
                     <DialogDescription>
-                        EMI #{emi.installment_no} ({emi.status}) · {amount}
+                        EMI #{emi.installment_no} · {amount} ·{' '}
+                        {inAdvance ? 'in advance, due' : 'due'}{' '}
+                        {formatDate(emi.due_date)}
                     </DialogDescription>
                 </DialogHeader>
-                <p className="text-sm">
-                    This member is blocked and can&apos;t log in, so the EMI is
-                    recorded here. Record it only after you have received{' '}
-                    <span className="font-medium">{amount}</span> in cash. The
-                    EMI counts as paid; the member earns nothing from it while
-                    blocked.
-                </p>
+                <div className="flex flex-col gap-2 text-sm">
+                    <p>
+                        Record it only after you have received{' '}
+                        <span className="font-medium">{amount}</span> in cash.
+                        The EMI is marked paid at once and earnings are
+                        calculated as for any EMI.
+                    </p>
+                    {emi.awaiting_approval && (
+                        <p className="text-muted-foreground">
+                            The member has already submitted a payment for this
+                            EMI. Recording it here approves that payment.
+                        </p>
+                    )}
+                    {emi.blocked && (
+                        <p className="text-muted-foreground">
+                            This member is blocked, so they earn nothing from
+                            it.
+                        </p>
+                    )}
+                </div>
                 <DialogFooter>
                     <Button disabled={processing} onClick={record}>
                         Cash received — record {amount}

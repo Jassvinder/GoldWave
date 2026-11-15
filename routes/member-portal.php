@@ -24,6 +24,9 @@ use Illuminate\Support\Facades\Route;
  */
 Route::middleware(['auth', 'member-portal'])->prefix('member')->name('member.')->group(function () {
     // T-153 — Assisted Registration (DOMAIN_LOGIC.md §12.2(b)).
+    // T-244 — the Hinglish Help / Guide (static content, `resources/js/lib/help-content.ts`).
+    Route::inertia('help', 'member/help')->name('help');
+
     Route::get('register-new', [AssistedRegistrationController::class, 'show'])->name('assisted-registration.show');
     Route::post('register-new', [AssistedRegistrationController::class, 'store'])->name('assisted-registration.store');
     // T-215 — the code that approves a wallet payment (DOMAIN_LOGIC.md §12.2(d)).

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\SuperAdmin;
 
 use App\Actions\Members\ApplyMemberRestriction;
 use App\Actions\Members\LiftMemberRestriction;
-use App\Actions\Members\RecordCashEmiForBlockedMember;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\ChangeMemberRestrictionRequest;
 use App\Models\Member;
@@ -85,13 +84,6 @@ class MemberRestrictionController extends Controller
             ->with('status', $request->string('type')->toString() === MemberRestriction::ACCOUNT_BLOCK
                 ? "{$member->customer_id} is unblocked."
                 : "{$member->customer_id}'s Payout Hold is lifted.");
-    }
-
-    public function recordCashEmi(Member $member, Request $request, RecordCashEmiForBlockedMember $record): RedirectResponse
-    {
-        $payment = $record($member, $request->user());
-
-        return back()->with('status', 'Cash EMI of ₹'.number_format((float) $payment->amount, 2).' recorded. It is settled in the background within a few seconds.');
     }
 
     /** @return array<string, mixed> */

@@ -52,6 +52,9 @@ class EarningsVerifier
     /** @var array<int, int> qualified-direct count per member, per run (T-178/T-179) */
     private array $qualifiedDirectCounts = [];
 
+    /** @var array<int, int> Level Income direct count per member, per run (T-246) */
+    private array $levelIncomeDirectCounts = [];
+
     /** @var array<string, array{label: string, checked: int, errors: int, warnings: int, findings: list<array{severity: string, message: string, ref: string}>}> */
     private array $report = [];
 
@@ -67,6 +70,7 @@ class EarningsVerifier
         $this->report = [];
         $this->ruleCache = [];
         $this->qualifiedDirectCounts = [];
+        $this->levelIncomeDirectCounts = [];
         $this->members = DB::table('members')->get()->keyBy('id');
         $this->plans = DB::table('membership_plans')->get()->keyBy('id');
 
@@ -332,7 +336,7 @@ class EarningsVerifier
                 $this->error($check, "Held, but only a level short of its qualified directs is held and this rule version needs {$requiredDirects} at this level.", $ref);
             } else {
                 $activeRequired = (int) (((array) $this->activeRule('level_income_min_directs'))[(string) $row->level_no] ?? 0);
-                $directsNow = $this->qualifiedDirectCount((int) $beneficiary->id);
+                $directsNow = $this->levelIncomeDirectCount((int) $beneficiary->id);
 
                 if (! $inactiveNow && $directsNow >= $activeRequired) {
                     $this->warn($check, "Held (needs {$activeRequired} qualified directs) but {$beneficiary->customer_id} has {$directsNow} now, so ₹{$row->amount} should have been released — run `php artisan level-income:release-held`.", $ref);
@@ -351,7 +355,7 @@ class EarningsVerifier
         }
 
         // A released row (T-186) was paid when the active version's count was met, so it is not compared here.
-        if (! $isHeld && $row->released_at === null && $requiredDirects > 0 && ($directsNow = $this->qualifiedDirectCount((int) $beneficiary->id)) < $requiredDirects) {
+        if (! $isHeld && $row->released_at === null && $requiredDirects > 0 && ($directsNow = $this->levelIncomeDirectCount((int) $beneficiary->id)) < $requiredDirects) {
             $this->warn($check, "Paid, but this level needs {$requiredDirects} qualified directs and {$beneficiary->customer_id} has {$directsNow} now (changed since, or paid under the wrong count).", $ref);
         }
 
@@ -652,6 +656,16 @@ class EarningsVerifier
             ->where('s.member_id', $memberId)
             ->where('i.status', 'overdue')
             ->exists();
+    }
+
+    /** T-246 — Level Income counts every active direct with a paid registration (no Pair Qualification EMIs). */
+    private function levelIncomeDirectCount(int $memberId): int
+    {
+        return $this->levelIncomeDirectCounts[$memberId] ??= $this->members
+            ->where('sponsor_id', $memberId)
+            ->filter(fn (stdClass $direct): bool => $direct->status === 'active'
+                && DB::table('payments')->where('member_id', $direct->id)->where('type', 'registration')->where('status', 'paid')->exists())
+            ->count();
     }
 
     private function qualifiedDirectCount(int $memberId): int

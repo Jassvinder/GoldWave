@@ -13,8 +13,10 @@ use App\Models\Member;
 use App\Models\MembershipPlan;
 use App\Models\Payment;
 use App\Models\RuleValue;
+use App\Models\RuleVersion;
 use App\Models\User;
 use App\Models\WalletLedgerEntry;
+use App\Services\PairQualifiedDirects;
 use Illuminate\Support\Carbon;
 
 /**
@@ -406,12 +408,12 @@ test('T-186: a direct confirmed through the real flow releases the sponsor\'s he
     expect((float) $s2->fresh()->wallet_balance)->toBe(800.0); // Both held L2 rows: P's ₹400 and the second direct's ₹400.
 });
 
-test('TEST.md scenario 36: an EMI direct below its Pair qualification EMIs and a non-active direct do not count', function () {
+test('T-246: an EMI direct counts for Level Income from its paid registration (no Pair Qualification EMIs); a non-active one does not', function () {
     setLevelMinDirects(['1' => 2]);
 
     $s1 = qualifiedLevelMember('SC36E-S1');
     qualifiedLevelMember('SC36E-CANCELLED', $s1, 'cancelled');
-    $emiDirect = levelIncomeMember('SC36E-EMI', $s1); // Plan A — needs 6 paid EMIs.
+    $emiDirect = levelIncomeMember('SC36E-EMI', $s1); // Plan A — needs 6 paid EMIs for Pair, not for Level Income.
     $schedule = EmiSchedule::create([
         'member_id' => $emiDirect->id,
         'membership_plan_id' => $emiDirect->membership_plan_id,
@@ -419,26 +421,40 @@ test('TEST.md scenario 36: an EMI direct below its Pair qualification EMIs and a
         'rate_booking_method' => 'future_rate',
         'installment_amount' => 1000,
     ]);
-    foreach (range(1, 5) as $no) {
-        EmiInstallment::create(['emi_schedule_id' => $schedule->id, 'installment_no' => $no, 'due_date' => now(), 'amount' => 1000, 'status' => 'paid']);
-    }
+    EmiInstallment::create(['emi_schedule_id' => $schedule->id, 'installment_no' => 1, 'due_date' => now(), 'amount' => 1000, 'status' => 'paid']);
+    makeRegistrationPayment($emiDirect, 1000);
 
-    // S1's directs: the cancelled one, the 5-EMI Plan A one and the payer itself (Plan E, paid) = 1 qualified.
+    // S1's directs: the cancelled one (no), the 1-EMI Plan A one (yes) and the payer itself (Plan E, paid, yes) = 2.
     $payer = qualifiedLevelMember('SC36E-P', $s1);
     $payment = Payment::where('member_id', $payer->id)->firstOrFail();
     app(CalculateLevelIncome::class)($payment);
 
-    $level1 = IncomeLedgerCalculation::where('source_payment_id', $payment->id)->where('level_no', 1)->firstOrFail();
-    expect($level1->eligibility_status)->toBe('held');
-    expect($level1->skip_reason)->toBe('insufficient_directs');
+    expect(IncomeLedgerCalculation::where('source_payment_id', $payment->id)->where('level_no', 1)->value('eligibility_status'))->toBe('paid');
 
-    // 6th EMI paid — the Plan A direct now counts, so the next payment pays L1.
-    EmiInstallment::create(['emi_schedule_id' => $schedule->id, 'installment_no' => 6, 'due_date' => now(), 'amount' => 1000, 'status' => 'paid']);
-    $next = qualifiedLevelMember('SC36E-P2', $s1);
-    $nextPayment = Payment::where('member_id', $next->id)->firstOrFail();
-    app(CalculateLevelIncome::class)($nextPayment);
+    // Pair/Reward still uses the Pair Qualification EMIs: only the Plan E payer counts there.
+    expect(app(PairQualifiedDirects::class)->count($s1->fresh()))->toBe(1)
+        ->and(app(PairQualifiedDirects::class)->countForLevelIncome($s1->fresh()))->toBe(2);
+});
 
-    expect(IncomeLedgerCalculation::where('source_payment_id', $nextPayment->id)->where('level_no', 1)->value('eligibility_status'))->toBe('paid');
+test('T-246: income held under the old count is released by the deploy migration', function () {
+    setLevelMinDirects(['1' => 2]);
+
+    // S1 has 2 active Plan A directs with only their registration paid; under the old count it was held.
+    $s1 = qualifiedLevelMember('T246-S1');
+    $first = levelIncomeMember('T246-D1', $s1);
+    makeRegistrationPayment($first, 1000);
+    $second = levelIncomeMember('T246-D2', $s1);
+    $payment = makeRegistrationPayment($second, 1000);
+    IncomeLedgerCalculation::create([
+        'type' => 'level_income', 'source_payment_id' => $payment->id, 'beneficiary_member_id' => $s1->id, 'level_no' => 1,
+        'rate_percent' => 5, 'amount' => 50, 'rule_version_id' => RuleVersion::where('is_active', true)->value('id'),
+        'eligibility_status' => 'held', 'skip_reason' => 'insufficient_directs',
+    ]);
+
+    (include database_path('migrations/2026_11_15_000001_release_held_level_income_for_t246.php'))->up();
+
+    expect(IncomeLedgerCalculation::where('beneficiary_member_id', $s1->id)->value('eligibility_status'))->toBe('paid')
+        ->and((float) $s1->fresh()->wallet_balance)->toBe(50.0);
 });
 
 test('T-179: a rule version without level_income_min_directs pays exactly as before', function () {

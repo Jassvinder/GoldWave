@@ -240,10 +240,7 @@ test('scenario 45: Super Admin records a blocked member\'s cash EMI on Member De
     $installment = EmiInstallment::create(['emi_schedule_id' => $schedule->id, 'installment_no' => 2, 'due_date' => now()->toDateString(), 'amount' => $plan->amount, 'status' => 'due']);
     $admin = mrSuperAdmin();
 
-    // Not offered while the member is not blocked.
-    $this->actingAs($admin)->get("/super-admin/members/{$member->id}")->assertInertia(fn ($page) => $page->where('record_cash_emi', null));
-    $this->actingAs($admin)->post("/super-admin/members/{$member->id}/record-cash-emi")->assertSessionHasErrors('emi');
-
+    // T-242 — offered for any active member now, blocked or not (see EmiScheduleTest for the unblocked case).
     app(ApplyMemberRestriction::class)($member, MemberRestriction::PAYOUT_HOLD, 'First warning given', $admin);
     app(ApplyMemberRestriction::class)($member, MemberRestriction::ACCOUNT_BLOCK, 'Second offence found', $admin);
 

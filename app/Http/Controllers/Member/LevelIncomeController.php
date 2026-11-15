@@ -67,7 +67,7 @@ class LevelIncomeController extends Controller
             'total' => (string) $rows->sum('amount'),
             'held' => $held,
             'heldTotal' => (string) $held->sum('amount'),
-            'qualifiedDirects' => $held->isEmpty() ? null : $this->qualifiedDirects->count($member),
+            'qualifiedDirects' => $held->isEmpty() ? null : $this->qualifiedDirects->countForLevelIncome($member),
         ]);
     }
 }
