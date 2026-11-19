@@ -26,37 +26,143 @@ export default function NetworkDiagramShell({
     summary,
     children,
 }: Props) {
-    const [scale, setScale] = useState(1);
-    const [pan, setPan] = useState({ x: 0, y: 0 });
-    const dragState = useRef<{
-        startX: number;
-        startY: number;
-        originX: number;
-        originY: number;
-    } | null>(null);
+    /*
+     * Pan/zoom model: the diagram is transformed with origin 0 0, so a
+     * viewport point p (relative to the viewport box) shows diagram point
+     * (p - pan) / scale. One active pointer pans; two pointers (mobile
+     * pinch) zoom around the fingers' midpoint and pan with it, keeping the
+     * diagram point under the fingers fixed. Every pointer is tracked by id —
+     * the old single-drag state treated a second finger as a fresh drag,
+     * which made the diagram jump around while pinching.
+     */
+    type View = { scale: number; x: number; y: number };
+    const [view, setViewState] = useState<View>({ scale: 1, x: 0, y: 0 });
+    // Mirror of `view` readable synchronously inside pointer handlers.
+    const viewRef = useRef<View>(view);
+
+    function setView(next: View | ((v: View) => View)) {
+        const v = typeof next === 'function' ? next(viewRef.current) : next;
+        viewRef.current = v;
+        setViewState(v);
+    }
+    const viewportRef = useRef<HTMLDivElement>(null);
+    const pointers = useRef(new Map<number, { x: number; y: number }>());
+    const gesture = useRef<
+        | {
+              kind: 'pan';
+              startX: number;
+              startY: number;
+              originX: number;
+              originY: number;
+          }
+        | {
+              kind: 'pinch';
+              startDist: number;
+              startScale: number;
+              anchorX: number;
+              anchorY: number;
+          }
+        | null
+    >(null);
+    // Set once a gesture actually moves, so releasing a drag/pinch on top of
+    // a member card does not also count as a click (re-rooting the tree).
+    const moved = useRef(false);
+
+    const MIN_SCALE = 0.2;
+    const MAX_SCALE = 2;
+    const clampScale = (s: number) =>
+        Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
+
+    function localPoint(clientX: number, clientY: number) {
+        const rect = viewportRef.current?.getBoundingClientRect();
+        return {
+            x: clientX - (rect?.left ?? 0),
+            y: clientY - (rect?.top ?? 0),
+        };
+    }
+
+    function startGesture() {
+        const pts = [...pointers.current.values()];
+        const v = viewRef.current;
+
+        if (pts.length >= 2) {
+            const [a, b] = pts;
+            const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            gesture.current = {
+                kind: 'pinch',
+                startDist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+                startScale: v.scale,
+                anchorX: (mid.x - v.x) / v.scale,
+                anchorY: (mid.y - v.y) / v.scale,
+            };
+        } else if (pts.length === 1) {
+            gesture.current = {
+                kind: 'pan',
+                startX: pts[0].x,
+                startY: pts[0].y,
+                originX: v.x,
+                originY: v.y,
+            };
+        } else {
+            gesture.current = null;
+        }
+    }
 
     function onPointerDown(e: React.PointerEvent) {
-        dragState.current = {
-            startX: e.clientX,
-            startY: e.clientY,
-            originX: pan.x,
-            originY: pan.y,
-        };
-        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (pointers.current.size === 0) moved.current = false;
+        pointers.current.set(e.pointerId, localPoint(e.clientX, e.clientY));
+        (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+        startGesture();
     }
 
     function onPointerMove(e: React.PointerEvent) {
-        if (!dragState.current) return;
-        const dx = e.clientX - dragState.current.startX;
-        const dy = e.clientY - dragState.current.startY;
-        setPan({
-            x: dragState.current.originX + dx,
-            y: dragState.current.originY + dy,
+        if (!pointers.current.has(e.pointerId)) return;
+        pointers.current.set(e.pointerId, localPoint(e.clientX, e.clientY));
+        const g = gesture.current;
+        if (!g) return;
+
+        if (g.kind === 'pan') {
+            const p = pointers.current.get(e.pointerId)!;
+            const dx = p.x - g.startX;
+            const dy = p.y - g.startY;
+            if (Math.abs(dx) + Math.abs(dy) > 4) moved.current = true;
+            setView((v) => ({ ...v, x: g.originX + dx, y: g.originY + dy }));
+            return;
+        }
+
+        const [a, b] = [...pointers.current.values()];
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        const scale = clampScale(
+            (g.startScale * Math.hypot(a.x - b.x, a.y - b.y)) / g.startDist,
+        );
+        moved.current = true;
+        setView({
+            scale,
+            x: mid.x - g.anchorX * scale,
+            y: mid.y - g.anchorY * scale,
         });
     }
 
-    function onPointerUp() {
-        dragState.current = null;
+    function onPointerEnd(e: React.PointerEvent) {
+        if (!pointers.current.delete(e.pointerId)) return;
+        // Re-baseline on the remaining finger(s) so lifting one finger of a
+        // pinch does not make the diagram jump.
+        startGesture();
+    }
+
+    function zoomBy(delta: number) {
+        const rect = viewportRef.current?.getBoundingClientRect();
+        const cx = (rect?.width ?? 0) / 2;
+        const cy = (rect?.height ?? 0) / 2;
+        setView((v) => {
+            const scale = clampScale(v.scale + delta);
+            return {
+                scale,
+                x: cx - ((cx - v.x) / v.scale) * scale,
+                y: cy - ((cy - v.y) / v.scale) * scale,
+            };
+        });
     }
 
     return (
@@ -83,24 +189,21 @@ export default function NetworkDiagramShell({
                 <div className="flex gap-2">
                     <button
                         type="button"
-                        onClick={() => setScale((s) => Math.max(0.2, s - 0.1))}
+                        onClick={() => zoomBy(-0.1)}
                         className="rounded-md border px-3 py-1 text-sm"
                     >
                         −
                     </button>
                     <button
                         type="button"
-                        onClick={() => {
-                            setScale(1);
-                            setPan({ x: 0, y: 0 });
-                        }}
+                        onClick={() => setView({ scale: 1, x: 0, y: 0 })}
                         className="rounded-md border px-3 py-1 text-sm"
                     >
                         Reset
                     </button>
                     <button
                         type="button"
-                        onClick={() => setScale((s) => Math.min(2, s + 0.1))}
+                        onClick={() => zoomBy(0.1)}
                         className="rounded-md border px-3 py-1 text-sm"
                     >
                         +
@@ -112,16 +215,27 @@ export default function NetworkDiagramShell({
 
             <div
                 className="bg-muted/30 h-[70vh] cursor-grab touch-none overflow-hidden rounded-md border active:cursor-grabbing"
+                ref={viewportRef}
                 onPointerDown={onPointerDown}
                 onPointerMove={onPointerMove}
-                onPointerUp={onPointerUp}
-                onPointerLeave={onPointerUp}
+                onPointerUp={onPointerEnd}
+                onPointerCancel={onPointerEnd}
+                onPointerLeave={(e) => {
+                    if (e.pointerType === 'mouse') onPointerEnd(e);
+                }}
+                onClickCapture={(e) => {
+                    if (moved.current) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        moved.current = false;
+                    }
+                }}
             >
                 <div
                     className="flex h-full w-full items-start justify-center pt-10"
                     style={{
-                        transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
-                        transformOrigin: 'top center',
+                        transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
+                        transformOrigin: '0 0',
                     }}
                 >
                     {children}
