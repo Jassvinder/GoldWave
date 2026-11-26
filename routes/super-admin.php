@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\SuperAdmin\AdminUserController;
+use App\Http\Controllers\SuperAdmin\BannerWinnerController;
 use App\Http\Controllers\SuperAdmin\CashPaymentApprovalController;
 use App\Http\Controllers\SuperAdmin\CompanyDeliveryController;
 use App\Http\Controllers\SuperAdmin\CompanyWalletController;
@@ -62,12 +63,17 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
     // require the Super Admin's own password re-entered within the last 5 minutes (300 s; `password.confirm`'s app-wide default is 3 h).
     // Super Admin only (29-09-2026): Rule Versions, Dummy Entry Settings/Assignment, Financial Summary.
     Route::middleware('role:super_admin')->group(function () {
+        // Opening the page redirects to the password screen; a save past the 5 minutes instead asks for the password
+        // inside the form (`password.fresh`, 26-11-2026), so a filled form is never lost on the way.
         Route::middleware('password.confirm:password.confirm,300')->group(function () {
             Route::get('rule-versions', [RuleVersionController::class, 'index'])->name('rule-versions.index');
-            Route::post('rule-versions', [RuleVersionController::class, 'store'])->name('rule-versions.store');
 
             // T-237 — Membership Plans (DOMAIN_LOGIC.md §3.3): prices are as sensitive as the compensation rules.
             Route::get('membership-plans', [MembershipPlanController::class, 'index'])->name('membership-plans.index');
+        });
+
+        Route::middleware('password.fresh:300')->group(function () {
+            Route::post('rule-versions', [RuleVersionController::class, 'store'])->name('rule-versions.store');
             Route::post('membership-plans', [MembershipPlanController::class, 'store'])->name('membership-plans.store');
             Route::patch('membership-plans/{plan}', [MembershipPlanController::class, 'update'])->name('membership-plans.update');
         });
@@ -128,6 +134,12 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
     Route::post('dashboard-notices', [DashboardNoticeController::class, 'store'])->name('dashboard-notices.store');
     Route::patch('dashboard-notices/{notice}', [DashboardNoticeController::class, 'update'])->name('dashboard-notices.update');
     Route::delete('dashboard-notices/{notice}', [DashboardNoticeController::class, 'destroy'])->name('dashboard-notices.destroy');
+
+    // T-248 — draw winners shown on the member login banner (display only; Super Admin and company Admin).
+    Route::get('banner-winners', [BannerWinnerController::class, 'index'])->name('banner-winners.index');
+    Route::post('banner-winners', [BannerWinnerController::class, 'store'])->name('banner-winners.store');
+    Route::patch('banner-winners/{winner}', [BannerWinnerController::class, 'update'])->name('banner-winners.update');
+    Route::delete('banner-winners/{winner}', [BannerWinnerController::class, 'destroy'])->name('banner-winners.destroy');
 
     // S09 — Store Management.
     Route::get('store-management', [StoreManagementController::class, 'index'])->name('store-management.index');

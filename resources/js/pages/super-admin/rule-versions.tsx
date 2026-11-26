@@ -13,6 +13,7 @@ import { FormEventHandler } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FormSection } from '@/components/form-section';
+import PasswordReconfirmField from '@/components/password-reconfirm-field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -82,8 +83,9 @@ type Props = {
 export default function SuperAdminRuleVersions({ versions, current }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const activeVersion = versions.find((version) => version.is_active);
-    const { data, setData, post, processing } = useForm({
+    const { data, setData, post, processing, errors } = useForm({
         notes: '',
+        confirm_password: '',
         level_income_rates: current.level_income_rates,
         level_income_min_directs: current.level_income_min_directs,
         pair_value_per_entry: current.pair_value_per_entry,
@@ -105,8 +107,10 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
         setData: setGoldData,
         post: postGold,
         processing: goldProcessing,
+        errors: goldErrors,
     } = useForm({
         notes: '',
+        confirm_password: '',
         level_income_rates_gold: current.level_income_rates_gold,
         pair_value_per_entry_gold: current.pair_value_per_entry_gold,
         purchase_repurchase_income_rates_gold:
@@ -118,12 +122,17 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
 
     const submit: FormEventHandler = (e) => {
         e.preventDefault();
-        post(store.url());
+        // The re-entered password (asked only after 5 minutes) is cleared after every attempt; the rest stays filled.
+        post(store.url(), {
+            onFinish: () => setData('confirm_password', ''),
+        });
     };
 
     const submitGold: FormEventHandler = (e) => {
         e.preventDefault();
-        postGold(store.url());
+        postGold(store.url(), {
+            onFinish: () => setGoldData('confirm_password', ''),
+        });
     };
 
     const setLevelRate = (level: string, value: number) => {
@@ -784,6 +793,14 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
                                             }
                                         />
                                     </div>
+                                    <PasswordReconfirmField
+                                        id="confirm_password"
+                                        value={data.confirm_password}
+                                        error={errors.confirm_password}
+                                        onChange={(v) =>
+                                            setData('confirm_password', v)
+                                        }
+                                    />
                                     <Button
                                         type="submit"
                                         disabled={processing}
@@ -973,6 +990,14 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
                                         }
                                     />
                                 </div>
+                                <PasswordReconfirmField
+                                    id="gold_confirm_password"
+                                    value={goldData.confirm_password}
+                                    error={goldErrors.confirm_password}
+                                    onChange={(v) =>
+                                        setGoldData('confirm_password', v)
+                                    }
+                                />
                                 <Button
                                     type="submit"
                                     disabled={goldProcessing}

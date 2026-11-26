@@ -726,9 +726,10 @@ test('the Rule Versions page and its publish endpoint require a recent password 
         ->get('/super-admin/rule-versions')
         ->assertRedirect(route('password.confirm'));
 
+    // 26-11-2026 — a save asks for the password inside the form (`password.fresh`) instead of redirecting away from it.
     $this->actingAs(spSuperAdmin())
         ->post('/super-admin/rule-versions', ['item_buyback_percent' => 58])
-        ->assertRedirect(route('password.confirm'));
+        ->assertSessionHasErrors('confirm_password');
 
     expect((float) app(RuleVersionService::class)->value('item_buyback_percent'))->toBe(60.0);
 

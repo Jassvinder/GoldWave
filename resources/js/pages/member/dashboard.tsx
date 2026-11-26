@@ -14,6 +14,7 @@ import {
     type DashboardNoticeItem,
     type TodaysRate,
 } from '@/components/dashboard-highlights';
+import { LoginBanner, type LoginBannerData } from '@/components/login-banner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { StatCard, StatGrid } from '@/components/stat-card';
@@ -95,6 +96,8 @@ type Props = {
     /** T-245 — top section: today's gold/silver rate and the offers/events/notices running today. */
     todays_rates: TodaysRate[];
     notices: DashboardNoticeItem[];
+    /** T-249 — set only on the first dashboard visit after a login: the welcome banner popup. */
+    login_banner: LoginBannerData | null;
 };
 
 /** Indian-grouped rupee amount, e.g. ₹14,500.00. */
@@ -135,6 +138,7 @@ export default function Dashboard({
     alerts,
     todays_rates,
     notices,
+    login_banner,
 }: Props) {
     const notInWallet = [
         {
@@ -156,6 +160,10 @@ export default function Dashboard({
     return (
         <>
             <Head title="Dashboard" />
+
+            {login_banner && (
+                <LoginBanner banner={login_banner} rates={todays_rates} />
+            )}
 
             <div className="flex w-full flex-col gap-6 p-4">
                 <div>

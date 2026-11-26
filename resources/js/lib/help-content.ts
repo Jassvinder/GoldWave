@@ -548,6 +548,21 @@ const staffSections: HelpSection[] = [
                 page: 'Dashboard Notices',
             },
             {
+                id: 'banner-winners',
+                title: 'Banner Winners (login banner par draw winners)',
+                text: [
+                    'Har login par member ko ek welcome banner dikhta hai: aaj ka gold/silver rate aur latest month ke draw winners. Winners yahan se daalte ho.',
+                    'Sirf Customer ID daalo, naam member ke account se apne aap aata hai. Banner par sirf sabse latest month ke winners dikhte hain.',
+                    'Ye sirf dikhane ke liye hai: Draw Management, wallet ya payout par koi asar nahi.',
+                ],
+                steps: [
+                    'Settings → Banner Winners kholo.',
+                    'Add Winner dabao: Draw month, Group No., Customer ID aur Prize bharo.',
+                    'Save karte hi agle login par members ko banner mein dikhne lagta hai.',
+                ],
+                page: 'Banner Winners',
+            },
+            {
                 id: 'payout-settings',
                 title: 'Payout & TDS, Payment Settings (UPI)',
                 text: [

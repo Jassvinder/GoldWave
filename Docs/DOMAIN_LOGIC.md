@@ -516,6 +516,15 @@ For an EMI membership (Plans A–D, §3), the member becomes eligible for the Mo
 
 Only confirmed/eligible EMI payments count toward this threshold. **This Draw-eligibility rule is a separate rule from Pair/Reward EMI qualification (§7.3)** — the source states this explicitly, even though Plans A/B/C happen to use the same numeric thresholds for both rules; do not merge the two checks into one code path, since Plan D's Draw threshold (1) and Pair/Reward threshold (still unconfigured — §7.3, §21) are already known to diverge. One-time Plans E/F require full payment (no EMI concept applies).
 
+### 8.8 Banner Winners: draw winners for the login banner only (T-248, user decision 24-11-2026)
+
+- **Why it exists.** The client is holding the monthly draw outside the system for now. They want groups of 100, and one draw was already held with fewer than 100 members. The in-system draw (§8.1–§8.4) will be finalised later with the client, so it is **not changed** now. Until then, the winners shown on the member login banner (`INSTRUCTIONS.md` M01) are typed in on a separate page, Banner Winners (`INSTRUCTIONS.md` S20).
+- **Who.** Super Admin or the company Admin (not Store Admin, not members).
+- **What is entered.** Draw month, Group No., the winner's **Customer ID**, and the Prize. The name is **never typed**. It is read from the member with that Customer ID (case and spaces ignored), so a renamed member shows the new name. An unknown Customer ID is refused. The same member can't be listed twice for the same month.
+- **What shows.** The banner shows only the **latest month** on the list, sorted by group.
+- **Display only.** A Banner Winner never touches `draw_groups` / `draw_executions`, prize snapshots, the §8.5 upline benefit, wallets or payouts. The public home page (§8.4 "Public display") and the member Draw page still read the in-system draw.
+- **Later.** When the in-system draw is finalised with the client, the banner is to read its winners from there, and this page is removed.
+
 ---
 
 ## 9. Income Booster

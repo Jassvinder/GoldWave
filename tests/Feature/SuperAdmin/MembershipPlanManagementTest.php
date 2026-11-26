@@ -345,3 +345,46 @@ test('the migration back-fill rule: every new membership schedule keeps the plan
     expect((float) $schedule->plan_installment_amount)->toBe(1000.0)
         ->and((float) $schedule->plan_fixed_weight_grams)->toBe(100.0);
 });
+
+test('a save after the 5-minute password window asks for the password inside the form instead of losing it (26-11-2026)', function () {
+    $admin = mpSuperAdmin();
+    $plansBefore = MembershipPlan::count();
+    $newPlan = [
+        'name' => 'Gold Rise Lite',
+        'product_category' => 'gold',
+        'plan_type' => 'emi',
+        'amount' => 2500,
+        'installment_count' => 20,
+        'fixed_weight_grams' => 5,
+        'pair_emis' => 3,
+        'draw_emis' => 3,
+        'is_active' => true,
+    ];
+
+    // The bug: a stale confirmation redirected to the password page and the filled dialog was thrown away.
+    $this->actingAs($admin)->withSession(['auth.password_confirmed_at' => time() - 301])
+        ->post(route('super-admin.membership-plans.store'), $newPlan)
+        ->assertSessionHasErrors('confirm_password');
+
+    $this->actingAs($admin)
+        ->post(route('super-admin.membership-plans.store'), [...$newPlan, 'confirm_password' => 'not-the-password'])
+        ->assertSessionHasErrors(['confirm_password' => 'The password is incorrect.']);
+
+    expect(MembershipPlan::count())->toBe($plansBefore);
+
+    $this->actingAs($admin)
+        ->post(route('super-admin.membership-plans.store'), [...$newPlan, 'confirm_password' => 'password'])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('super-admin.membership-plans.index'));
+
+    $plan = MembershipPlan::where('name', 'Gold Rise Lite')->firstOrFail();
+    expect(MembershipPlan::count())->toBe($plansBefore + 1)
+        ->and((float) $plan->amount)->toBe(2500.0)
+        ->and($plan->installment_count)->toBe(20)
+        ->and(session('auth.password_confirmed_at'))->toBeGreaterThanOrEqual(time() - 5);
+
+    // The renewed confirmation covers the next save without asking again.
+    $this->actingAs($admin)
+        ->patch(route('super-admin.membership-plans.update', $plan), mpEmiEdit(['name' => 'Gold Rise Lite', 'amount' => 2500, 'installment_count' => 20, 'fixed_weight_grams' => 5, 'pair_emis' => 4, 'draw_emis' => 4]))
+        ->assertSessionHasNoErrors();
+});

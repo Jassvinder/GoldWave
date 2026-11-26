@@ -4,6 +4,7 @@ import { FormEventHandler, useState } from 'react';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { FormSection } from '@/components/form-section';
 import InputError from '@/components/input-error';
+import PasswordReconfirmField from '@/components/password-reconfirm-field';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -139,6 +140,7 @@ function PlanDialog({ plan }: { plan?: Plan }) {
                 ? String(plan.draw_emis)
                 : '',
         is_active: plan?.is_active ?? true,
+        confirm_password: '',
     });
 
     const isEmi = form.data.plan_type === 'emi';
@@ -169,17 +171,23 @@ function PlanDialog({ plan }: { plan?: Plan }) {
                       draw_emis: data.draw_emis,
                   }
                 : {}),
+            // Sent only after the server asked for it (more than 5 minutes since the last password confirmation).
+            ...(data.confirm_password !== ''
+                ? { confirm_password: data.confirm_password }
+                : {}),
         }));
 
         const options = {
             preserveScroll: true,
             onSuccess: () => {
                 setOpen(false);
+                form.setData('confirm_password', '');
 
                 if (isNew) {
                     form.reset();
                 }
             },
+            onError: () => form.setData('confirm_password', ''),
         };
 
         if (isNew) {
@@ -379,6 +387,13 @@ function PlanDialog({ plan }: { plan?: Plan }) {
                         )}
                         <InputError message={form.errors.is_active} />
                     </div>
+
+                    <PasswordReconfirmField
+                        id={`plan-password-${plan?.id ?? 'new'}`}
+                        value={form.data.confirm_password}
+                        error={form.errors.confirm_password}
+                        onChange={(v) => form.setData('confirm_password', v)}
+                    />
 
                     <DialogFooter>
                         <Button type="submit" disabled={form.processing}>

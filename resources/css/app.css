@@ -12,8 +12,12 @@
         'Instrument Sans', ui-sans-serif, system-ui, sans-serif,
         'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
         'Noto Color Emoji';
-    --font-display: 'Poppins', 'Instrument Sans', ui-sans-serif, system-ui,
-        sans-serif;
+    --font-display:
+        'Poppins', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+    /* T-249 — member login banner. */
+    --font-banner-serif: 'Cinzel', Georgia, 'Times New Roman', serif;
+    --font-banner-script: 'Great Vibes', 'Brush Script MT', cursive;
+    --font-banner-italic: 'Playfair Display', Georgia, serif;
 
     --radius-lg: var(--radius);
     --radius-md: calc(var(--radius) - 2px);

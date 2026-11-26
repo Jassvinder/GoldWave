@@ -20,6 +20,21 @@ export default defineConfig({
                 bunny('Poppins', {
                     weights: [600, 700, 800],
                 }),
+                // T-249 — the member login banner (serif title, script tagline, italic lines). Not preloaded: only the
+                // banner uses them, so other pages never download them.
+                bunny('Cinzel', {
+                    weights: [600, 700],
+                    preload: false,
+                }),
+                bunny('Great Vibes', {
+                    weights: [400],
+                    preload: false,
+                }),
+                bunny('Playfair Display', {
+                    weights: [500, 600],
+                    styles: ['normal', 'italic'],
+                    preload: false,
+                }),
             ],
         }),
         inertia(),

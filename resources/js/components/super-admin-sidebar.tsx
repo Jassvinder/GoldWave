@@ -1,4 +1,5 @@
 import {
+    Award,
     Banknote,
     Bell,
     BookOpen,
@@ -34,6 +35,7 @@ import { PortalSidebar } from '@/components/portal-sidebar';
 import { dashboard } from '@/routes';
 import { help as staffHelp } from '@/routes/super-admin';
 import { index as adminUsersIndex } from '@/routes/super-admin/admin-users';
+import { index as bannerWinnersIndex } from '@/routes/super-admin/banner-winners';
 import { audit as compensationAudit } from '@/routes/super-admin/compensation';
 import { index as earningsVerificationIndex } from '@/routes/super-admin/earnings-verification';
 import { index as drawManagementIndex } from '@/routes/super-admin/draw-management';
@@ -174,6 +176,11 @@ const settingsItems: NavItem[] = [
         title: 'Dashboard Notices',
         href: dashboardNoticesIndex(),
         icon: Megaphone,
+    },
+    {
+        title: 'Banner Winners',
+        href: bannerWinnersIndex(),
+        icon: Award,
     },
     {
         title: 'Landing Page',

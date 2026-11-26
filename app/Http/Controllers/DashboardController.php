@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Admin\StoreDashboardController;
 use App\Http\Controllers\SuperAdmin\DashboardController as SuperAdminDashboardController;
+use App\Listeners\FlagLoginBannerOnLogin;
+use App\Models\BannerWinner;
 use App\Models\BoosterQualification;
 use App\Models\DashboardNotice;
 use App\Models\DrawExecution;
@@ -16,6 +18,7 @@ use App\Services\PairPoolBreakdown;
 use App\Support\Dates;
 use App\Support\Portal;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -46,7 +49,7 @@ class DashboardController extends Controller
         $inStorePortal = $user?->isStoreAdmin() === true && Portal::current($request) !== Portal::MEMBER;
 
         if ($member && ! $inStorePortal) {
-            return $this->memberDashboard($member, $pairPool, $network);
+            return $this->memberDashboard($request, $member, $pairPool, $network);
         }
 
         // Super Admin and the company Admin (29-09-2026) share the company dashboard.
@@ -65,7 +68,7 @@ class DashboardController extends Controller
         return Inertia::render('dashboard');
     }
 
-    private function memberDashboard(Member $member, PairPoolBreakdown $pairPool, MemberNetworkSummary $network): Response
+    private function memberDashboard(Request $request, Member $member, PairPoolBreakdown $pairPool, MemberNetworkSummary $network): Response
     {
         $member->load(['membershipPlan', 'emiSchedule.installments']);
 
@@ -129,6 +132,9 @@ class DashboardController extends Controller
             $alerts[] = 'Your bank details are awaiting Super Admin verification.';
         }
 
+        $todaysRates = $this->todaysRates();
+        $bannerKey = $request->session()->pull(FlagLoginBannerOnLogin::SESSION_KEY);
+
         return Inertia::render('member/dashboard', [
             'member' => [
                 'customer_id' => $member->customer_id,
@@ -176,7 +182,11 @@ class DashboardController extends Controller
             'draw' => $this->drawSummary($member),
             'alerts' => $alerts,
             // T-245 — the top section: today's gold/silver rate and the offers/events/notices running today.
-            'todays_rates' => $this->todaysRates(),
+            'todays_rates' => $todaysRates,
+            // T-249 — the welcome banner popup, once per login (the session mark is taken off here).
+            'login_banner' => is_string($bannerKey)
+                ? ['key' => $bannerKey, 'winners' => $this->bannerWinners()]
+                : null,
             'notices' => DashboardNotice::showingToday()
                 ->orderByRaw("case kind when 'offer' then 0 when 'event' then 1 else 2 end")
                 ->orderByDesc('id')
@@ -218,6 +228,36 @@ class DashboardController extends Controller
         }
 
         return $rates;
+    }
+
+    /**
+     * T-248/T-249 — the winners of the latest month on Banner Winners, by group (name and Customer ID from the member).
+     *
+     * @return array{month: string, list: array<int, array{group_no: int, name: string|null, customer_id: string, prize: string}>}|null
+     */
+    private function bannerWinners(): ?array
+    {
+        $latestMonth = BannerWinner::max('draw_month');
+
+        if ($latestMonth === null) {
+            return null;
+        }
+
+        $winners = BannerWinner::with('member.user:id,name')
+            ->whereDate('draw_month', substr((string) $latestMonth, 0, 10))
+            ->orderBy('group_no')
+            ->orderBy('id')
+            ->get();
+
+        return [
+            'month' => Carbon::parse((string) $latestMonth)->format('F Y'),
+            'list' => $winners->map(fn (BannerWinner $winner): array => [
+                'group_no' => $winner->group_no,
+                'name' => $winner->member->user?->name,
+                'customer_id' => (string) $winner->member->customer_id,
+                'prize' => $winner->prize,
+            ])->values()->all(),
+        ];
     }
 
     /** @return array{wins: array<int, array{group_no: int, cycle_month_no: int, executed_at: string|null, prize_name: string|null, prize_value: string|null}>, won: int, upline_benefits: int, latest_upline: array{prize_name: string|null, prize_value: string|null, winner_customer_id: string|null}|null} */

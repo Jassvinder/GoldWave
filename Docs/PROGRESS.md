@@ -2,7 +2,12 @@
 
 Keep only information needed to continue current work. Move durable decisions to their canonical document; remove stale entries when the task closes.
 
-## LATEST (15-11-2026): client batch of 6 tasks, to be deployed together
+## LATEST (24-11-2026): login welcome banner + Banner Winners (T-248, T-249)
+
+- Done locally and verified, **not committed**. The next `.\gw deploy` runs 1 migration (`banner_winners`).
+- Pending with the client: the in-system draw (groups of 100, how to record the draw already held with fewer members). When it is final, the banner should read winners from the draw and the Banner Winners page should be removed (`DOMAIN_LOGIC.md` §8.8).
+
+## Earlier (15-11-2026): client batch of 6 tasks, to be deployed together
 
 - Live check done (read-only, see T-240). T-240…T-246 are all done locally and verified (full suite 506/506, build OK), **not committed**.
 - Next: the user commits and runs `.\gw deploy` once. It runs 2 migrations: `dashboard_notices` table, and the T-246 release of held Level Income (check `laravel.log` for "T-246: held Level Income released on deploy" — on 15-11-2026 live had 211 held rows, ₹8,400). Then `php artisan earnings:verify` on the server should still pass.

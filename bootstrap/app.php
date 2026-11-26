@@ -3,6 +3,7 @@
 use App\Console\Scheduling;
 use App\Http\Middleware\EnsureMemberNotBlocked;
 use App\Http\Middleware\EnsureMemberPortal;
+use App\Http\Middleware\EnsurePasswordRecentlyConfirmed;
 use App\Http\Middleware\EnsureRole;
 use App\Http\Middleware\EnsureStoreOwnership;
 use App\Http\Middleware\HandleAppearance;
@@ -44,6 +45,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'member-portal' => EnsureMemberPortal::class,
             'role' => EnsureRole::class,
             'store-owner' => EnsureStoreOwnership::class,
+            // Saves on password-gated Super Admin pages: asks for the password inside the form instead of redirecting.
+            'password.fresh' => EnsurePasswordRecentlyConfirmed::class,
         ]);
 
         $middleware->validateCsrfTokens(except: ['payments/webhook']);
