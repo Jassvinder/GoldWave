@@ -63,22 +63,34 @@ class SubmitPendingProfileFields
                 ]);
             }
 
-            $locked->update([
-                'pan_card' => $panCard,
-                'aadhaar_card' => $aadhaarCard,
-                'profile_photo_path' => $profilePhotoPath,
-                'address' => $address,
-                'pending_fields_submitted_at' => now(),
-            ]);
+            // T-251 (DOMAIN_LOGIC.md §3.4) — the same person's other IDs that have not filled the form yet get the
+            // same details, so a person with 11 IDs fills it once. An ID that already submitted keeps its own.
+            $ids = Member::whereKey($locked->id)
+                ->when($locked->user_id !== null, fn ($query) => $query->orWhere(fn ($others) => $others
+                    ->where('user_id', $locked->user_id)
+                    ->whereNull('pending_fields_submitted_at')))
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
 
-            MemberBankDetail::create([
-                'member_id' => $locked->id,
-                'account_holder_name' => $bankDetails['account_holder_name'],
-                'account_number' => $bankDetails['account_number'],
-                'ifsc_code' => $bankDetails['ifsc_code'],
-                'bank_name' => $bankDetails['bank_name'],
-                'proof_document_path' => $bankDetails['proof_document_path'],
-            ]);
+            foreach ($ids as $id) {
+                $id->update([
+                    'pan_card' => $panCard,
+                    'aadhaar_card' => $aadhaarCard,
+                    'profile_photo_path' => $profilePhotoPath,
+                    'address' => $address,
+                    'pending_fields_submitted_at' => now(),
+                ]);
+
+                MemberBankDetail::create([
+                    'member_id' => $id->id,
+                    'account_holder_name' => $bankDetails['account_holder_name'],
+                    'account_number' => $bankDetails['account_number'],
+                    'ifsc_code' => $bankDetails['ifsc_code'],
+                    'bank_name' => $bankDetails['bank_name'],
+                    'proof_document_path' => $bankDetails['proof_document_path'],
+                ]);
+            }
 
             return $locked->fresh();
         });

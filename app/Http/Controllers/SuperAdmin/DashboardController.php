@@ -80,7 +80,11 @@ class DashboardController extends Controller
 
         $alerts = [];
         // T-212 — GPay/UPI payments wait in the same Payment Approvals queue as cash, so they count here too.
-        $pendingApprovals = Payment::whereIn('mode', PaymentModes::NEEDS_APPROVAL)->where('cash_status', 'pending_verification')->count();
+        // T-251 — a combined payment for several IDs is one approval, as on the Payment Approvals page.
+        $pendingApprovals = (int) Payment::whereIn('mode', PaymentModes::NEEDS_APPROVAL)
+            ->where('cash_status', 'pending_verification')
+            ->selectRaw("count(distinct coalesce('b' || payment_batch_id, 'p' || id)) as total")
+            ->value('total');
 
         if ($pendingApprovals > 0) {
             $alerts[] = "{$pendingApprovals} cash / GPay-UPI payment(s) awaiting approval.";

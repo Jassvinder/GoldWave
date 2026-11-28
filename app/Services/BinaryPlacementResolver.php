@@ -39,6 +39,22 @@ class BinaryPlacementResolver
     }
 
     /**
+     * T-251 (DOMAIN_LOGIC.md §3.4) — where the n-th ID of a multi-ID request goes, under the request's first ID (index
+     * 0), filling level by level, left before right: index 1 = first's Left, 2 = first's Right, 3 = Left-Left, 4 =
+     * Left-Right, 5 = Right-Left, … Every place is new (made in the same request), so no tree walk is needed.
+     *
+     * @return array{parent_index: int, side: 'left'|'right'}
+     */
+    public static function levelOrderSlot(int $index): array
+    {
+        if ($index < 1) {
+            throw new \InvalidArgumentException('Index 0 is the first ID itself; it is placed by resolve().');
+        }
+
+        return ['parent_index' => intdiv($index - 1, 2), 'side' => $index % 2 === 1 ? 'left' : 'right'];
+    }
+
+    /**
      * Every ancestor up $member's Binary Position chain, unbounded (no
      * per-level cap, unlike Level Income's 12 — DOMAIN_LOGIC.md §7's
      * Pair/Reward Beneficiary Chain Rule is a full team-size count all the

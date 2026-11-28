@@ -281,6 +281,9 @@ class RuleVersionSeeder extends Seeder
         // overdue EMIs; the member is then owed silver for the principal paid.
         $this->seedValue($version, 'store_emi_break_overdue_count', 3);
 
+        // DOMAIN_LOGIC.md §3.4 (T-251, 26-11-2026) — member IDs one person may hold, pending ones included.
+        $this->seedValue($version, 'max_ids_per_person', 11);
+
         // T-115 (19-09-2026) — public landing page's Super-Admin-editable
         // hero copy, matching T-104's original static text as the seeded
         // starting point.

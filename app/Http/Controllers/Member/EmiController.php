@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Member;
 
 use App\Actions\Emi\QuoteFullEmiPayment;
+use App\Actions\Payments\InitiateCombinedEmiPayment;
 use App\Actions\Payments\InitiateEmiInstallmentPayment;
 use App\Actions\Payments\InitiateFullEmiPayment;
 use App\Contracts\PaymentGatewayContract;
@@ -12,7 +13,9 @@ use App\Models\CurrentRateBookingRequest;
 use App\Models\EmiInstallment;
 use App\Models\EmiSchedule;
 use App\Models\Member;
+use App\Models\PaymentBatch;
 use App\Models\StoreEmiBooking;
+use App\Models\User;
 use App\Services\Payments\PaymentModes;
 use App\Services\RuleVersionService;
 use App\Support\Dates;
@@ -75,6 +78,9 @@ class EmiController extends Controller
             'full_payment' => $this->fullPaymentOffer($member, $paidCount, $schedule?->total_installments),
             // T-185a — the member's Repurchase on EMI, if any.
             'store_emi' => $this->storeEmi($member),
+            // T-251 part 3 — "Pay for all my IDs" (2+ active IDs only).
+            'all_ids' => $this->allIds($request->user()),
+            'combined_payment_options' => [...PaymentModes::forPage(), 'modes' => PaymentModes::NEEDS_APPROVAL],
         ]);
     }
 
@@ -253,6 +259,55 @@ class EmiController extends Controller
 
         return redirect()->route('member.emi.index')
             ->with('status', self::submittedMessage($payment->mode, 'Payment for all remaining EMIs'));
+    }
+
+    /** T-251 part 3 (DOMAIN_LOGIC.md §3.4) — "Pay for all my IDs": the next EMI of every ID in one Cash / GPay-UPI payment. */
+    public function payAllIds(PayEmiInstallmentRequest $request, InitiateCombinedEmiPayment $action): RedirectResponse
+    {
+        $batch = $action($request->user(), $request->string('mode')->toString());
+        PaymentModes::attachUpiProof($batch, $request);
+
+        $count = $batch->payments()->count();
+
+        return redirect()->route('member.emi.index')
+            ->with('status', self::submittedMessage($batch->mode, "Payment of {$count} EMIs (₹".number_format((float) $batch->amount, 2).')'));
+    }
+
+    /**
+     * T-251 part 3 — the "Pay for all my IDs" card, for a person with 2+ active IDs: the EMIs it would pay now, or the
+     * combined EMI payment still waiting for approval. Null for a person with one ID.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function allIds(User $user): ?array
+    {
+        if (Member::where('user_id', $user->id)->where('status', 'active')->count() < 2) {
+            return null;
+        }
+
+        $waiting = PaymentBatch::where('type', 'emi_installment')
+            ->where('cash_status', 'pending_verification')
+            ->whereHas('payments.member', fn ($query) => $query->where('user_id', $user->id))
+            ->latest('id')
+            ->first();
+
+        $items = InitiateCombinedEmiPayment::items($user);
+
+        return [
+            'items' => array_map(fn (array $item): array => [
+                'customer_id' => $item['member']->customer_id,
+                'installment_no' => $item['installment']->installment_no,
+                'due_date' => Dates::date($item['installment']->due_date),
+                'amount' => (string) $item['installment']->amount,
+            ], $items),
+            'total' => (string) collect($items)->sum(fn (array $item) => (float) $item['installment']->amount),
+            'min' => InitiateCombinedEmiPayment::MIN_IDS,
+            'waiting' => $waiting ? [
+                'amount' => (string) $waiting->amount,
+                'count' => $waiting->payments()->count(),
+                'submitted_on' => Dates::date($waiting->created_at),
+            ] : null,
+        ];
     }
 
     /** T-185a — "Pay All Remaining EMIs" for the member's own store Repurchase on EMI (principal only, Current Rate). */

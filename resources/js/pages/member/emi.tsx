@@ -11,9 +11,11 @@ import {
 } from '@/components/ui/card';
 import { DataTable, type DataTableColumn } from '@/components/data-table';
 import { EmiPayDialog } from '@/components/emi-pay-dialog';
+import type { PaymentOptions } from '@/components/payment-mode-picker';
 import { formatDate, formatRatePer10g } from '@/lib/utils';
 import {
     payAll,
+    payAllIds,
     pay as payInstallment,
     storePayAll,
 } from '@/routes/member/emi';
@@ -70,6 +72,21 @@ type Props = {
     full_payment: FullPaymentOffer | null;
     /** T-185a — the member's Repurchase on EMI (a store piece over 10 or 20 Current Rate EMIs). */
     store_emi: StoreEmi | null;
+    /** T-251 part 3 — "Pay for all my IDs"; null for a person with one active ID. */
+    all_ids: AllIds | null;
+    combined_payment_options: PaymentOptions;
+};
+
+type AllIds = {
+    items: {
+        customer_id: string;
+        installment_no: number;
+        due_date: string | null;
+        amount: string;
+    }[];
+    total: string;
+    min: number;
+    waiting: { amount: string; count: number; submitted_on: string | null } | null;
 };
 
 type FullPaymentOffer = {
@@ -130,11 +147,16 @@ export default function Emi({
     held_earnings,
     full_payment,
     store_emi,
+    all_ids,
+    combined_payment_options,
 }: Props) {
     const flash = usePage().props.flash as { status?: string } | undefined;
     const errors = usePage().props.errors as Record<string, string>;
     const paymentError =
-        errors?.payment ?? errors?.installment ?? errors?.full_payment;
+        errors?.payment ??
+        errors?.installment ??
+        errors?.full_payment ??
+        errors?.combined_emi;
     return (
         <>
             <Head title="EMI Schedule" />
@@ -206,6 +228,13 @@ export default function Emi({
                     </div>
                 )}
 
+                {all_ids && (
+                    <AllIdsCard
+                        allIds={all_ids}
+                        options={combined_payment_options}
+                    />
+                )}
+
                 {full_payment && (
                     <PayAllCard
                         offer={full_payment}
@@ -255,6 +284,124 @@ export default function Emi({
                 {store_emi && <StoreEmiSection storeEmi={store_emi} />}
             </div>
         </>
+    );
+}
+
+/**
+ * T-251 part 3 (DOMAIN_LOGIC.md §3.4) — "Pay for all my IDs": the next EMI of each of the person's IDs in one Cash or
+ * GPay/UPI payment, approved as one. Shows the payment still waiting instead, when there is one.
+ */
+function AllIdsCard({
+    allIds,
+    options,
+}: {
+    allIds: AllIds;
+    options: PaymentOptions;
+}) {
+    const count = allIds.items.length;
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Pay for all my IDs</CardTitle>
+                <CardDescription>
+                    The next EMI of each of your IDs in one payment.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+                {allIds.waiting && (
+                    <Alert>
+                        <AlertTitle>Waiting for approval</AlertTitle>
+                        <AlertDescription>
+                            Your payment of {money(allIds.waiting.amount)} for{' '}
+                            {allIds.waiting.count} EMIs (submitted{' '}
+                            {formatDate(allIds.waiting.submitted_on)}) is
+                            waiting for the company to confirm it.
+                        </AlertDescription>
+                    </Alert>
+                )}
+
+                {count >= allIds.min ? (
+                    <div className="flex flex-wrap items-end justify-between gap-4">
+                        <div>
+                            <div className="text-muted-foreground text-sm">
+                                {count} EMIs
+                            </div>
+                            <div className="text-2xl font-semibold">
+                                {money(allIds.total)}
+                            </div>
+                        </div>
+
+                        <EmiPayDialog
+                            url={payAllIds.url()}
+                            amount={allIds.total}
+                            options={options}
+                            title="Pay for all my IDs?"
+                            description={`This one payment pays the next EMI of ${count} IDs. The company confirms it first.`}
+                            trigger={<Button>Pay for all my IDs</Button>}
+                        >
+                            <div className="overflow-x-auto rounded-md border">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-muted/50 text-muted-foreground text-left text-xs">
+                                        <tr>
+                                            <th className="px-3 py-2 font-medium">
+                                                Customer ID
+                                            </th>
+                                            <th className="px-3 py-2 font-medium">
+                                                EMI
+                                            </th>
+                                            <th className="px-3 py-2 font-medium">
+                                                Due
+                                            </th>
+                                            <th className="px-3 py-2 text-right font-medium">
+                                                Amount
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {allIds.items.map((item) => (
+                                            <tr
+                                                key={item.customer_id}
+                                                className="border-t"
+                                            >
+                                                <td className="px-3 py-2 font-mono">
+                                                    {item.customer_id}
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    #{item.installment_no}
+                                                </td>
+                                                <td className="px-3 py-2 whitespace-nowrap">
+                                                    {formatDate(item.due_date)}
+                                                </td>
+                                                <td className="px-3 py-2 text-right">
+                                                    {money(item.amount)}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        <tr className="border-t font-semibold">
+                                            <td className="px-3 py-2" colSpan={3}>
+                                                Total
+                                            </td>
+                                            <td className="px-3 py-2 text-right">
+                                                {money(allIds.total)}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </EmiPayDialog>
+                    </div>
+                ) : (
+                    !allIds.waiting && (
+                        <p className="text-muted-foreground text-sm">
+                            {count === 0
+                                ? 'None of your IDs has an EMI to pay right now.'
+                                : `Only ${allIds.items[0].customer_id} has an EMI to pay right now. Switch to that ID and pay it in the schedule below.`}
+                        </p>
+                    )
+                )}
+            </CardContent>
+        </Card>
     );
 }
 

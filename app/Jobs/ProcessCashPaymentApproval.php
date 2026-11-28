@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Actions\Payments\ApproveCashPayment;
+use App\Actions\Payments\ApprovePaymentBatch;
 use App\Models\Payment;
 use App\Models\User;
 use App\Notifications\PaymentSettlementFailed;
@@ -33,10 +34,17 @@ class ProcessCashPaymentApproval implements ShouldQueue
 
     public function __construct(public readonly Payment $payment, public readonly User $operator) {}
 
-    public function handle(ApproveCashPayment $approve): void
+    public function handle(ApproveCashPayment $approve, ApprovePaymentBatch $approveBatch): void
     {
         try {
-            $approve($this->payment, $this->operator);
+            // T-251 — the first payment of a combined payment stands for all of it: every ID is approved together.
+            $batch = $this->payment->batch;
+
+            if ($batch !== null) {
+                $approveBatch($batch, $this->operator);
+            } else {
+                $approve($this->payment, $this->operator);
+            }
         } finally {
             PaymentInProgress::release($this->payment->id);
         }

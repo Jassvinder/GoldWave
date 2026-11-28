@@ -26,6 +26,25 @@ class CashPaymentDecided extends AppNotification
 
     public function body(): string
     {
+        // T-251 — a combined payment for several IDs: one message with the total and every Customer ID.
+        $batch = $this->payment->batch;
+
+        if ($batch !== null) {
+            $total = '₹'.number_format((float) $batch->amount, 2);
+            $rows = $batch->payments()->with('member')->get();
+            $count = $rows->count();
+
+            if (! $this->approved) {
+                return "Your payment of {$total} for {$count} IDs was not accepted. Please contact GoldWave to sort it out.";
+            }
+
+            $ids = $rows->map(fn (Payment $row) => $row->member?->customer_id)->filter()->implode(', ');
+
+            return $batch->type === 'registration'
+                ? "Your payment of {$total} for {$count} IDs was approved. Your IDs are active: {$ids}. Log in with any of them."
+                : "Your payment of {$total} for the EMIs of {$count} IDs was approved ({$ids}).";
+        }
+
         $amount = '₹'.number_format((float) $this->payment->amount, 2);
         $for = $this->payment->type === 'registration'
             ? 'your registration'

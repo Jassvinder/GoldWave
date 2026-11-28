@@ -9,6 +9,7 @@ use App\Models\Store;
 use App\Models\User;
 use App\Notifications\CashPaymentDecided;
 use App\Services\Notifier;
+use App\Services\Payments\PaymentModes;
 use App\Services\StoreWalletService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -44,6 +45,11 @@ class CollectCashPaymentViaStoreWallet
 
             if ($locked->status === 'paid') {
                 throw ValidationException::withMessages(['payment' => 'This payment has already been settled.']);
+            }
+
+            // T-251 — one ID of a combined payment is never settled alone (DOMAIN_LOGIC.md §3.4).
+            if ($locked->payment_batch_id !== null) {
+                throw ValidationException::withMessages(['payment' => PaymentModes::BATCH_PART_MESSAGE]);
             }
 
             $wallet = $store->wallet()->firstOrFail();

@@ -269,6 +269,75 @@ Schedules created before T-237 are back-filled from their plan's current values.
 
 Worked examples: `Docs/TEST.md` scenarios 46–47.
 
+### 3.4 Several IDs for one person (T-251 — user decisions 09-11-2026 and 26-11-2026; parts 1–2 built 26-11-2026, part 3 built 28-11-2026)
+
+One person (one name, email and mobile) can hold several member IDs. Each ID is a full, normal member: its own Customer ID, place in the tree, plan, EMIs, wallet and earnings.
+
+**Limit:** at most **11 IDs per person**, counting pending (unpaid) IDs too. The number is a rule value (`max_ids_per_person`, default 11) that Super Admin changes on Rule Versions.
+
+**Two ways to create them** (user answer 26-11-2026: both):
+1. **On registration, several at once.** The registration form gets a "Number of IDs" field (1 up to the limit). It appears on the public Join page, the member's Register page (assisted registration) and the Store Admin's Register page.
+2. **Later, "Add ID".** It can be used by the person themselves (member portal) or by Super Admin / company Admin (Member Detail). Another member can never add an ID to someone else (decided 09-11-2026). One request may add one or more IDs, within the limit.
+
+**Plan:** all IDs made in one request share one plan (user answer: same plan). A later "Add ID" request may choose a different active plan.
+
+**Sponsor** (user answer: the person's first ID):
+- On registration, the first new ID gets the sponsor typed in the form, as today. Every other ID in that request is sponsored by that first ID.
+- On "Add ID", every new ID is sponsored by the person's **first ID** (the oldest one).
+
+**Placement:**
+- **Registration:** the first ID goes where the form says (sponsor + Left/Right, walking down that side, §4.3), as today. The other IDs fill the empty places **under that first ID, level by level, left before right**: its Left, its Right, then Left-Left, Left-Right, Right-Left, Right-Right, and so on (user answer: choose one place, the rest automatic).
+- **"Add ID":** the person (or staff) picks **any member in the tree** as the parent and a side (user answer: anywhere in the tree). The first new ID goes there, walking down that side if it is taken (§4.3). Any other IDs in the same request fill the places under it level by level, as above.
+
+**Income (user answer 26-11-2026: like a normal member):** an extra ID is an ordinary direct of its sponsor. It counts as a direct for Level Income and Booster, and its joining and EMIs pay Level Income, Pair entries and every other income to its uplines, **including the person's own first ID**. Nothing in §6–§9 changes.
+
+**Payment: one combined payment per request** (user answer: same plan, one payment).
+- The amount is the plan's first payment × number of IDs. For example, 11 × ₹2,500 = ₹27,500 for a ₹2,500 EMI plan, or 3 × ₹20,000 = ₹60,000 for a Direct plan.
+- Modes: **Cash or GPay/UPI**, with one Ref ID and one screenshot for the whole amount. Online is switched off (§10.0). A wallet-funded assisted registration (§12.2) stays one ID per request (user confirmed 26-11-2026).
+- Payment Approvals shows it as **one row**, e.g. "11 IDs × ₹2,500 = ₹27,500". Approve activates every ID in it, in order, each getting its own Customer ID. Each ID's own income runs as if it had paid alone. Reject rejects all of them. It is all or nothing: one failure leaves every ID pending.
+- One ID of a combined payment is never approved, rejected or collected by a store on its own. Such an attempt is refused with "This payment is part of a combined payment for several IDs. Approve or reject it as one on Payment Approvals."
+- A Ref ID is unique across single and combined payments.
+- A request of one ID works exactly as today.
+
+**Monthly EMIs** (user answer: both ways):
+- The member EMI page gets "Pay for all my IDs". It takes the earliest unpaid EMI of each active ID on an EMI plan and puts them into one combined Cash/UPI payment. That payment is approved or rejected as one row, as above.
+- Each ID's EMI can still be paid on its own, as today. Store collection and Record Cash EMI stay one ID at a time.
+- As built (28-11-2026): the card shows only for a person with 2+ active IDs. An ID whose next EMI already has a payment waiting is left out, and at least 2 EMIs are needed. Online is not offered. While the combined payment waits, those EMIs cannot be paid alone or by Record Cash EMI ("This EMI is in a combined payment for all your IDs…"). A rejected one pays nothing, and the EMIs can be paid again.
+
+**Login and switching:**
+- **One login per person.** The password, email and mobile belong to the person, not to an ID.
+- **Customer ID + password:** any of the person's Customer IDs with the same password works, and opens that ID.
+- **OTP (mobile/email):** opens the person's first ID.
+- **Switch ID:** a header menu lists the person's active IDs. Choosing one switches every page (dashboard, wallet, tree, EMIs, reports) to that ID.
+- Only the first activation sets the password to the Customer ID (§2.2). Activating a 2nd or later ID never resets the password.
+
+**Kept per ID:** wallet and ledger, payouts, earnings, EMIs and product, Draw entry, and bank/KYC details. On "Add ID" the details are copied from the first ID: gender, PAN, Aadhaar, photo, address, the "pending profile submitted" date, and every bank detail row with its verification. On a multi-ID registration only the gender is known. **Complete Profile is filled once per person** (user decision 28-11-2026): the first submission, from any ID, also fills every other ID of the person that has not submitted yet, with the same PAN, Aadhaar, photo, address and a bank detail row each. An ID that already submitted keeps its own details. **Verifying** a bank detail also verifies the same account (account number + IFSC) on the person's other IDs, so the passbook is checked once. There is **no transfer between a person's own IDs** (decided 09-11-2026).
+
+**Restrictions (§2.3):** an **Account Block** on any ID blocks every ID of that person, and an Unblock lifts all of them (decided 09-11-2026). **Payout Hold** works the same way, for the whole person (user confirmed 26-11-2026). As built: each ID gets its own history row with the same reason, an ID that already has it keeps its own, and the page message adds "The same applies to the other n IDs of this person."
+
+**Unpaid IDs (§2.2a):** the IDs of one request are deleted together, one calendar month after the request, if the combined payment never came. The same "kept" rules apply. If any ID of the request has someone placed or sponsored under it, the whole request is kept. The IDs of the request among themselves do not count as "under it". The user is deleted only when no ID of theirs is left, so an unpaid "Add ID" never touches the person's other IDs or login.
+
+**Existing members:** nothing changes. Every current member is a person with one ID.
+
+Worked examples: `Docs/TEST.md` scenarios 50–53. Schema: `DATABASE_SCHEMA.md` "T-251 additions". Code layout: `ARCHITECTURE.md` "Several IDs for one person".
+
+### 3.5 Change Sponsor / Side before activation (T-252 — client via user 28-11-2026; built 28-11-2026)
+
+A member sometimes joins with the wrong side or the wrong sponsor. The client wants to fix it in the office without a new joining.
+
+- **Who:** Super Admin only. The company Admin cannot. Each change asks for the password again when the last confirmation is older than 5 minutes (inside the dialog, like plan saves).
+- **When:** only while the member is not active yet (`draft` / `payment_pending`) and the registration payment is not approved. After activation nothing can be moved.
+- **Nobody under it:** refused once anyone else has been placed or sponsored under the member. The only IDs allowed below it are the other IDs of its own combined payment (§3.4).
+- **Combined payment:** the IDs of one combined payment move together. The change is made on the first ID, and the rest stay under it as they were. Choosing a later ID of the group is refused with the name of the first ID.
+- **Where it goes:** the same as a new joining. The member goes to the bottom of the chosen side under the given Customer ID (§4.3). The old place becomes free, and the next joining on that side takes it.
+- **Sponsor:** for a normal joining, the given Customer ID becomes the new sponsor and must be an active member. For an ID added later to an existing person ("Add ID", §3.4) the sponsor stays the person's first ID, and the given Customer ID is only the parent.
+- **Nothing to undo:** pairs, income, team counts and the sponsor's directs all start at the payment approval, so a pending member has none yet.
+- **Approval at the same time:** the change and the approval take the same locks (combined payment, then payment, then member). Whichever comes second sees the result of the first: an approval waits and activates the member in its new place, or the change is refused because the member is already active.
+- **Record:** every change keeps the old and new sponsor and place, the reason (required) and who made it. Member Detail shows these under Network.
+- **Where:** Member Detail → Network → "Change Sponsor / Side" ("Change Place" for an added ID). The Payment Approvals review shows the joining's sponsor and place with a link to Member Detail, so a wrong one is caught before approving.
+
+Worked example: `Docs/TEST.md` scenario 54. Schema: `DATABASE_SCHEMA.md` "T-252 additions".
+
 ---
 
 ## 4. Sponsor, Direct & Binary Position

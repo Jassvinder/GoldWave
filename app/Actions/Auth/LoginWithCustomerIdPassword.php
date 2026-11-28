@@ -4,6 +4,7 @@ namespace App\Actions\Auth;
 
 use App\Models\Member;
 use App\Models\User;
+use App\Support\MemberIds;
 use App\Support\Portal;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -38,6 +39,8 @@ class LoginWithCustomerIdPassword
 
         Auth::login($user);
         session(['goldwave_login_method' => 'password']);
+        // T-251 — a person with several IDs works on the one they logged in with.
+        MemberIds::select($member);
         Portal::stamp(Portal::MEMBER);
 
         return $user;

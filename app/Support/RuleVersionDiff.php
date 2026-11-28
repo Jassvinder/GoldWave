@@ -49,6 +49,7 @@ class RuleVersionDiff
         'store_gst_percent' => 'Store GST %',
         'store_income_min_directs' => 'Store Income Directs to Unlock',
         'store_emi_break_overdue_count' => 'Repurchase EMI: Overdue EMIs to Break',
+        'max_ids_per_person' => 'Max IDs per Person',
         'landing_hero_headline' => 'Landing Page Headline',
         'landing_hero_subtext' => 'Landing Page Subtext',
         'landing_hero_cta_primary_label' => 'Landing Page Primary CTA Label',

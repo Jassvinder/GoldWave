@@ -715,6 +715,48 @@ A visitor who is not logged in sees "Past draw results are available to members"
 
 **Search:** "uet-x" (any case) opens X. "UET-" lists the 3 matching members. **Access:** the company Admin gets 403.
 
+### 50. Registering 11 IDs at once (NEW 26-11-2026 — user decisions, DOMAIN_LOGIC.md §3.4, T-251)
+
+**Given** sponsor S (GWL05) whose Left place is empty, plan "Gold Rise Lite" ₹2,500 × 20, and `max_ids_per_person` = 11.
+**When** P registers on `/join` with sponsor GWL05, side Left, Number of IDs 11, GPay/UPI with one Ref ID.
+**Then:**
+- One user P and 11 pending members exist, none with a Customer ID yet.
+- ID 1 sits at S-Left with sponsor S. IDs 2–11 have sponsor ID 1 and sit at: ID1-L, ID1-R, ID1-L-L, ID1-L-R, ID1-R-L, ID1-R-R, ID1-L-L-L, ID1-L-L-R, ID1-L-R-L, ID1-L-R-R.
+- One payment batch of ₹27,500 (11 × ₹2,500) with the Ref ID, and 11 payments of ₹2,500 linked to it. Payment Approvals shows one row "11 IDs × ₹2,500 = ₹27,500".
+**When** Super Admin approves it. **Then** the 11 IDs get the next 11 Customer IDs in order, each has 20 installments with the first paid, and each fires its own income (ID 1 earns Level 1 on IDs 2–11's ₹2,500 at the normal rate). The login password is ID 1's Customer ID, and any of the 11 Customer IDs with that password logs in.
+**Refused:** Number of IDs 12 ("At most 11 IDs per person"); a Ref ID already used; a rejected batch leaves all 11 pending with no Customer ID.
+
+### 51. Add ID anywhere in the tree (NEW 26-11-2026 — user decisions, DOMAIN_LOGIC.md §3.4, T-251)
+
+**Given** person P has 2 active IDs (GWL20 first, GWL21), and member Q (GWL40, not P's) has an empty Right place.
+**When** P, signed in on GWL21, uses "Add ID": count 1, plan Silver Start Direct ₹20,000, parent GWL40, side Right, Cash.
+**Then** the new ID sits at GWL40-Right with sponsor **GWL20** (the first ID, not GWL21), and the batch is ₹20,000. After approval it gets a Customer ID, and P's password is unchanged.
+**When** P already has 11 IDs (pending ones counted). **Then** "Add ID" is refused. Another member R cannot add an ID for P (403). Super Admin can add one from P's Member Detail.
+
+### 52. Pay EMIs for all IDs together (NEW 26-11-2026 — user decisions, DOMAIN_LOGIC.md §3.4, T-251)
+
+**Given** P has 3 active IDs on ₹2,500 × 20. ID A has paid 3 EMIs, B has paid 2 and C has paid 3. One more ID, D, is on a Direct plan.
+**When** P chooses "Pay for all my IDs" with GPay/UPI. **Then** one batch of ₹7,500 covers A's EMI 4, B's EMI 3 and C's EMI 4. D is not included.
+**When** it is approved. **Then** each installment is paid and each ID's income runs on its own. **When** it is rejected. **Then** none of the three is paid.
+Paying only B's EMI 3 alone still works as today, but not while it is in a combined payment that is waiting.
+Test: `tests/Feature/Members/SeveralIdsPart3Test.php`.
+
+### 53. Switch ID, block and unpaid purge (NEW 26-11-2026 — user decisions, DOMAIN_LOGIC.md §3.4, T-251)
+
+**Given** P with IDs GWL20 and GWL21 logs in by OTP. **Then** the dashboard shows GWL20. **When** P switches to GWL21. **Then** the wallet, tree, EMIs and reports show GWL21's own figures. Switching to another person's ID is refused.
+**When** Super Admin blocks GWL21. **Then** GWL20 is blocked too, and P cannot log in by either Customer ID or OTP. Unblock lifts both.
+**Given** a 3-ID request was made on 01-10-2026 and its cash never came. **Then** all 3 IDs, their payments, the batch and the user are deleted on the run after 01-11-2026. If someone was placed under ID 2, all 3 are kept.
+An unpaid "Add ID" of a person with an active ID is deleted alone; the person's other ID and login stay.
+Test: `tests/Feature/Members/SeveralIdsPart3Test.php`.
+
+### 54. Change sponsor / side before activation (NEW 28-11-2026 — client via user, DOMAIN_LOGIC.md §3.5, T-252)
+
+**Given** R joins under sponsor S on the Left by mistake and is still payment pending. **When** Super Admin chooses S, Right, with a reason. **Then** R is at the bottom of S's Right side, the change is recorded, and the next Left joining under S takes R's old place. **When** R's cash is approved. **Then** R becomes active on the Right.
+**When** Super Admin chooses another active member T, Left. **Then** T becomes R's sponsor, and R goes to the bottom of T's Left side.
+**Given** another joining was already placed under R. **Then** the change is refused. An active member, an inactive or unknown Customer ID, or the same place again is refused too.
+**Given** a 3-ID request. **Then** choosing ID 2 is refused. Moving ID 1 takes IDs 2 and 3 with it. **Given** an added ID of an existing person. **Then** only its place changes, and its sponsor stays the first ID.
+Test: `tests/Feature/SuperAdmin/ChangePendingPlacementTest.php`.
+
 ## Concurrency Verification (T-020, 15-09-2026)
 
 A separate PHPUnit testsuite, `tests/Concurrency/`, verifies genuine parallel-access safety for the financial critical sections `Docs/TEST.md`'s Risk-based Coverage table calls out by name: Store Wallet deduction (§16.1), Store Inventory decrement (§16.8), and the Booster Payout Processor (§19). It is **not** part of the default `php artisan test` run and never runs against SQLite — see `DOMAIN_LOGIC.md` §21's T-020 pre-coding entry for why (SQLite `:memory:` can't even be shared across two connections, so a real race can't be produced against it; the code's actual `lockForUpdate()` behavior is Postgres-specific). Run it explicitly, against the real dev Postgres database, with:

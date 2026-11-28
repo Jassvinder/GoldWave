@@ -59,7 +59,15 @@ class ActivateMembershipOnPaymentConfirmed
             $member->loadMissing('user', 'membershipPlan');
 
             // Initial default password = Customer ID itself (deliberate, not a placeholder — DOMAIN_LOGIC.md §2.2).
-            $member->user?->update(['password' => $customerId]);
+            // T-251 (§3.4) — only for the person's first ID: a 2nd or later ID shares the login they already use.
+            $hasOtherActiveId = $member->user_id !== null && Member::where('user_id', $member->user_id)
+                ->whereKeyNot($member->id)
+                ->where('status', 'active')
+                ->exists();
+
+            if (! $hasOtherActiveId) {
+                $member->user?->update(['password' => $customerId]);
+            }
 
             $plan = $member->membershipPlan;
 

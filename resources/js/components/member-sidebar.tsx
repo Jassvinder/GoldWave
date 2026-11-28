@@ -8,6 +8,7 @@ import {
     FileText,
     Gem,
     HandCoins,
+    IdCard,
     LayoutGrid,
     Network,
     Receipt,
@@ -28,6 +29,7 @@ import { help as memberHelp } from '@/routes/member';
 import { index as drawIndex } from '@/routes/member/draw';
 import { index as emiIndex } from '@/routes/member/emi';
 import { index as levelIncomeIndex } from '@/routes/member/level-income';
+import { index as myIdsIndex } from '@/routes/member/my-ids';
 import { index as notificationsIndex } from '@/routes/member/notifications';
 import { index as pairRewardIndex } from '@/routes/member/pair-reward';
 import { index as paymentHistoryIndex } from '@/routes/member/payment-history';
@@ -64,6 +66,8 @@ const sections: NavGroup[] = [
         label: 'Membership & Payments',
         items: [
             { title: 'Membership Plan', href: showMembership(), icon: Gem },
+            // T-251 — every ID this person holds, and "Add ID" (DOMAIN_LOGIC.md §3.4).
+            { title: 'My IDs', href: myIdsIndex(), icon: IdCard },
             { title: 'EMI Schedule', href: emiIndex(), icon: Receipt },
             {
                 title: 'Payment History',

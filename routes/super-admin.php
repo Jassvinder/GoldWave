@@ -107,6 +107,12 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
         Route::get('member-restrictions', [MemberRestrictionController::class, 'index'])->name('member-restrictions.index');
         Route::post('member-restrictions/apply', [MemberRestrictionController::class, 'apply'])->name('member-restrictions.apply');
         Route::post('member-restrictions/lift', [MemberRestrictionController::class, 'lift'])->name('member-restrictions.lift');
+
+        // T-252 — move a not-yet-active member to a new sponsor and/or side (DOMAIN_LOGIC.md §3.5); asks the password
+        // inside the dialog when the last confirmation is older than 5 minutes.
+        Route::post('members/{member}/change-placement', [MemberManagementController::class, 'changePlacement'])
+            ->middleware('password.fresh:300')
+            ->name('members.change-placement');
     });
 
     // S06 — Draw Master Settings + Admin Draw Management.
@@ -173,6 +179,8 @@ Route::middleware(['auth', 'role:super_admin,admin'])->prefix('super-admin')->na
     Route::post('members/{member}/record-cash-emi', [MemberManagementController::class, 'recordCashEmi'])->name('members.record-cash-emi');
     Route::post('members/{member}/verify-bank-detail', [MemberManagementController::class, 'verifyBankDetail'])->name('members.verify-bank-detail');
     Route::post('members/{member}/revert-current-rate', [MemberManagementController::class, 'revertCurrentRate'])->name('members.revert-current-rate');
+    // T-251 — Super Admin or the company Admin adds IDs for this member's person (DOMAIN_LOGIC.md §3.4).
+    Route::post('members/{member}/add-ids', [MemberManagementController::class, 'addIds'])->name('members.add-ids');
 
     // Company plan-jewellery delivery + bills (T-171).
     Route::get('company-deliveries', [CompanyDeliveryController::class, 'index'])->name('company-deliveries.index');

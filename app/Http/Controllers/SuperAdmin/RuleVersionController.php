@@ -8,6 +8,7 @@ use App\Http\Requests\SuperAdmin\PublishCompensationRulesRequest;
 use App\Models\RuleVersion;
 use App\Services\RuleVersionService;
 use App\Support\Dates;
+use App\Support\MemberIds;
 use App\Support\RuleVersionDiff;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -40,6 +41,7 @@ class RuleVersionController extends Controller
         'store_gst_percent',
         'store_income_min_directs',
         'store_emi_break_overdue_count',
+        'max_ids_per_person',
     ];
 
     public function index(Request $request, RuleVersionService $rules): Response
@@ -86,6 +88,8 @@ class RuleVersionController extends Controller
         $current['store_income_min_directs'] ??= 0;
         // T-185b — the break default applies until a version carries its own value.
         $current['store_emi_break_overdue_count'] ??= 3;
+        // T-251 — the IDs-per-person limit applies until a version carries its own value.
+        $current['max_ids_per_person'] ??= MemberIds::DEFAULT_LIMIT;
 
         return Inertia::render('super-admin/rule-versions', [
             'versions' => $versions,

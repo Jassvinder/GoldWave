@@ -58,6 +58,8 @@ class PublishCompensationRulesRequest extends FormRequest
             'store_gst_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'store_income_min_directs' => ['nullable', 'integer', 'min:0'],
             'store_emi_break_overdue_count' => ['nullable', 'integer', 'min:1', 'max:24'],
+            // T-251 (DOMAIN_LOGIC.md §3.4) — member IDs one person may hold, pending ones included.
+            'max_ids_per_person' => ['nullable', 'integer', 'min:1', 'max:100'],
         ];
     }
 }

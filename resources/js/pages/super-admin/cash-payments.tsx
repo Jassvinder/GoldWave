@@ -1,4 +1,4 @@
-import { Head, router, usePage, usePoll } from '@inertiajs/react';
+import { Head, Link, router, usePage, usePoll } from '@inertiajs/react';
 import { Banknote, Eye } from 'lucide-react';
 import { FormEventHandler, useEffect, useState } from 'react';
 import { DataPagination } from '@/components/data-pagination';
@@ -38,9 +38,14 @@ type PendingPayment = {
     mode: 'cash' | 'upi';
     amount: string;
     created_at: string;
+    member_id: number;
     member: {
         customer_id: string | null;
         user: { name: string; email: string } | null;
+        /** T-252 — the joining's sponsor and place. */
+        placement_side: 'left' | 'right' | null;
+        sponsor: { customer_id: string | null } | null;
+        placement_parent: { customer_id: string | null } | null;
     } | null;
     emi_installment: { installment_no: number } | null;
     /** T-184 — set on a "Pay All Remaining EMIs" payment. */
@@ -50,7 +55,34 @@ type PendingPayment = {
     upi_screenshot_url: string | null;
     /** T-228 — its approval is running in the background. */
     approving: boolean;
+    /**
+     * T-251 — one combined payment for several IDs of one person: this row stands for all of them, `amount` is the
+     * total, and Approve / Reject decide every ID together.
+     */
+    combined?: {
+        count: number;
+        each: string;
+        ids: { customer_id: string | null; installment_no: number | null }[];
+    };
 };
+
+/** T-251 — "Registration — 11 IDs" / "EMIs — 3 IDs" for a combined payment, else the normal label. */
+function pendingLabel(row: PendingPayment): string {
+    if (row.combined) {
+        return row.type === 'registration'
+            ? `Registration — ${row.combined.count} IDs`
+            : `EMIs — ${row.combined.count} IDs`;
+    }
+
+    return paymentLabel(
+        row.type,
+        row.covers_installments,
+        row.emi_installment?.installment_no,
+    );
+}
+
+const inr = (value: string | number) =>
+    `₹${Number(value).toLocaleString('en-IN')}`;
 
 /** T-226 — a Cash / GPay-UPI payment that was approved or rejected. */
 type DecidedPayment = {
@@ -71,6 +103,8 @@ type DecidedPayment = {
     decided_time: string | null;
     decided_by: string | null;
     store_name: string | null;
+    /** T-251 — the total of the combined payment this ID was part of, or null. */
+    combined_amount: string | null;
 };
 
 type Filters = {
@@ -192,19 +226,18 @@ function ReviewPaymentDialog({ row }: { row: PendingPayment }) {
                         <dt className="text-muted-foreground text-xs">
                             Payment
                         </dt>
-                        <dd className="font-medium">
-                            {paymentLabel(
-                                row.type,
-                                row.covers_installments,
-                                row.emi_installment?.installment_no,
-                            )}
-                        </dd>
+                        <dd className="font-medium">{pendingLabel(row)}</dd>
                     </div>
                     <div>
                         <dt className="text-muted-foreground text-xs">
                             Amount
                         </dt>
                         <dd className="text-lg font-semibold">{amount}</dd>
+                        {row.combined && (
+                            <dd className="text-muted-foreground text-xs">
+                                {row.combined.count} × {inr(row.combined.each)}
+                            </dd>
+                        )}
                     </div>
                     <div>
                         <dt className="text-muted-foreground text-xs">
@@ -223,6 +256,56 @@ function ReviewPaymentDialog({ row }: { row: PendingPayment }) {
                         </dd>
                     </div>
                 </dl>
+
+                {row.combined && (
+                    <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+                        <p className="font-medium">
+                            {row.type === 'registration'
+                                ? `One payment for ${row.combined.count} IDs of this person. Approve activates all of them; Reject rejects all of them.`
+                                : `One payment for the EMIs of ${row.combined.count} IDs of this person. Approve pays all of them; Reject pays none.`}
+                        </p>
+                        <p className="mt-1 text-xs">
+                            {row.combined.ids
+                                .map((id, index) =>
+                                    id.customer_id
+                                        ? `${id.customer_id}${id.installment_no ? ` (EMI #${id.installment_no})` : ''}`
+                                        : `New ID ${index + 1}`,
+                                )
+                                .join(' · ')}
+                        </p>
+                    </div>
+                )}
+
+                {row.type === 'registration' && row.member && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
+                        <div>
+                            <div className="text-muted-foreground text-xs">
+                                Joining place
+                            </div>
+                            <div className="font-medium">
+                                Sponsor{' '}
+                                <span className="font-mono">
+                                    {row.member.sponsor?.customer_id ?? '—'}
+                                </span>{' '}
+                                ·{' '}
+                                {row.member.placement_side === 'left'
+                                    ? 'Left'
+                                    : 'Right'}{' '}
+                                of{' '}
+                                <span className="font-mono">
+                                    {row.member.placement_parent?.customer_id ??
+                                        '—'}
+                                </span>
+                            </div>
+                        </div>
+                        <Link
+                            href={showMember.url(row.member_id)}
+                            className="text-primary text-xs underline"
+                        >
+                            Wrong? Change it before approving
+                        </Link>
+                    </div>
+                )}
 
                 {row.mode === 'upi' ? (
                     <div className="flex flex-col gap-3">
@@ -315,16 +398,23 @@ const pendingColumns: DataTableColumn<PendingPayment>[] = [
         key: 'type',
         header: 'Payment Type',
         render: (row) => (
-            <Badge variant="secondary">
-                {paymentLabel(
-                    row.type,
-                    row.covers_installments,
-                    row.emi_installment?.installment_no,
-                )}
-            </Badge>
+            <Badge variant="secondary">{pendingLabel(row)}</Badge>
         ),
     },
-    { key: 'amount', header: 'Amount', render: (row) => `₹${row.amount}` },
+    {
+        key: 'amount',
+        header: 'Amount',
+        render: (row) => (
+            <div className="whitespace-nowrap">
+                <div>₹{row.amount}</div>
+                {row.combined && (
+                    <div className="text-muted-foreground text-xs">
+                        {row.combined.count} × {inr(row.combined.each)}
+                    </div>
+                )}
+            </div>
+        ),
+    },
     {
         key: 'mode',
         header: 'Paid by',
@@ -400,7 +490,20 @@ const historyColumns: DataTableColumn<DecidedPayment>[] = [
             </div>
         ),
     },
-    { key: 'amount', header: 'Amount', render: (row) => `₹${row.amount}` },
+    {
+        key: 'amount',
+        header: 'Amount',
+        render: (row) => (
+            <div className="whitespace-nowrap">
+                <div>₹{row.amount}</div>
+                {row.combined_amount && (
+                    <div className="text-muted-foreground text-xs">
+                        of {inr(row.combined_amount)} paid together
+                    </div>
+                )}
+            </div>
+        ),
+    },
     {
         key: 'mode',
         header: 'Paid by',

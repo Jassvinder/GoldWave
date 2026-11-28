@@ -1,5 +1,10 @@
 import { Head, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import {
+    COMBINED_MODES,
+    IdCountField,
+    paymentOptionsFor,
+} from '@/components/id-count-field';
 import InputError from '@/components/input-error';
 import FormErrorSummary, {
     SponsorRequiredHint,
@@ -37,6 +42,8 @@ type Props = {
     } | null;
     referral_invalid: boolean;
     payment_options: PaymentOptions;
+    /** T-251 — most IDs one person may register at once (`max_ids_per_person`). */
+    id_limit: number;
 };
 
 type SponsorState =
@@ -50,6 +57,7 @@ export default function Register({
     referral,
     referral_invalid,
     payment_options,
+    id_limit,
 }: Props) {
     const [sponsor, setSponsor] = useState<SponsorState>(
         referral
@@ -72,7 +80,26 @@ export default function Register({
         payment_mode: 'cash' as PaymentMode,
         upi_reference: '',
         upi_screenshot: null as File | null,
+        id_count: 1,
     });
+
+    const planAmount = plans.find(
+        (p) => p.id === form.data.membership_plan_id,
+    )?.amount;
+    const idCount = form.data.id_count;
+
+    function changeIdCount(count: number) {
+        form.setData((data) => ({
+            ...data,
+            id_count: count,
+            // Several IDs are paid together by Cash or GPay/UPI only.
+            payment_mode:
+                count > 1 && !COMBINED_MODES.includes(data.payment_mode)
+                    ? 'cash'
+                    : data.payment_mode,
+        }));
+        form.clearErrors('id_count', 'payment_mode');
+    }
 
     async function checkSponsorCode(code: string) {
         if (!code) {
@@ -314,17 +341,30 @@ export default function Register({
                                 error={form.errors.membership_plan_id}
                             />
 
+                            {/* T-251 — several IDs for this person, paid together */}
+                            {id_limit > 1 && (
+                                <IdCountField
+                                    value={idCount}
+                                    max={id_limit}
+                                    amount={planAmount}
+                                    onChange={changeIdCount}
+                                    error={form.errors.id_count}
+                                    placementNote="ID 1 goes at the side chosen above; the others are placed under ID 1 and sponsored by it. One login opens all of them."
+                                />
+                            )}
+
                             {/* Payment mode */}
                             <div className="grid gap-2">
                                 <Label>Payment Mode</Label>
                                 <PaymentModePicker
-                                    options={payment_options}
+                                    options={paymentOptionsFor(
+                                        payment_options,
+                                        idCount,
+                                    )}
                                     amount={
-                                        plans.find(
-                                            (p) =>
-                                                p.id ===
-                                                form.data.membership_plan_id,
-                                        )?.amount
+                                        planAmount === undefined
+                                            ? undefined
+                                            : Number(planAmount) * idCount
                                     }
                                     mode={form.data.payment_mode}
                                     onModeChange={(mode) => {

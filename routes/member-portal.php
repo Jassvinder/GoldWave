@@ -6,12 +6,14 @@ use App\Http\Controllers\Member\ChangeRequestController;
 use App\Http\Controllers\Member\DrawController;
 use App\Http\Controllers\Member\LevelIncomeController;
 use App\Http\Controllers\Member\MembershipController;
+use App\Http\Controllers\Member\MyIdsController;
 use App\Http\Controllers\Member\PairRewardController;
 use App\Http\Controllers\Member\PaymentHistoryController;
 use App\Http\Controllers\Member\PayoutController;
 use App\Http\Controllers\Member\PendingProfileController;
 use App\Http\Controllers\Member\ProfileController;
 use App\Http\Controllers\Member\ReportsController;
+use App\Http\Controllers\Member\SwitchMemberIdController;
 use App\Http\Controllers\Member\WalletController;
 use App\Http\Controllers\NotificationController;
 use Illuminate\Support\Facades\Route;
@@ -26,6 +28,11 @@ Route::middleware(['auth', 'member-portal'])->prefix('member')->name('member.')-
     // T-153 — Assisted Registration (DOMAIN_LOGIC.md §12.2(b)).
     // T-244 — the Hinglish Help / Guide (static content, `resources/js/lib/help-content.ts`).
     Route::inertia('help', 'member/help')->name('help');
+
+    // T-251 — the header "Switch ID" for a person who holds several IDs (DOMAIN_LOGIC.md §3.4).
+    Route::post('switch-id', SwitchMemberIdController::class)->name('switch-id');
+    Route::get('my-ids', [MyIdsController::class, 'index'])->name('my-ids.index');
+    Route::post('my-ids', [MyIdsController::class, 'store'])->name('my-ids.store');
 
     Route::get('register-new', [AssistedRegistrationController::class, 'show'])->name('assisted-registration.show');
     Route::post('register-new', [AssistedRegistrationController::class, 'store'])->name('assisted-registration.store');

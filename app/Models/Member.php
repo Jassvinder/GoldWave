@@ -109,6 +109,12 @@ class Member extends Model
         return $this->hasMany(MemberRestriction::class);
     }
 
+    /** @return HasMany<MemberPlacementChange, $this> */
+    public function placementChanges(): HasMany
+    {
+        return $this->hasMany(MemberPlacementChange::class);
+    }
+
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {

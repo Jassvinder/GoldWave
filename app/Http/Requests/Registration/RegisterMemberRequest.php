@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Registration;
 
 use App\Services\Payments\PaymentModes;
+use App\Support\MemberIds;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -33,8 +34,37 @@ class RegisterMemberRequest extends FormRequest
             'mobile' => ['required', 'digits:10', 'unique:users,mobile'],
             // T-237 — a plan switched Off on Membership Plans cannot be joined (DOMAIN_LOGIC.md §3.3).
             'membership_plan_id' => ['required', 'integer', Rule::exists('membership_plans', 'id')->where('is_active', true)],
-            'payment_mode' => ['required', Rule::in(PaymentModes::offered())],
+            // T-251 — several IDs are paid together by Cash or GPay/UPI only (DOMAIN_LOGIC.md §3.4).
+            'payment_mode' => ['required', Rule::in($this->severalIds() ? PaymentModes::NEEDS_APPROVAL : PaymentModes::offered())],
             ...PaymentModes::upiProofRules('payment_mode'),
+            'id_count' => self::idCountRules(),
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return self::idCountMessages($this->severalIds());
+    }
+
+    /** T-251 — "Number of IDs" on a registration (DOMAIN_LOGIC.md §3.4); 1 when left out. */
+    public function severalIds(): bool
+    {
+        return (int) $this->input('id_count', 1) > 1;
+    }
+
+    /** @return list<mixed> */
+    public static function idCountRules(): array
+    {
+        return ['nullable', 'integer', 'min:1', 'max:'.MemberIds::limit()];
+    }
+
+    /** @return array<string, string> */
+    public static function idCountMessages(bool $severalIds): array
+    {
+        return [
+            'id_count.max' => 'At most '.MemberIds::limit().' IDs per person.',
+            ...($severalIds ? ['payment_mode.in' => 'Several IDs are paid together by Cash or GPay/UPI only.'] : []),
         ];
     }
 }

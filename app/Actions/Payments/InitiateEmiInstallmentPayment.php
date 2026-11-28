@@ -76,6 +76,13 @@ class InitiateEmiInstallmentPayment
                     ]);
                 }
 
+                // T-251 — this EMI is in a combined "Pay for all my IDs" payment, decided only as one.
+                if ($existing && $existing->status === 'pending' && $existing->payment_batch_id !== null) {
+                    throw ValidationException::withMessages([
+                        'installment' => 'This EMI is in a combined payment for all your IDs, waiting for confirmation.',
+                    ]);
+                }
+
                 if ($existing && $existing->status === 'pending') {
                     return $existing;
                 }

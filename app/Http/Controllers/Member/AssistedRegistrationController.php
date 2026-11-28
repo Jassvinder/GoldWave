@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Member;
 use App\Actions\Payout\SubmitPayoutRequest;
 use App\Actions\Registration\QueueWalletFundedRegistration;
 use App\Actions\Registration\RegisterMember;
+use App\Actions\Registration\RegisterMemberIds;
 use App\Actions\Registration\SendWalletPaymentOtp;
 use App\Actions\Registration\VerifyWalletPaymentOtp;
 use App\Contracts\PaymentGatewayContract;
@@ -14,6 +15,7 @@ use App\Http\Requests\Registration\AssistedRegisterMemberRequest;
 use App\Models\MembershipPlan;
 use App\Services\Payments\PaymentModes;
 use App\Services\WalletLedgerService;
+use App\Support\MemberIds;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -46,6 +48,8 @@ class AssistedRegistrationController extends Controller
                 'id', 'code', 'name', 'amount', 'installment_count', 'product_category', 'fixed_weight_grams',
             ]),
             'wallet_balance' => $this->wallet->availableBalance($member),
+            // T-251 — "Number of IDs" goes up to this (DOMAIN_LOGIC.md §3.4).
+            'id_limit' => MemberIds::limit(),
             // T-162 — this member's permanent link to the public join page with them as sponsor.
             'referral_link' => route('registration.show', ['ref' => $member->referralCode()]),
             // T-215 — the wallet-payment code goes here; a recent email/mobile change holds wallet payments for 48 h.
@@ -103,6 +107,14 @@ class AssistedRegistrationController extends Controller
             $newMember = $queueWalletRegistration($request->validated(), null, $payer, $request->user());
 
             return redirect(RegistrationController::signedStatusUrl($newMember));
+        }
+
+        // T-251 — a new person with several IDs, one combined Cash/UPI payment (DOMAIN_LOGIC.md §3.4).
+        if ($request->severalIds()) {
+            return RegistrationController::finishSeveralIds(
+                app(RegisterMemberIds::class)->forNewPerson($request->validated(), $request->user()),
+                $request,
+            );
         }
 
         $newMember = $registerMember($request->validated());

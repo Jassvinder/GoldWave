@@ -76,6 +76,7 @@ type Props = {
         store_gst_percent: number;
         store_income_min_directs: number;
         store_emi_break_overdue_count: number;
+        max_ids_per_person: number;
     };
 };
 
@@ -100,6 +101,7 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
         store_gst_percent: current.store_gst_percent,
         store_income_min_directs: current.store_income_min_directs,
         store_emi_break_overdue_count: current.store_emi_break_overdue_count,
+        max_ids_per_person: current.max_ids_per_person,
     });
 
     const {
@@ -769,6 +771,30 @@ export default function SuperAdminRuleVersions({ versions, current }: Props) {
                                         closes by itself: the piece returns to
                                         stock and the member is owed silver for
                                         the principal paid.
+                                    </p>
+                                </div>
+                                <div className="grid gap-1 sm:col-span-2">
+                                    <Label className="text-xs">
+                                        Max IDs per person
+                                    </Label>
+                                    <Input
+                                        type="number"
+                                        min={1}
+                                        max={100}
+                                        step="1"
+                                        value={data.max_ids_per_person}
+                                        onChange={(e) =>
+                                            setData(
+                                                'max_ids_per_person',
+                                                Number(e.target.value),
+                                            )
+                                        }
+                                    />
+                                    <p className="text-muted-foreground text-xs">
+                                        How many member IDs one person (one
+                                        login) may hold, unpaid ones included.
+                                        Lowering it never removes an existing
+                                        ID; it only stops new ones.
                                     </p>
                                 </div>
                             </FormSection>

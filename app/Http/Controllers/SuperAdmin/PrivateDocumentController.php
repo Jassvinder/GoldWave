@@ -17,7 +17,8 @@ class PrivateDocumentController extends Controller
 {
     public function paymentScreenshot(Payment $payment): StreamedResponse
     {
-        return $this->inline($payment->upi_screenshot_path);
+        // T-251 — an ID of a combined payment shows the one screenshot sent for all of them.
+        return $this->inline($payment->upi_screenshot_path ?? $payment->batch?->upi_screenshot_path);
     }
 
     /** The member's latest bank detail row — the one Member Detail shows and Verify acts on. */

@@ -13,12 +13,23 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+    ChangePlacementDialog,
+    type ChangePlacementOptions,
+} from '@/components/change-placement-dialog';
 import { EditMemberDialog } from '@/components/edit-member-dialog';
+import {
+    AddIdsDialog,
+    PersonIdsTable,
+    type AddIdsForm,
+    type PersonId,
+} from '@/components/person-ids';
 import { RevertCurrentRateDialog } from '@/components/revert-current-rate-dialog';
 import { ResetMemberPasswordDialog } from '@/components/reset-member-password-dialog';
 import { formatDate, formatGender, formatRatePer10g } from '@/lib/utils';
 import { show as showDirects } from '@/routes/member/directs';
 import {
+    addIds,
     bankProof,
     index as membersIndex,
     recordCashEmi,
@@ -101,6 +112,21 @@ type Props = {
     restrictions: RestrictionRow[];
     /** T-242 — the member's earliest unpaid plan EMI, which company staff can record as cash received. */
     record_cash_emi: RecordCashEmi | null;
+    /** T-251 — this person's IDs and the Add ID form; null for the company root or an unassigned dummy. */
+    person_ids: { ids: PersonId[]; add_form: AddIdsForm } | null;
+    /** T-252 — Super Admin only, while the member is not active yet. */
+    change_placement: ChangePlacementOptions | null;
+    /** T-252 — every sponsor / place change of this member, newest first. */
+    placement_changes: {
+        id: number;
+        changed_on: string | null;
+        changed_by: string;
+        old_sponsor: string | null;
+        new_sponsor: string | null;
+        old_place: string | null;
+        new_place: string | null;
+        reason: string;
+    }[];
     can_manage_restrictions: boolean;
     can_view_upline_earnings: boolean;
     bank_details: BankDetails;
@@ -175,6 +201,9 @@ export default function SuperAdminMemberDetail({
     member,
     restrictions,
     record_cash_emi,
+    person_ids,
+    change_placement,
+    placement_changes,
     can_manage_restrictions,
     can_view_upline_earnings,
     bank_details,
@@ -359,10 +388,40 @@ export default function SuperAdminMemberDetail({
                     </CardContent>
                 </Card>
 
+                {/* T-251 — every ID of this person (one login), and Add ID for staff (DOMAIN_LOGIC.md §3.4). */}
+                {person_ids && (
+                    <Card>
+                        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+                            <CardTitle>
+                                IDs of this person ({person_ids.ids.length})
+                            </CardTitle>
+                            <AddIdsDialog
+                                form={person_ids.add_form}
+                                submitUrl={addIds.url(member.id)}
+                                firstId={
+                                    person_ids.ids.find((id) => id.is_first)
+                                        ?.customer_id ?? null
+                                }
+                            />
+                        </CardHeader>
+                        <CardContent>
+                            <PersonIdsTable ids={person_ids.ids} />
+                        </CardContent>
+                    </Card>
+                )}
+
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle>Network</CardTitle>
-                        <div className="flex gap-2">
+                        <div className="flex flex-wrap justify-end gap-2">
+                            {change_placement && (
+                                <ChangePlacementDialog
+                                    memberId={member.id}
+                                    options={change_placement}
+                                    currentSponsor={member.sponsor_customer_id}
+                                    currentSide={member.placement_side}
+                                />
+                            )}
                             <Button variant="outline" size="sm" asChild>
                                 <Link href={showDirects.url(member.id)}>
                                     View Directs
@@ -454,6 +513,38 @@ export default function SuperAdminMemberDetail({
                                         </Link>
                                     ),
                                 )}
+                            </div>
+                        )}
+
+                        {placement_changes.length > 0 && (
+                            <div className="flex flex-col gap-2">
+                                <p className="text-muted-foreground text-xs">
+                                    Sponsor / side changes
+                                </p>
+                                {placement_changes.map((change) => (
+                                    <div
+                                        key={change.id}
+                                        className="rounded-md border p-2"
+                                    >
+                                        <div className="flex flex-wrap justify-between gap-2">
+                                            <span className="font-medium">
+                                                {change.old_sponsor !==
+                                                    change.new_sponsor &&
+                                                    `Sponsor ${change.old_sponsor ?? '—'} → ${change.new_sponsor ?? '—'} · `}
+                                                {change.old_place ?? '—'} →{' '}
+                                                {change.new_place ?? '—'}
+                                            </span>
+                                            <span className="text-muted-foreground text-xs">
+                                                {formatDate(change.changed_on)}{' '}
+                                                ·{' '}
+                                                {change.changed_by}
+                                            </span>
+                                        </div>
+                                        <p className="text-muted-foreground mt-1 text-xs">
+                                            {change.reason}
+                                        </p>
+                                    </div>
+                                ))}
                             </div>
                         )}
 

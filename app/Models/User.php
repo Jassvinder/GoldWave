@@ -3,11 +3,14 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Support\MemberIds;
 use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -32,6 +35,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read Member|null $member
+ * @property-read Collection<int, Member> $members
  * @property-read Store|null $store
  */
 #[Fillable(['name', 'email', 'mobile', 'password', 'role'])]
@@ -59,11 +63,35 @@ class User extends Authenticatable implements PasskeyUser
     /**
      * GoldWave member record for this login identity — null for a pure Admin/Super Admin user.
      *
+     * T-251 (DOMAIN_LOGIC.md §3.4) — a person may hold several IDs. This is the one they work on: for the signed-in
+     * user the ID chosen with Switch ID (`MemberIds`), otherwise their first active ID, otherwise their first ID. A
+     * person with one ID always gets that ID, exactly as before. Eager loading (`with('member')`) builds the relation
+     * on a blank model, so it never sees the selection: read the signed-in user's ID through `$user->member`.
+     *
      * @return HasOne<Member, $this>
      */
     public function member(): HasOne
     {
-        return $this->hasOne(Member::class);
+        $relation = $this->hasOne(Member::class);
+        $selectedId = MemberIds::selectedIdFor($this);
+
+        if ($selectedId !== null) {
+            $relation->orderByRaw('CASE WHEN members.id = ? THEN 0 ELSE 1 END', [$selectedId]);
+        }
+
+        return $relation
+            ->orderByRaw("CASE WHEN members.status = 'active' THEN 0 ELSE 1 END")
+            ->orderBy('members.id');
+    }
+
+    /**
+     * T-251 — every member ID this person holds, first one first.
+     *
+     * @return HasMany<Member, $this>
+     */
+    public function members(): HasMany
+    {
+        return $this->hasMany(Member::class)->orderBy('members.id');
     }
 
     /**

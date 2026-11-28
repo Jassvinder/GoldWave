@@ -28,12 +28,23 @@ class CashPaymentAwaitingApproval extends AppNotification
     {
         $member = $this->payment->member;
         $who = trim(($member->user->name ?? 'A member').($member->customer_id ? " ({$member->customer_id})" : ''));
+        $how = $this->payment->mode === 'upi' ? 'a GPay/UPI' : 'a cash';
+
+        // T-251 — one alert for a combined payment that covers several IDs.
+        $batch = $this->payment->batch;
+
+        if ($batch !== null) {
+            $total = '₹'.number_format((float) $batch->amount, 2);
+            $count = $batch->payments()->count();
+            $for = $batch->type === 'registration' ? "{$count} new IDs" : "the EMIs of {$count} IDs";
+
+            return "{$who} submitted {$how} payment of {$total} for {$for}.";
+        }
+
         $amount = '₹'.number_format((float) $this->payment->amount, 2);
         $for = $this->payment->type === 'registration'
             ? 'a new registration'
             : $this->payment->emiLabel();
-
-        $how = $this->payment->mode === 'upi' ? 'a GPay/UPI' : 'a cash';
 
         return "{$who} submitted {$how} payment of {$amount} for {$for}.";
     }

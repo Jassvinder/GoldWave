@@ -111,10 +111,33 @@ class RegisterMember
                 'role' => 'member',
             ]);
 
+            // Gender is required by RegisterMemberRequest (T-122); Actions called directly (seeders/tests) may omit it.
+            return $this->createId($user, $sponsor, $placement, $plan, $paymentMode, ['gender' => $data['gender'] ?? null]);
+        });
+    }
+
+    /**
+     * One pending ID: the member row, its EMI schedule header (EMI plans) and its registration payment. Shared with
+     * `RegisterMemberIds` (T-251), which calls it once per ID of a multi-ID request with `$batchId` set; such a payment
+     * carries no proof of its own, the batch does.
+     *
+     * @param  array{parent_id: int, side: string}  $placement
+     * @param  array<string, mixed>  $profile  member columns copied onto the new ID (gender, and for a 2nd ID the KYC)
+     */
+    public function createId(
+        User $user,
+        Member $sponsor,
+        array $placement,
+        MembershipPlan $plan,
+        string $paymentMode,
+        array $profile = [],
+        ?int $batchId = null,
+    ): Member {
+        return DB::transaction(function () use ($user, $sponsor, $placement, $plan, $paymentMode, $profile, $batchId) {
             $member = Member::create([
+                ...$profile,
                 'user_id' => $user->id,
                 'customer_id' => null,
-                'gender' => $data['gender'] ?? null, // Required by RegisterMemberRequest (T-122); Actions called directly (seeders/tests) may omit it.
                 'sponsor_id' => $sponsor->id,
                 'placement_parent_id' => $placement['parent_id'],
                 'placement_side' => $placement['side'],
@@ -153,6 +176,7 @@ class RegisterMember
 
             Payment::create([
                 'member_id' => $member->id,
+                'payment_batch_id' => $batchId,
                 'type' => 'registration',
                 'amount' => $registrationAmount,
                 'mode' => $paymentMode,

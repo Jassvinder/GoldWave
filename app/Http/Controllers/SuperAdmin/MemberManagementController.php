@@ -5,19 +5,24 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Actions\Admin\ResetMemberPassword;
 use App\Actions\Admin\UpdateMemberDetails;
 use App\Actions\Emi\RevertCurrentRateBooking;
+use App\Actions\Members\ChangePendingPlacement;
 use App\Actions\Members\RecordCashEmiByStaff;
 use App\Actions\Profile\VerifyMemberBankDetail;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Members\AddMemberIdsRequest;
+use App\Http\Requests\SuperAdmin\ChangePendingPlacementRequest;
 use App\Http\Requests\SuperAdmin\ResetMemberPasswordRequest;
 use App\Http\Requests\SuperAdmin\RevertCurrentRateBookingRequest;
 use App\Http\Requests\SuperAdmin\UpdateMemberDetailsRequest;
 use App\Models\EmiRateBookingEvent;
 use App\Models\EmiSchedule;
 use App\Models\Member;
+use App\Models\MemberPlacementChange;
 use App\Models\MemberRestriction;
 use App\Models\MembershipPlan;
 use App\Services\MemberNetworkSummary;
 use App\Support\Dates;
+use App\Support\PersonIds;
 use App\Support\WebpImageStore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -211,6 +216,33 @@ class MemberManagementController extends Controller
                     'blocked' => $member->isBlocked(),
                 ]
                 : null,
+            // T-251 — the person's IDs and the "Add ID" form (none for the company root or an unassigned dummy).
+            'person_ids' => $member->user !== null && ! $member->is_company_root ? [
+                'ids' => PersonIds::list($member->user),
+                'add_form' => PersonIds::addForm($member->user),
+            ] : null,
+            // T-252 — Super Admin only, while the member is not active yet: the "Change Sponsor / Side" form.
+            'change_placement' => $request->user()?->role === 'super_admin'
+                && in_array($member->status, ChangePendingPlacement::PENDING_STATUSES, true)
+                ? [
+                    'sponsor_fixed' => ChangePendingPlacement::sponsorIsFixed($member),
+                    'blocker' => app(ChangePendingPlacement::class)->blocker($member),
+                ]
+                : null,
+            'placement_changes' => $member->placementChanges()
+                ->with(['oldSponsor:id,customer_id', 'newSponsor:id,customer_id', 'oldParent:id,customer_id', 'newParent:id,customer_id', 'changedBy:id,name'])
+                ->orderByDesc('id')
+                ->get()
+                ->map(fn (MemberPlacementChange $change): array => [
+                    'id' => $change->id,
+                    'changed_on' => Dates::date($change->created_at),
+                    'changed_by' => $change->changedBy->name,
+                    'old_sponsor' => $change->oldSponsor?->customer_id,
+                    'new_sponsor' => $change->newSponsor?->customer_id,
+                    'old_place' => self::place($change->oldParent, $change->old_side),
+                    'new_place' => self::place($change->newParent, $change->new_side),
+                    'reason' => $change->reason,
+                ]),
             'can_manage_restrictions' => $request->user()?->role === 'super_admin',
             // T-238 — the Upline Earnings page is Super Admin only.
             'can_view_upline_earnings' => $request->user()?->role === 'super_admin',
@@ -350,6 +382,24 @@ class MemberManagementController extends Controller
             ->with('status', "{$member->customer_id}'s EMI schedule is back on Future Rate.");
     }
 
+    /** T-251 (DOMAIN_LOGIC.md §3.4) — new IDs for this member's person, sponsored by their first ID. */
+    public function addIds(Member $member, AddMemberIdsRequest $request): RedirectResponse
+    {
+        abort_if($member->user === null || $member->is_company_root, 404);
+
+        return PersonIds::add($member->user, $request, $request->user());
+    }
+
+    /** T-252 (DOMAIN_LOGIC.md §3.5) — Super Admin moves a not-yet-active member to a new sponsor and/or side. */
+    public function changePlacement(Member $member, ChangePendingPlacementRequest $request, ChangePendingPlacement $change): RedirectResponse
+    {
+        $side = $request->string('placement_side')->toString() === 'left' ? 'left' : 'right';
+        $moved = $change($member, $request->string('code')->toString(), $side, $request->string('reason')->toString(), $request->user());
+        $moved->load(['sponsor', 'placementParent']);
+
+        return back()->with('status', "Moved: sponsor {$moved->sponsor?->customer_id}, ".ucfirst($side)." of {$moved->placementParent?->customer_id}.");
+    }
+
     /** T-242 (DOMAIN_LOGIC.md §5 item 10) — the member's earliest unpaid EMI, received in cash at the office. */
     public function recordCashEmi(Member $member, Request $request, RecordCashEmiByStaff $record): RedirectResponse
     {
@@ -371,6 +421,12 @@ class MemberManagementController extends Controller
 
         return redirect()->route('super-admin.members.show', $member)
             ->with('status', "{$member->customer_id}'s bank details are verified.");
+    }
+
+    /** "Left of GWL-0001", or null when the member had no place (the old place may since have been purged). */
+    private static function place(?Member $parent, ?string $side): ?string
+    {
+        return $side !== null ? ucfirst($side).' of '.($parent->customer_id ?? '—') : null;
     }
 
     /** @return array<string, mixed> */

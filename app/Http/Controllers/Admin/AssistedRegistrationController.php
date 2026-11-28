@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Registration\QueueWalletFundedRegistration;
 use App\Actions\Registration\RegisterMember;
+use App\Actions\Registration\RegisterMemberIds;
 use App\Contracts\PaymentGatewayContract;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Registration\RegistrationController;
@@ -11,6 +12,7 @@ use App\Http\Requests\Registration\AssistedRegisterMemberRequest;
 use App\Models\MembershipPlan;
 use App\Models\Store;
 use App\Services\Payments\PaymentModes;
+use App\Support\MemberIds;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -36,6 +38,8 @@ class AssistedRegistrationController extends Controller
                 'id', 'code', 'name', 'amount', 'installment_count', 'product_category', 'fixed_weight_grams',
             ]),
             'wallet_balance' => (float) $store->wallet->fresh()->balance,
+            // T-251 — "Number of IDs" goes up to this (DOMAIN_LOGIC.md §3.4).
+            'id_limit' => MemberIds::limit(),
         ]);
     }
 
@@ -57,6 +61,14 @@ class AssistedRegistrationController extends Controller
             $newMember = $queueWalletRegistration($request->validated(), $store, null, $request->user());
 
             return redirect(RegistrationController::signedStatusUrl($newMember));
+        }
+
+        // T-251 — a new person with several IDs, one combined Cash/UPI payment (DOMAIN_LOGIC.md §3.4).
+        if ($request->severalIds()) {
+            return RegistrationController::finishSeveralIds(
+                app(RegisterMemberIds::class)->forNewPerson($request->validated(), $request->user()),
+                $request,
+            );
         }
 
         $newMember = $registerMember($request->validated());

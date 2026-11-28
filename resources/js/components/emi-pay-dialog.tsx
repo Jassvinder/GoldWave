@@ -26,6 +26,8 @@ type Props = {
     trigger: ReactNode;
     /** Extra lines shown above the payment choice, e.g. the Pay All summary. */
     children?: ReactNode;
+    /** Overrides the page's `payment_options`, e.g. Cash / GPay-UPI only for "Pay for all my IDs" (T-251). */
+    options?: PaymentOptions;
 };
 
 /**
@@ -40,8 +42,10 @@ export function EmiPayDialog({
     description,
     trigger,
     children,
+    options: optionsOverride,
 }: Props) {
-    const options = usePage().props.payment_options as PaymentOptions;
+    const pageOptions = usePage().props.payment_options as PaymentOptions;
+    const options = optionsOverride ?? pageOptions;
     const [open, setOpen] = useState(false);
     const form = useForm({
         mode: (options.modes[0] ?? 'cash') as PaymentMode,

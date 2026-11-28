@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Registration;
 
 use App\Actions\Registration\RegisterMember;
+use App\Actions\Registration\RegisterMemberIds;
 use App\Actions\Registration\ValidateSponsorCode;
 use App\Contracts\PaymentGatewayContract;
 use App\Http\Controllers\Controller;
@@ -10,12 +11,15 @@ use App\Http\Requests\Registration\RegisterMemberRequest;
 use App\Http\Requests\Registration\ValidateSponsorCodeRequest;
 use App\Models\Member;
 use App\Models\MembershipPlan;
+use App\Models\Payment;
 use App\Services\Payments\PaymentModes;
 use App\Services\Payments\RazorpayGateway;
+use App\Support\MemberIds;
 use App\Support\PaymentInProgress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -45,6 +49,8 @@ class RegistrationController extends Controller
                 'sponsor_name' => $referrer->user?->name,
             ] : null,
             'referral_invalid' => $ref !== '' && $referrer === null,
+            // T-251 — "Number of IDs" goes up to this (DOMAIN_LOGIC.md §3.4).
+            'id_limit' => MemberIds::limit(),
         ]);
     }
 
@@ -63,8 +69,13 @@ class RegistrationController extends Controller
         ]);
     }
 
-    public function store(RegisterMemberRequest $request, RegisterMember $action): RedirectResponse
+    public function store(RegisterMemberRequest $request, RegisterMember $action, RegisterMemberIds $severalIds): RedirectResponse
     {
+        // T-251 — "Number of IDs" above 1: one person, several IDs, one combined Cash/UPI payment (DOMAIN_LOGIC.md §3.4).
+        if ($request->severalIds()) {
+            return self::finishSeveralIds($severalIds->forNewPerson($request->validated()), $request);
+        }
+
         $member = $action($request->validated());
 
         $payment = $member->payments->firstWhere('type', 'registration');
@@ -87,6 +98,22 @@ class RegistrationController extends Controller
         }
 
         return redirect(self::signedStatusUrl($member));
+    }
+
+    /**
+     * T-251 — after a multi-ID request: the proof goes on the combined payment (or the single payment of a one-ID
+     * "Add ID"), then the status page of the first ID, which lists them all.
+     *
+     * @param  Collection<int, Member>  $members
+     */
+    public static function finishSeveralIds(Collection $members, Request $request): RedirectResponse
+    {
+        $first = $members->firstOrFail();
+        $payment = $first->payments->firstWhere('type', 'registration');
+
+        PaymentModes::attachUpiProof($payment->batch ?? $payment, $request);
+
+        return redirect(self::signedStatusUrl($first));
     }
 
     /**
@@ -119,6 +146,30 @@ class RegistrationController extends Controller
                 ? RazorpayGateway::checkoutUrl($payment)
                 : null,
             'payment_error' => session('payment_error'),
+            // T-251 — the IDs paid together with this one, or null when it was paid alone.
+            'batch' => self::batchSummary($payment),
         ]);
+    }
+
+    /** @return array{count: int, amount: string, each: string, ids: list<array{customer_id: string|null, status: string}>}|null */
+    private static function batchSummary(?Payment $payment): ?array
+    {
+        $batch = $payment?->batch;
+
+        if ($batch === null) {
+            return null;
+        }
+
+        $payments = $batch->payments()->with('member')->get();
+
+        return [
+            'count' => $payments->count(),
+            'amount' => (string) $batch->amount,
+            'each' => (string) $payment->amount,
+            'ids' => array_values($payments->map(fn (Payment $row): array => [
+                'customer_id' => $row->member?->customer_id,
+                'status' => (string) $row->member?->status,
+            ])->all()),
+        ];
     }
 }

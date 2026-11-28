@@ -51,6 +51,25 @@ Grouped by migration file (`database/migrations/`). Column-level detail and the 
 | `create_store_sales_tables`                                  | `store_sales`, `invoices`, `store_profit_distributions` (+ deferred FK back onto `income_ledger_calculations`)                                                                                                                                                                                                           | §15, §16.2, §16.4                     |
 | `create_store_activity_logs_table`                           | `store_activity_logs` (polymorphic `affected_reference`)                                                                                                                                                                                                                                                                 | §16.3                                 |
 
+### T-252 additions (Change Sponsor / Side before activation — 28-11-2026)
+
+Migration `2026_11_28_000001_create_member_placement_changes_table` is forward-only. No existing row changes.
+- **`member_placement_changes`:** one row per Super Admin change of a pending member's sponsor and/or place.
+  - Columns: `member_id` → members (cascade), `old_sponsor_id` / `new_sponsor_id` → members (nullable, null on delete), `old_parent_id` / `new_parent_id` → members (nullable, null on delete), `old_side` / `new_side` (`left` | `right`, nullable), `reason` (string 500), `changed_by` → users, timestamps.
+  - Index: `member_id`.
+- Rules: `DOMAIN_LOGIC.md` §3.5.
+
+### T-251 additions (Several IDs for one person — 26-11-2026)
+
+Migration `2026_11_26_000001_allow_several_ids_per_person` (built 26-11-2026; the tables are used from T-251 part 2). No existing row changes.
+- **`members.user_id`:** the unique index is dropped and a plain index is kept, so one user (person) can own several members. `users.email` and `users.mobile` stay unique.
+- **`payment_batches`:** one combined payment that covers several `payments` rows (one row per ID).
+  - Columns: `type` (`registration` | `emi_installment`), `mode` (`cash` | `upi`), `amount` (decimal 14,2, the total), `upi_reference` (string 64, nullable, unique), `upi_screenshot_path` (nullable), `status` (`pending` | `paid` | `failed`), `cash_status` (`pending_verification` | `approved` | `rejected`), `created_by` → users (nullable; the person or staff who made it), `verified_by` → users (nullable), `verified_at`, `paid_at`, timestamps.
+  - The Ref ID and screenshot live on the batch. Its `payments` rows keep `upi_reference` null, so the unique index on `payments.upi_reference` is untouched.
+- **`payments.payment_batch_id`** → `payment_batches` (nullable, indexed). Null for every payment made alone, which covers all existing rows.
+- **Rule value `max_ids_per_person`** (integer, default 11) in the rule version payload, not a column.
+- Rules: `DOMAIN_LOGIC.md` §3.4.
+
 ### T-237 additions (Membership Plans managed by Super Admin — 18-10-2026)
 
 Migration `2026_10_18_000001_add_plan_snapshot_and_plan_changes` is forward-only, like T-231's.

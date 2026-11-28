@@ -5,6 +5,7 @@ namespace App\Actions\Auth;
 use App\Models\Member;
 use App\Models\User;
 use App\Services\OtpService;
+use App\Support\MemberIds;
 use App\Support\Portal;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
@@ -32,6 +33,8 @@ class VerifyLoginOtp
         Auth::login($user);
         session(['goldwave_login_method' => 'otp']);
         Portal::stamp(Portal::MEMBER);
+        // T-251 — OTP names the person, not an ID: they start on their first active ID.
+        MemberIds::select($user->member);
 
         return $user;
     }

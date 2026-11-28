@@ -3,6 +3,7 @@
 namespace App\Services\Payments;
 
 use App\Models\Payment;
+use App\Models\PaymentBatch;
 use App\Services\RuleVersionService;
 use App\Support\WebpImageStore;
 use Illuminate\Http\Request;
@@ -20,6 +21,9 @@ class PaymentModes
 {
     /** Modes that wait for a Super Admin / Admin approval (`payments.cash_status`). */
     public const NEEDS_APPROVAL = ['cash', 'upi'];
+
+    /** T-251 — refusal when one ID of a combined payment is settled on its own. */
+    public const BATCH_PART_MESSAGE = 'This payment is part of a combined payment for several IDs. Approve or reject it as one on Payment Approvals.';
 
     /** @return list<string> modes a member or registrant may choose; `wallet` only on the assisted flows. */
     public static function offered(bool $withWallet = false): array
@@ -64,7 +68,8 @@ class PaymentModes
     public static function upiProofRules(string $modeField): array
     {
         return [
-            'upi_reference' => ["exclude_unless:{$modeField},upi", 'required', 'string', 'min:6', 'max:64', 'unique:payments,upi_reference'],
+            // T-251 — a combined payment keeps its Ref ID on `payment_batches`, so a Ref ID is checked against both.
+            'upi_reference' => ["exclude_unless:{$modeField},upi", 'required', 'string', 'min:6', 'max:64', 'unique:payments,upi_reference', 'unique:payment_batches,upi_reference'],
             'upi_screenshot' => ["exclude_unless:{$modeField},upi", 'required', 'image', 'max:5120'],
         ];
     }
@@ -100,8 +105,11 @@ class PaymentModes
         return str_starts_with($path, '/') ? asset(ltrim($path, '/')) : Storage::disk('public')->url($path);
     }
 
-    /** Stores the Ref ID and screenshot on a `upi` payment (no-op for other modes). */
-    public static function attachUpiProof(?Payment $payment, Request $request): void
+    /**
+     * Stores the Ref ID and screenshot on a `upi` payment (no-op for other modes). T-251 — for several IDs paid
+     * together, pass the combined payment (`PaymentBatch`): its rows carry no proof of their own.
+     */
+    public static function attachUpiProof(Payment|PaymentBatch|null $payment, Request $request): void
     {
         if ($payment === null || $payment->mode !== 'upi') {
             return;

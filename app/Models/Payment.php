@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property-read Member|null $member
+ * @property-read PaymentBatch|null $batch
  * @property-read User|null $verifiedBy
  * @property-read EmiInstallment|null $emiInstallment
  * @property-read Store|null $payingStore
@@ -17,6 +18,7 @@ class Payment extends Model
 {
     protected $fillable = [
         'member_id',
+        'payment_batch_id',
         'paying_store_id',
         'paying_member_id',
         'type',
@@ -51,6 +53,16 @@ class Payment extends Model
     public function member(): BelongsTo
     {
         return $this->belongsTo(Member::class);
+    }
+
+    /**
+     * T-251 — the combined payment this row is part of (several IDs paid together), or null when paid alone.
+     *
+     * @return BelongsTo<PaymentBatch, $this>
+     */
+    public function batch(): BelongsTo
+    {
+        return $this->belongsTo(PaymentBatch::class, 'payment_batch_id');
     }
 
     /** @return BelongsTo<Store, $this> */

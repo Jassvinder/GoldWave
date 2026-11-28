@@ -1,4 +1,5 @@
 import { Breadcrumbs } from '@/components/breadcrumbs';
+import { MemberIdSwitcher } from '@/components/member-id-switcher';
 import { NavUserMenu } from '@/components/nav-user-menu';
 import { NotificationBell } from '@/components/notification-bell';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -24,6 +25,7 @@ export function PortalHeader({
             </div>
 
             <div className="flex shrink-0 items-center gap-1">
+                <MemberIdSwitcher />
                 <NotificationBell />
                 <NavUserMenu />
             </div>

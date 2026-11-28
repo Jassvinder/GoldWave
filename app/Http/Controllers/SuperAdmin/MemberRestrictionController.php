@@ -70,9 +70,9 @@ class MemberRestrictionController extends Controller
         $apply($member, $request->string('type')->toString(), $request->string('reason')->toString(), $request->user());
 
         return redirect()->route('super-admin.member-restrictions.index', ['customer_id' => $member->customer_id])
-            ->with('status', $request->string('type')->toString() === MemberRestriction::ACCOUNT_BLOCK
+            ->with('status', ($request->string('type')->toString() === MemberRestriction::ACCOUNT_BLOCK
                 ? "{$member->customer_id} is blocked."
-                : "{$member->customer_id} is on a Payout Hold.");
+                : "{$member->customer_id} is on a Payout Hold.").self::otherIdsNote($member));
     }
 
     public function lift(ChangeMemberRestrictionRequest $request, LiftMemberRestriction $lift): RedirectResponse
@@ -81,9 +81,17 @@ class MemberRestrictionController extends Controller
         $lift($member, $request->string('type')->toString(), $request->string('reason')->toString(), $request->user(), $request->boolean('also_lift_payout_hold'));
 
         return redirect()->route('super-admin.member-restrictions.index', ['customer_id' => $member->customer_id])
-            ->with('status', $request->string('type')->toString() === MemberRestriction::ACCOUNT_BLOCK
+            ->with('status', ($request->string('type')->toString() === MemberRestriction::ACCOUNT_BLOCK
                 ? "{$member->customer_id} is unblocked."
-                : "{$member->customer_id}'s Payout Hold is lifted.");
+                : "{$member->customer_id}'s Payout Hold is lifted.").self::otherIdsNote($member));
+    }
+
+    /** T-251 part 3 — a restriction covers every ID of the person, so the message says so. */
+    private static function otherIdsNote(Member $member): string
+    {
+        $others = $member->user_id === null ? 0 : Member::where('user_id', $member->user_id)->whereKeyNot($member->id)->count();
+
+        return $others === 0 ? '' : ' The same applies to the other '.($others === 1 ? 'ID' : "{$others} IDs").' of this person.';
     }
 
     /** @return array<string, mixed> */

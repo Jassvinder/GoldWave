@@ -33,7 +33,17 @@ type Props = {
     /** Signed checkout link while an online payment is still pending (T-137). */
     pay_url: string | null;
     payment_error: string | null;
+    /** T-251 — several IDs registered together and paid in one payment; null for one ID. */
+    batch: {
+        count: number;
+        amount: string;
+        each: string;
+        ids: { customer_id: string | null; status: string }[];
+    } | null;
 };
+
+const inr = (value: string | number) =>
+    `₹${Number(value).toLocaleString('en-IN')}`;
 
 const statusLabel: Record<string, string> = {
     draft: 'Draft',
@@ -68,6 +78,7 @@ export default function RegistrationStatus({
     processing,
     pay_url,
     payment_error,
+    batch,
 }: Props) {
     const isActive = member.status === 'active';
     const isCancelled = member.status === 'cancelled';
@@ -154,10 +165,9 @@ export default function RegistrationStatus({
                                     Payment
                                 </span>
                                 <span className="text-right text-sm">
-                                    ₹
-                                    {Number(payment.amount).toLocaleString(
-                                        'en-IN',
-                                    )}{' '}
+                                    {batch
+                                        ? `${batch.count} IDs × ${inr(batch.each)} = ${inr(batch.amount)}`
+                                        : inr(payment.amount)}{' '}
                                     · {modeLabel[payment.mode]} ·{' '}
                                     {paymentStateLabel[
                                         payment.cash_status ?? payment.status
@@ -165,6 +175,35 @@ export default function RegistrationStatus({
                                         payment.cash_status ??
                                         payment.status}
                                 </span>
+                            </div>
+                        )}
+
+                        {batch && (
+                            <div className="grid gap-2 rounded-md border p-3">
+                                <span className="text-muted-foreground text-sm">
+                                    Your {batch.count} IDs
+                                </span>
+                                <ol className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
+                                    {batch.ids.map((id, index) => (
+                                        <li
+                                            key={index}
+                                            className="flex items-center gap-1.5"
+                                        >
+                                            <span className="text-muted-foreground w-5 text-right text-xs">
+                                                {index + 1}.
+                                            </span>
+                                            <span
+                                                className={
+                                                    id.customer_id
+                                                        ? 'font-mono font-medium'
+                                                        : 'text-muted-foreground'
+                                                }
+                                            >
+                                                {id.customer_id ?? 'Pending'}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ol>
                             </div>
                         )}
 
@@ -228,8 +267,9 @@ export default function RegistrationStatus({
                         {isActive && (
                             <div className="flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-950">
                                 <p className="text-sm text-green-800 dark:text-green-200">
-                                    Use your Customer ID to log in — your
-                                    initial password is your Customer ID itself.
+                                    {batch
+                                        ? `Log in with any of your ${batch.count} Customer IDs. Your initial password is the first Customer ID (${batch.ids[0]?.customer_id ?? member.customer_id}). Use "Switch ID" at the top to move between your IDs.`
+                                        : 'Use your Customer ID to log in — your initial password is your Customer ID itself.'}
                                 </p>
                                 <Button asChild className="w-full sm:w-auto">
                                     <a href={memberLogin.url()}>

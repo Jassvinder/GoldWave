@@ -25,6 +25,11 @@ class RejectCashPayment
                 throw ValidationException::withMessages(['payment' => 'This payment does not need a manual approval.']);
             }
 
+            // T-251 — one ID of a combined payment is rejected only with the rest (`RejectPaymentBatch`).
+            if ($locked->payment_batch_id !== null) {
+                throw ValidationException::withMessages(['payment' => PaymentModes::BATCH_PART_MESSAGE]);
+            }
+
             if ($locked->status !== 'pending') {
                 return false;
             }

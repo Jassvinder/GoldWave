@@ -14,6 +14,9 @@ use Illuminate\Validation\ValidationException;
  * T-231 (DOMAIN_LOGIC.md §2.3) — Super Admin puts a member under a Payout Hold or an Account Block, with a reason.
  * Takes effect now; nothing before it is undone. Either one cancels every pending payout request of the member and
  * releases its wallet hold. A block also signs the member out of every open session.
+ *
+ * T-251 part 3 (§3.4) — a restriction is for the person: it is applied to every ID of the same user at once (each gets
+ * its own history row with the same reason). An ID that already has it keeps its own.
  */
 class ApplyMemberRestriction
 {
@@ -28,28 +31,39 @@ class ApplyMemberRestriction
         }
 
         $restriction = DB::transaction(function () use ($member, $type, $reason, $operator, $column) {
-            $locked = Member::whereKey($member->id)->lockForUpdate()->firstOrFail();
+            $ids = PersonMembers::lock($member);
+            $chosen = $ids->firstWhere('id', $member->id) ?? Member::whereKey($member->id)->firstOrFail();
 
-            if ($locked->{$column} !== null) {
+            if ($chosen->{$column} !== null) {
                 throw ValidationException::withMessages([
                     'type' => $type === MemberRestriction::ACCOUNT_BLOCK ? 'This member is already blocked.' : 'This member is already on a Payout Hold.',
                 ]);
             }
 
             $now = now();
-            $locked->update([$column => $now]);
+            $created = null;
 
-            foreach (PayoutRequest::where('member_id', $locked->id)->where('status', 'pending')->get() as $request) {
-                ($this->cancelPayout)($request);
+            foreach ($ids->filter(fn (Member $id) => $id->{$column} === null) as $locked) {
+                $locked->update([$column => $now]);
+
+                foreach (PayoutRequest::where('member_id', $locked->id)->where('status', 'pending')->get() as $request) {
+                    ($this->cancelPayout)($request);
+                }
+
+                $row = MemberRestriction::create([
+                    'member_id' => $locked->id,
+                    'type' => $type,
+                    'reason' => trim($reason),
+                    'started_at' => $now,
+                    'started_by' => $operator->id,
+                ]);
+
+                if ($locked->id === $member->id) {
+                    $created = $row;
+                }
             }
 
-            return MemberRestriction::create([
-                'member_id' => $locked->id,
-                'type' => $type,
-                'reason' => trim($reason),
-                'started_at' => $now,
-                'started_by' => $operator->id,
-            ]);
+            return $created ?? throw new \LogicException('The chosen member was not restricted.');
         });
 
         if ($type === MemberRestriction::ACCOUNT_BLOCK && $member->user_id !== null && config('session.driver') === 'database') {
